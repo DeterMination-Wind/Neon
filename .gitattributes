@@ -1,0 +1,7 @@
+# Ensure Linux CI can execute scripts.
+gradlew text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+
+# Windows scripts keep CRLF.
+*.bat text eol=crlf

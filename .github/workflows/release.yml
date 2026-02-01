@@ -26,7 +26,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build
-        run: ./gradlew jar
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon jar
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

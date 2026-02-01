@@ -28,7 +28,10 @@ public class BekToolsMod extends Mod{
         stealthPath = new StealthPathMod();
         radialBuildMenu = new RadialBuildMenuMod();
 
-        Events.on(ClientLoadEvent.class, e -> registerSettings());
+        Events.on(ClientLoadEvent.class, e -> {
+            registerSettings();
+            GithubUpdateCheck.checkOnce();
+        });
     }
 
     @Override

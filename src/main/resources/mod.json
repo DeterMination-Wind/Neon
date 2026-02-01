@@ -1,0 +1,11 @@
+{
+  "name": "bek-tools",
+  "displayName": "BEK-Tools / BEK 工具集",
+  "author": "DeterMination (BEK)",
+  "description": "A bundled toolkit: Power Grid Minimap + Stealth Path + Radial Build Menu. / 辅助模组三合一：电网小地图叠加 + 偷袭小道 + 圆盘快捷建造。",
+  "version": "1.0.0",
+  "minGameVersion": 154,
+  "hidden": true,
+  "java": true,
+  "main": "bektools.BekToolsMod"
+}

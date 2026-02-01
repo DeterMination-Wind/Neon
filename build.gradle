@@ -1,0 +1,44 @@
+plugins{
+    id "java"
+}
+
+group = "bektools"
+version = "1.0.0"
+
+repositories{
+    mavenCentral()
+    maven{ url "https://jitpack.io" }
+}
+
+dependencies{
+    // Prefer building against a local Mindustry source checkout (as an included subproject).
+    if(rootProject.findProject(":core") != null){
+        compileOnly project(":core")
+    }else{
+        // Standalone build: fetch Mindustry core from JitPack.
+        def mindustryVersion = (findProperty("mindustryVersion") ?: "v154.3").toString()
+        compileOnly "com.github.Anuken.MindustryJitpack:core:$mindustryVersion"
+    }
+}
+
+tasks.withType(JavaCompile).configureEach{
+    options.encoding = "UTF-8"
+}
+
+jar{
+    // A Mindustry Java mod is a zip/jar archive with classes + resources.
+    // Use .zip extension for distribution.
+    archiveFileName = "BEK-Tools.zip"
+}
+
+// Keep a copy at the repo root for easy install.
+tasks.register("copyZipToRoot", Copy){
+    doNotTrackState("Copies into root directory which may contain unreadable Gradle lock files.")
+    dependsOn tasks.named("jar")
+    from(tasks.named("jar").flatMap{ it.archiveFile })
+    into(rootDir.parentFile)
+}
+
+tasks.named("jar").configure{
+    finalizedBy tasks.named("copyZipToRoot")
+}

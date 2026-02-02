@@ -104,6 +104,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private static final String keySafeCorridorBiasPct = "sp-safe-corridor-bias-pct";
     private static final String keyComputeSafeDistance = "sp-compute-safe-distance";
     private static final String keyRtsMaxWaypoints = "sp-rts-max-waypoints";
+    private static final String keyRtsUpdateInterval = "sp-rts-update-interval";
+    private static final String keyRtsCommandSpacing = "sp-rts-command-spacing";
     private static final String keyAutoBatchEnabled = "sp-auto-batch-enabled";
     private static final String keyAutoBatchSizePct = "sp-auto-batch-size-pct";
     private static final String keyAutoBatchDelayPct = "sp-auto-batch-delay-pct";
@@ -182,6 +184,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private int autoMoveFollowGoalPacked = -1;
     private final arc.struct.IntIntMap autoMoveFollowPathHash = new arc.struct.IntIntMap();
     private final arc.struct.IntFloatMap autoMoveFollowLastIssue = new arc.struct.IntFloatMap();
+    private float rtsSendCursor = 0f;
 
     private float autoMoveMonitorUntil = 0f;
     private float autoMoveMonitorNextCheck = 0f;
@@ -244,6 +247,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             autoMoveFollowGoalPacked = -1;
             autoMoveFollowPathHash.clear();
             autoMoveFollowLastIssue.clear();
+            rtsSendCursor = 0f;
             invalidatePassableCache();
         });
 
@@ -261,6 +265,14 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
     private static int rtsMaxWaypoints(){
         return clamp(Core.settings.getInt(keyRtsMaxWaypoints, 12), 2, 80);
+    }
+
+    private static float rtsUpdateInterval(){
+        return Math.max(1f, Core.settings.getInt(keyRtsUpdateInterval, 30));
+    }
+
+    private static float rtsCommandSpacing(){
+        return Math.max(0f, Core.settings.getInt(keyRtsCommandSpacing, 2));
     }
 
     private static int autoClusterSplitTiles(){
@@ -339,6 +351,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
         Core.settings.defaults(keySafeCorridorBiasPct, 35);
         Core.settings.defaults(keyComputeSafeDistance, true);
         Core.settings.defaults(keyRtsMaxWaypoints, 12);
+        Core.settings.defaults(keyRtsUpdateInterval, 30);
+        Core.settings.defaults(keyRtsCommandSpacing, 2);
         Core.settings.defaults(keyAutoBatchEnabled, true);
         Core.settings.defaults(keyAutoBatchSizePct, 100);
         Core.settings.defaults(keyAutoBatchDelayPct, 100);
@@ -455,6 +469,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
         table.pref(new HeaderSetting("@sp.section.advanced.automove", Icon.commandRally));
         table.pref(new IconSliderSetting(keyRtsMaxWaypoints, 12, 2, 60, 1, Icon.list, v -> String.valueOf(v), null));
+        table.pref(new IconSliderSetting(keyRtsUpdateInterval, 30, 1, 240, 1, Icon.refresh, v -> Strings.autoFixed(v / 60f, 2) + "s", null));
+        table.pref(new IconSliderSetting(keyRtsCommandSpacing, 2, 0, 10, 1, Icon.info, v -> Strings.autoFixed(v / 60f, 3) + "s", null));
         table.pref(new IconCheckSetting(keyAutoBatchEnabled, true, Icon.commandRally, null));
         table.pref(new IconSliderSetting(keyAutoBatchSizePct, 100, 50, 200, 10, Icon.resize, v -> v + "%", null));
         table.pref(new IconSliderSetting(keyAutoBatchDelayPct, 100, 0, 200, 10, Icon.refresh, v -> v + "%", null));
@@ -931,6 +947,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             autoMoveFollowGoalPacked = -1;
             autoMoveFollowPathHash.clear();
             autoMoveFollowLastIssue.clear();
+            rtsSendCursor = 0f;
             showToast(requested == autoModeMouse ? "@sp.toast.auto.mouse.off" : "@sp.toast.auto.attack.off", 2.5f);
         }else{
             autoMode = requested;
@@ -947,6 +964,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             autoMoveFollowGoalPacked = -1;
             autoMoveFollowPathHash.clear();
             autoMoveFollowLastIssue.clear();
+            rtsSendCursor = 0f;
 
             if(autoMode == autoModeAttack && bufferedTargetPacked == -1){
                 showToast("@sp.toast.auto.attack.wait", 3f);
@@ -961,6 +979,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         if(!state.isGame() || world == null || player == null) return;
 
         float baseInterval = previewRefreshInterval();
+        float rtsInterval = Math.max(baseInterval, rtsUpdateInterval());
         if(Time.time < autoNextCompute) return;
 
         Seq<ControlledCluster> clusters = computeControlledClusters();
@@ -1032,7 +1051,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 float lastIssued = autoMoveFollowLastIssue.get(cluster.key, -999999f);
 
                 if(prevHash == Integer.MIN_VALUE || prevHash != newHash){
-                    if(Time.time - lastIssued >= baseInterval){
+                    if(Time.time - lastIssued >= rtsInterval){
                         issueRtsMoveAlongPath(cluster, sp.path, map.width);
                         autoMoveFollowPathHash.put(cluster.key, newHash);
                         autoMoveFollowLastIssue.put(cluster.key, Time.time);
@@ -1949,6 +1968,11 @@ public class StealthPathMod extends mindustry.mod.Mod{
             waypoints.add(new Vec2(tileToWorld(tx) + tilesize / 2f, tileToWorld(ty) + tilesize / 2f));
         }
 
+        // Do not include a waypoint at the path's start; this can cause queued RTS paths to stall.
+        if(waypoints.size > 1){
+            waypoints.remove(0);
+        }
+
         int lastIdx = compact.items[compact.size - 1];
         int lastTx = lastIdx % width;
         int lastTy = lastIdx / width;
@@ -2021,25 +2045,43 @@ public class StealthPathMod extends mindustry.mod.Mod{
             }
 
             float delay = b * delayBetween;
-            if(delay <= 0.001f){
-                for(int i = 0; i < waypoints.size; i++){
-                    boolean queue = i != 0;
-                    Call.commandUnits(player, ids, null, null, waypoints.get(i), queue, true);
-                }
-            }else{
-                int[] batchIds = ids;
-                Time.run(delay, () -> {
-                    for(int k = 0; k < batchIds.length; k++){
-                        if(autoMoveCommandByUnit.get(batchIds[k], -1) != commandId) return;
-                    }
-                    if(!state.isGame() || player == null) return;
-                    for(int i = 0; i < waypoints.size; i++){
-                        boolean queue = i != 0;
-                        Call.commandUnits(player, batchIds, null, null, waypoints.get(i), queue, true);
+            int[] batchIds = ids;
+
+            // Send the first waypoint quickly, then drip-feed queued waypoints to avoid triggering server DoS protections.
+            scheduleRtsCommand(delay, commandId, batchIds, waypoints.first(), false);
+
+            if(waypoints.size > 1){
+                Time.run(0f, () -> {
+                    for(int i = 1; i < waypoints.size; i++){
+                        scheduleRtsCommand(delay, commandId, batchIds, waypoints.get(i), true);
                     }
                 });
             }
         }
+    }
+
+    private void scheduleRtsCommand(float baseDelayFrames, int commandId, int[] unitIds, Vec2 waypoint, boolean queue){
+        float spacing = rtsCommandSpacing();
+        float now = Time.time;
+        float earliest = now + Math.max(0f, baseDelayFrames);
+        float scheduled = Math.max(earliest, rtsSendCursor);
+        rtsSendCursor = scheduled + spacing;
+
+        float delay = scheduled - now;
+        if(delay <= 0.001f){
+            runRtsCommand(commandId, unitIds, waypoint, queue);
+        }else{
+            Time.run(delay, () -> runRtsCommand(commandId, unitIds, waypoint, queue));
+        }
+    }
+
+    private void runRtsCommand(int commandId, int[] unitIds, Vec2 waypoint, boolean queue){
+        if(!state.isGame() || player == null) return;
+        if(unitIds == null || unitIds.length == 0) return;
+        for(int i = 0; i < unitIds.length; i++){
+            if(autoMoveCommandByUnit.get(unitIds[i], -1) != commandId) return;
+        }
+        Call.commandUnits(player, unitIds, null, null, waypoint, queue, true);
     }
 
     private static int findNearestPassable(ThreatMap map, int x, int y, int radius){

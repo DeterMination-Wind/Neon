@@ -3,9 +3,7 @@
     {
       "id": "pgmm",
       "name": "Power Grid Minimap",
-      "repo": "https://github.com/DeterMination-Wind/Power-Grid-Minimap-",
-      "branch": "main",
-      "localFallback": "../Power-Grid-Minimap-repo-clone",
+      "localPath": "../Power-Grid-Minimap-repo-clone",
       "javaPackageDir": "src/main/java/powergridminimap",
       "mainClassFile": "PowerGridMinimapMod.java",
       "bundlesDir": "src/main/resources/bundles"
@@ -13,9 +11,7 @@
     {
       "id": "sp",
       "name": "StealthPath",
-      "repo": "https://github.com/DeterMination-Wind/StealthPath",
-      "branch": "main",
-      "localFallback": "../StealthPath",
+      "localPath": "../StealthPath",
       "javaPackageDir": "src/main/java/stealthpath",
       "mainClassFile": "StealthPathMod.java",
       "bundlesDir": "src/main/resources/bundles"
@@ -23,9 +19,7 @@
     {
       "id": "rbm",
       "name": "Radial Build Menu",
-      "repo": "https://github.com/DeterMination-Wind/Radial-Build-Menu-hud-",
-      "branch": "main",
-      "localFallback": "../Radial-Build-Menu-hud-",
+      "localPath": "../Radial-Build-Menu-hud-",
       "javaPackageDir": "src/main/java/radialbuildmenu",
       "mainClassFile": "RadialBuildMenuMod.java",
       "bundlesDir": "src/main/resources/bundles"

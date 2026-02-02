@@ -73,7 +73,7 @@ Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
 
 ### 同步上游更新（维护脚本）
 
-仓库内提供 `tools/update_submods.py` 用于自动检测并合并 3 个上游模组（PGMM / StealthPath / RBM）的更新到本仓库：
+仓库内提供 `tools/update_submods.py` 用于自动检测并合并 3 个本地子模组仓库（PGMM / StealthPath / RBM）的更新到本仓库（不访问 GitHub，直接读取本地 git HEAD）：
 
 ```bash
 python tools/update_submods.py --check
@@ -82,7 +82,6 @@ python tools/update_submods.py
 
 它会：
 
-- 自动 clone/pull 上游到本地 `./.submods/`（已加入 `.gitignore`）
 - 更新 3 个主类源码并自动重新注入 BEK-Tools 的整合钩子
 - 合并 `bundles/*.properties` 并生成 `tools/submods.lock.json`（记录上游 commit）
 
@@ -120,7 +119,7 @@ Output: `build/libs/BEK-Tools.zip`
 
 ### Sync upstream updates (maintainer script)
 
-This repo includes `tools/update_submods.py` to auto-detect and merge updates from the 3 upstream mods (PGMM / StealthPath / RBM):
+This repo includes `tools/update_submods.py` to auto-detect and merge updates from 3 local git checkouts (PGMM / StealthPath / RBM). It does NOT access GitHub; it reads local git HEADs:
 
 ```bash
 python tools/update_submods.py --check
@@ -129,7 +128,6 @@ python tools/update_submods.py
 
 It will:
 
-- Clone/pull upstream repos into `./.submods/` (gitignored)
 - Refresh the 3 main Java sources and re-inject BEK-Tools integration hooks
 - Merge `bundles/*.properties` and write `tools/submods.lock.json` (upstream commit lock)
 

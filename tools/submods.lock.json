@@ -1,21 +1,18 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-02-02T13:06:50Z",
+  "generatedAtUtc": "2026-02-02T13:22:32Z",
   "mods": {
     "pgmm": {
       "head": "20830c383abb32f9fca00529709e5b2139291cc7",
-      "branch": "main",
-      "repo": "https://github.com/DeterMination-Wind/Power-Grid-Minimap-"
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\Power-Grid-Minimap-repo-clone"
     },
     "sp": {
       "head": "12490e7b4e9e1653d10c377b6ab51f6ce3994170",
-      "branch": "main",
-      "repo": "https://github.com/DeterMination-Wind/StealthPath"
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\StealthPath"
     },
     "rbm": {
       "head": "da99ec04c278bfbfcee4dbdc0133c718853e92fd",
-      "branch": "main",
-      "repo": "https://github.com/DeterMination-Wind/Radial-Build-Menu-hud-"
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\Radial-Build-Menu-hud-"
     }
   }
 }

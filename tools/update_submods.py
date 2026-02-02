@@ -18,16 +18,13 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
 CONFIG_PATH = TOOLS / "submods.json"
 LOCK_PATH = TOOLS / "submods.lock.json"
-SUBMODS_DIR = ROOT / ".submods"
 
 
 @dataclasses.dataclass(frozen=True)
 class SubMod:
     id: str
     name: str
-    repo: str
-    branch: str
-    local_fallback: Optional[Path]
+    local_path: Path
     java_package_dir: Path
     main_class_file: str
     bundles_dir: Path
@@ -53,14 +50,14 @@ def load_config() -> List[SubMod]:
     raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     mods: List[SubMod] = []
     for m in raw.get("mods", []):
-        fallback = m.get("localFallback")
+        local_path = m.get("localPath")
+        if not local_path:
+            raise ValueError(f"Missing localPath for mod entry: {m.get('id')}")
         mods.append(
             SubMod(
                 id=m["id"],
                 name=m["name"],
-                repo=m["repo"],
-                branch=m.get("branch", "main"),
-                local_fallback=(ROOT / fallback).resolve() if fallback else None,
+                local_path=(ROOT / local_path).resolve(),
                 java_package_dir=ROOT / m["javaPackageDir"],
                 main_class_file=m["mainClassFile"],
                 bundles_dir=ROOT / m["bundlesDir"],
@@ -81,30 +78,17 @@ def save_lock(lock: dict) -> None:
     LOCK_PATH.write_text(json.dumps(lock, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def ensure_clone(mod: SubMod) -> Path:
-    dest = SUBMODS_DIR / mod.id
-    if not dest.exists():
-        SUBMODS_DIR.mkdir(parents=True, exist_ok=True)
-        try:
-            run(["git", "clone", "--depth", "1", "--branch", mod.branch, mod.repo, str(dest)])
-            return dest
-        except Exception as e:
-            if mod.local_fallback and mod.local_fallback.exists():
-                print(f"[{mod.id}] WARN: clone failed, using localFallback: {mod.local_fallback}")
-                return mod.local_fallback
-            raise e
-
-    # Update to latest branch head (shallow fetch is fine)
-    try:
-        run(["git", "fetch", "origin", mod.branch, "--depth", "1"], cwd=dest)
-        run(["git", "checkout", "-q", mod.branch], cwd=dest)
-        run(["git", "reset", "--hard", f"origin/{mod.branch}"], cwd=dest)
-    except Exception as e:
-        if mod.local_fallback and mod.local_fallback.exists():
-            print(f"[{mod.id}] WARN: fetch failed, using localFallback: {mod.local_fallback}")
-            return mod.local_fallback
-        raise e
-    return dest
+def resolve_local_repo(mod: SubMod) -> Path:
+    """
+    Uses an existing local git checkout as the single source of truth.
+    This script intentionally does NOT access GitHub/remotes.
+    """
+    repo_dir = mod.local_path
+    if not repo_dir.exists():
+        raise FileNotFoundError(f"[{mod.id}] localPath does not exist: {repo_dir}")
+    if not (repo_dir / ".git").exists():
+        raise FileNotFoundError(f"[{mod.id}] localPath is not a git repo (missing .git): {repo_dir}")
+    return repo_dir
 
 
 def git_head(repo_dir: Path) -> str:
@@ -399,7 +383,7 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
 
 
 def main(argv: List[str]) -> int:
-    ap = argparse.ArgumentParser(description="Sync BEK-Tools with upstream sub-mods (pgmm/sp/rbm).")
+    ap = argparse.ArgumentParser(description="Sync BEK-Tools with local sub-mod git checkouts (pgmm/sp/rbm).")
     ap.add_argument("--check", action="store_true", help="Only check for updates; do not write files.")
     ap.add_argument("--force", action="store_true", help="Force rewrite even if lock matches.")
     args = ap.parse_args(argv)
@@ -412,7 +396,7 @@ def main(argv: List[str]) -> int:
     resolved: List[Tuple[SubMod, Path, str]] = []
 
     for sm in mods:
-        repo_dir = ensure_clone(sm)
+        repo_dir = resolve_local_repo(sm)
         head = git_head(repo_dir)
         resolved.append((sm, repo_dir, head))
 
@@ -438,7 +422,7 @@ def main(argv: List[str]) -> int:
 
     # Update lock file.
     for sm, _repo_dir, head in resolved:
-        lock_mods[sm.id] = {"head": head, "branch": sm.branch, "repo": sm.repo}
+        lock_mods[sm.id] = {"head": head, "localPath": str(sm.local_path)}
     lock["mods"] = lock_mods
     save_lock(lock)
 

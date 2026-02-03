@@ -28,17 +28,21 @@ jobs:
       - name: Build
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon jar
+          ./gradlew --no-daemon jar jarAndroid
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BEK-Tools.zip
-          path: build/libs/BEK-Tools.zip
+          name: BEK-Tools
+          path: |
+            build/libs/BEK-Tools.zip
+            build/libs/BEK-Tools.jar
 
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/libs/BEK-Tools.zip
+          files: |
+            build/libs/BEK-Tools.zip
+            build/libs/BEK-Tools.jar
           generate_release_notes: true

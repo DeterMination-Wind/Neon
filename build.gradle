@@ -31,6 +31,14 @@ jar{
     archiveFileName = "BEK-Tools.zip"
 }
 
+tasks.register("jarAndroid", Jar){
+    group = "build"
+    description = "Packages BEK-Tools as a .jar for Mindustry Android."
+    dependsOn classes
+    archiveFileName = "BEK-Tools.jar"
+    from(sourceSets.main.output)
+}
+
 // Keep a copy at the repo root for easy install.
 tasks.register("copyZipToRoot", Copy){
     doNotTrackState("Copies into root directory which may contain unreadable Gradle lock files.")
@@ -39,6 +47,19 @@ tasks.register("copyZipToRoot", Copy){
     into(rootDir.parentFile)
 }
 
+tasks.register("copyJarToRoot", Copy){
+    doNotTrackState("Copies into root directory which may contain unreadable Gradle lock files.")
+    dependsOn tasks.named("jarAndroid")
+    from(tasks.named("jarAndroid").flatMap{ it.archiveFile })
+    into(rootDir.parentFile)
+}
+
 tasks.named("jar").configure{
     finalizedBy tasks.named("copyZipToRoot")
+}
+
+tasks.named("jarAndroid").configure{
+    //Avoid Gradle validation warnings when building `jar` (finalizes copyZipToRoot) and `jarAndroid` together.
+    mustRunAfter tasks.named("copyZipToRoot")
+    finalizedBy tasks.named("copyJarToRoot")
 }

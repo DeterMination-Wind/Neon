@@ -11,6 +11,7 @@ import arc.graphics.g2d.Lines;
 import arc.input.KeyCode;
 import arc.input.KeyBind;
 import arc.math.Mathf;
+import arc.scene.Element;
 import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.style.Drawable;
@@ -2979,6 +2980,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
             t.add(overlayThreatValue).left().growX();
         }).padTop(2f).growX().row();
 
+        // Allow arbitrary resize in MindustryX OverlayUI (prevents "snap back" on resize end).
+        overlayModeContent.add(new PreferAnySize()).grow().row();
+
         // Window 2: damage.
         overlayDamageContent = new Table();
         overlayDamageContent.background(bgDraw);
@@ -3002,6 +3006,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
             t.add(overlayDamageValue).left().growX();
         }).padTop(6f).growX().row();
 
+        // Allow arbitrary resize in MindustryX OverlayUI (prevents "snap back" on resize end).
+        overlayDamageContent.add(new PreferAnySize()).grow().row();
+
         // Window 3: controls.
         overlayControlsContent = new Table();
         overlayControlsContent.background(bgDraw);
@@ -3016,57 +3023,92 @@ public class StealthPathMod extends mindustry.mod.Mod{
             t.add("快捷控制").color(key);
         }).growX().row();
 
-        overlayControlsContent.table(t -> {
-            t.left().defaults().growX().minWidth(0f).height(38f);
+        Table buttonsHost = new Table();
+        buttonsHost.left();
+        overlayControlsContent.add(buttonsHost).growX().row();
 
-            arc.scene.ui.TextButton bx = new TextButton("X：仅炮塔", btnStyle);
-            bx.getLabel().setColor(accent);
-            bx.getLabel().setWrap(true);
-            bx.getLabelCell().growX().minWidth(0f);
-            bx.clicked(() -> {
-                lastIncludeUnits = false;
-                computePath(false, false);
-            });
-            bx.update(() -> bx.getLabel().setColor((autoMode == autoModeOff && !lastIncludeUnits) ? warn : accent));
+        // Allow arbitrary resize in MindustryX OverlayUI (prevents "snap back" on resize end).
+        overlayControlsContent.add(new PreferAnySize()).grow().row();
 
-            arc.scene.ui.TextButton by = new TextButton("Y：炮塔+单位", btnStyle);
-            by.getLabel().setColor(accent);
-            by.getLabel().setWrap(true);
-            by.getLabelCell().growX().minWidth(0f);
-            by.clicked(() -> {
-                lastIncludeUnits = true;
-                computePath(true, false);
-            });
-            by.update(() -> by.getLabel().setColor((autoMode == autoModeOff && lastIncludeUnits) ? warn : accent));
+        arc.scene.ui.TextButton bx = new TextButton("X：仅炮塔", btnStyle);
+        bx.getLabel().setColor(accent);
+        bx.getLabel().setWrap(true);
+        bx.getLabelCell().growX().minWidth(0f);
+        bx.clicked(() -> {
+            lastIncludeUnits = false;
+            computePath(false, false);
+        });
+        bx.update(() -> bx.getLabel().setColor((autoMode == autoModeOff && !lastIncludeUnits) ? warn : accent));
 
-            arc.scene.ui.TextButton bn = new TextButton("N：自动→鼠标", btnStyle);
-            bn.getLabel().setColor(fg);
-            bn.getLabel().setWrap(true);
-            bn.getLabelCell().growX().minWidth(0f);
-            bn.clicked(() -> toggleAutoMode(autoModeMouse));
-            bn.update(() -> bn.getLabel().setColor(autoMode == autoModeMouse ? warn : fg));
+        arc.scene.ui.TextButton by = new TextButton("Y：炮塔+单位", btnStyle);
+        by.getLabel().setColor(accent);
+        by.getLabel().setWrap(true);
+        by.getLabelCell().growX().minWidth(0f);
+        by.clicked(() -> {
+            lastIncludeUnits = true;
+            computePath(true, false);
+        });
+        by.update(() -> by.getLabel().setColor((autoMode == autoModeOff && lastIncludeUnits) ? warn : accent));
 
-            arc.scene.ui.TextButton bm = new TextButton("M：自动→攻击", btnStyle);
-            bm.getLabel().setColor(fg);
-            bm.getLabel().setWrap(true);
-            bm.getLabelCell().growX().minWidth(0f);
-            bm.clicked(() -> toggleAutoMode(autoModeAttack));
-            bm.update(() -> bm.getLabel().setColor(autoMode == autoModeAttack ? warn : fg));
+        arc.scene.ui.TextButton bn = new TextButton("N：自动→鼠标", btnStyle);
+        bn.getLabel().setColor(fg);
+        bn.getLabel().setWrap(true);
+        bn.getLabelCell().growX().minWidth(0f);
+        bn.clicked(() -> toggleAutoMode(autoModeMouse));
+        bn.update(() -> bn.getLabel().setColor(autoMode == autoModeMouse ? warn : fg));
 
-            arc.scene.ui.TextButton bt = new TextButton("L：切换威胁模式", btnStyle);
-            bt.getLabel().setColor(type);
-            bt.getLabel().setWrap(true);
-            bt.getLabelCell().growX().minWidth(0f);
-            bt.clicked(this::cycleThreatMode);
+        arc.scene.ui.TextButton bm = new TextButton("M：自动→攻击", btnStyle);
+        bm.getLabel().setColor(fg);
+        bm.getLabel().setWrap(true);
+        bm.getLabelCell().growX().minWidth(0f);
+        bm.clicked(() -> toggleAutoMode(autoModeAttack));
+        bm.update(() -> bm.getLabel().setColor(autoMode == autoModeAttack ? warn : fg));
 
-            t.add(bx).padRight(6f);
-            t.add(by);
-            t.row();
-            t.add(bn).padTop(6f).padRight(6f);
-            t.add(bm).padTop(6f);
-            t.row();
-            t.add(bt).colspan(2).padTop(6f);
-        }).growX().row();
+        arc.scene.ui.TextButton bt = new TextButton("L：切换威胁模式", btnStyle);
+        bt.getLabel().setColor(type);
+        bt.getLabel().setWrap(true);
+        bt.getLabelCell().growX().minWidth(0f);
+        bt.clicked(this::cycleThreatMode);
+
+        final float[] lastW = {Float.NaN};
+        final float[] lastH = {Float.NaN};
+        overlayControlsContent.update(() -> {
+            float w = Math.max(0f, overlayControlsContent.getWidth());
+            float h = Math.max(0f, overlayControlsContent.getHeight());
+            if(Math.abs(w - lastW[0]) <= 2f && Math.abs(h - lastH[0]) <= 2f) return;
+            lastW[0] = w;
+            lastH[0] = h;
+
+            // Responsive layout: vertical resize => stack; wide resize => multi-column grid.
+            int cols = w >= 520f ? 3 : (w >= 340f ? 2 : 1);
+
+            buttonsHost.clearChildren();
+            buttonsHost.left().defaults().minWidth(0f).height(38f);
+
+            if(cols <= 1){
+                buttonsHost.defaults().growX();
+                buttonsHost.add(bx).row();
+                buttonsHost.add(by).padTop(6f).row();
+                buttonsHost.add(bn).padTop(6f).row();
+                buttonsHost.add(bm).padTop(6f).row();
+                buttonsHost.add(bt).padTop(6f).row();
+            }else if(cols == 2){
+                buttonsHost.defaults().growX();
+                buttonsHost.add(bx).padRight(6f);
+                buttonsHost.add(by).row();
+                buttonsHost.add(bn).padTop(6f).padRight(6f);
+                buttonsHost.add(bm).padTop(6f).row();
+                buttonsHost.add(bt).colspan(2).padTop(6f).row();
+            }else{
+                // 3 columns: put X/Y/Threat on first row; N/M on second row.
+                buttonsHost.defaults().growX();
+                buttonsHost.add(bx).padRight(6f);
+                buttonsHost.add(by).padRight(6f);
+                buttonsHost.add(bt).row();
+                buttonsHost.add(bn).padTop(6f).padRight(6f).colspan(2);
+                buttonsHost.add(bm).padTop(6f).row();
+            }
+        });
     }
 
     private static Drawable tintDrawable(Drawable base, Color tint){
@@ -3075,6 +3117,28 @@ public class StealthPathMod extends mindustry.mod.Mod{
             return ((arc.scene.style.TextureRegionDrawable)base).tint(tint);
         }
         return base;
+    }
+
+    private static class PreferAnySize extends Element{
+        @Override
+        public float getMinWidth(){
+            return 0f;
+        }
+
+        @Override
+        public float getPrefWidth(){
+            return getWidth();
+        }
+
+        @Override
+        public float getMinHeight(){
+            return 0f;
+        }
+
+        @Override
+        public float getPrefHeight(){
+            return getHeight();
+        }
     }
 
     private String overlayPathModeText(){
@@ -3095,6 +3159,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         private Method getData;
         private Method setEnabled;
         private Method setPinned;
+        private boolean accessorsInitialized = false;
 
         boolean isInstalled(){
             if(initialized) return installed;
@@ -3156,7 +3221,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
         private void tryInitWindowAccessors(Object window){
             if(window == null) return;
-            if(getData != null || setAvailability != null) return;
+            if(accessorsInitialized && (getData != null || setAvailability != null || setResizable != null || setAutoHeight != null)) return;
             try{
                 Class<?> wc = window.getClass();
                 try{
@@ -3190,6 +3255,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                         setPinned = null;
                     }
                 }
+                accessorsInitialized = true;
             }catch(Throwable ignored){
             }
         }

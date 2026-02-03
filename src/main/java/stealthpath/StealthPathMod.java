@@ -3,6 +3,7 @@ package stealthpath;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
+import arc.func.Prov;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -53,6 +54,7 @@ import mindustry.world.meta.BuildVisibility;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.PriorityQueue;
+import java.lang.reflect.Method;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -203,6 +205,20 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
     private float autoNextNoUnitsToast = 0f;
 
+    // Optional MindustryX OverlayUI integration (reflection; no hard dependency).
+    private final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
+    private Object xModeWindow;
+    private Object xDamageWindow;
+    private Object xControlsWindow;
+    private Table overlayModeContent;
+    private Table overlayDamageContent;
+    private Table overlayControlsContent;
+    private float overlayNextAttachAttempt = 0f;
+
+    private Label overlayModeValue;
+    private Label overlayThreatValue;
+    private Label overlayDamageValue;
+
     // Cached passability (expensive to recompute every frame).
     private final arc.struct.IntMap<boolean[]> passableCacheByKey = new arc.struct.IntMap<>();
     private final IntSeq passableCacheKeyOrder = new IntSeq();
@@ -229,6 +245,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
             refreshAutoColors();
             registerTriggers();
             GithubUpdateCheck.checkOnce();
+            // Try to attach OverlayUI windows (safe in vanilla; will fall back to HUD).
+            Time.runTask(1f, this::ensureOverlayWindowsAttached);
         });
 
         Events.on(ClientChatEvent.class, e -> onChatMessage(e.message));
@@ -664,6 +682,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private void update(){
         if(mobile) return;
         if(!Core.settings.getBool(keyEnabled, true)) return;
+
+        ensureOverlayWindowsAttached();
+
         if(!state.isGame() || world == null || world.isGenerating() || player == null || player.unit() == null) return;
 
         if(Core.scene.hasKeyboard() || Core.scene.hasDialog()) return;
@@ -2838,6 +2859,327 @@ public class StealthPathMod extends mindustry.mod.Mod{
         if(!Core.settings.getBool(keyShowToasts, true)) return;
         String text = keyOrText.startsWith("@") ? Core.bundle.get(keyOrText.substring(1)) : keyOrText;
         ui.showInfoToast(text, seconds);
+    }
+
+    private void ensureOverlayWindowsAttached(){
+        // Avoid spamming reflection attempts every frame.
+        if(Time.time < overlayNextAttachAttempt) return;
+        overlayNextAttachAttempt = Time.time + 60f;
+
+        if(ui == null || ui.hudGroup == null) return;
+
+        if(overlayModeContent == null || overlayDamageContent == null || overlayControlsContent == null){
+            buildOverlayWindows();
+        }
+
+        boolean enabled = Core.settings.getBool(keyEnabled, true);
+
+        if(xOverlayUi.isInstalled()){
+            try{
+                // When hosted by OverlayUI, do not manage position/size ourselves.
+                if(xModeWindow == null){
+                    try{ overlayModeContent.remove(); }catch(Throwable ignored){}
+                    xModeWindow = xOverlayUi.registerWindow("stealthpath-mode", overlayModeContent, () -> state != null && state.isGame());
+                    xOverlayUi.tryConfigureWindow(xModeWindow, true, true);
+                }
+                if(xDamageWindow == null){
+                    try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
+                    xDamageWindow = xOverlayUi.registerWindow("stealthpath-damage", overlayDamageContent, () -> state != null && state.isGame());
+                    xOverlayUi.tryConfigureWindow(xDamageWindow, true, true);
+                }
+                if(xControlsWindow == null){
+                    try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
+                    xControlsWindow = xOverlayUi.registerWindow("stealthpath-controls", overlayControlsContent, () -> state != null && state.isGame());
+                    xOverlayUi.tryConfigureWindow(xControlsWindow, true, true);
+                }
+
+                // Show panels when the mod is enabled, without requiring users to manually add them in OverlayUI.
+                xOverlayUi.setEnabledAndPinned(xModeWindow, enabled, true);
+                xOverlayUi.setEnabledAndPinned(xDamageWindow, enabled, true);
+                xOverlayUi.setEnabledAndPinned(xControlsWindow, enabled, true);
+                return;
+            }catch(Throwable ignored){
+                xModeWindow = null;
+                xDamageWindow = null;
+                xControlsWindow = null;
+            }
+        }
+
+        // Fallback: attach directly to HUD group (vanilla client, or OverlayUI unavailable).
+        attachFallbackHud(overlayModeContent, "sp-ov-mode", 8f, -8f);
+        attachFallbackHud(overlayDamageContent, "sp-ov-dmg", 8f, -84f);
+        attachFallbackHud(overlayControlsContent, "sp-ov-ctl", 8f, -152f);
+    }
+
+    private void attachFallbackHud(Table content, String name, float x, float yFromTop){
+        if(content == null || ui == null || ui.hudGroup == null) return;
+        if(ui.hudGroup.find(name) != null) return;
+        try{ content.remove(); }catch(Throwable ignored){}
+        content.name = name;
+        ui.hudGroup.addChild(content);
+        content.toFront();
+        content.update(() -> {
+            // Anchor near top-left; yFromTop is negative pixels down from top.
+            content.setPosition(x, Core.graphics.getHeight() + yFromTop, Align.topLeft);
+        });
+    }
+
+    private void buildOverlayWindows(){
+        // VSCode-like palette (Dark+).
+        Color bg = Color.valueOf("1e1e1e");
+        Color border = Color.valueOf("2d2d30");
+        Color fg = Color.valueOf("d4d4d4");
+        Color key = Color.valueOf("c586c0");   // keyword
+        Color type = Color.valueOf("4ec9b0");  // type
+        Color value = Color.valueOf("9cdcfe"); // variable
+        Color number = Color.valueOf("b5cea8"); // number
+        Color accent = Color.valueOf("569cd6"); // function-ish
+        Color warn = Color.valueOf("d7ba7d");
+
+        Drawable bgDraw = tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, bg);
+        Drawable borderDraw = tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, border);
+
+        arc.scene.ui.TextButton.TextButtonStyle btnStyle = new arc.scene.ui.TextButton.TextButtonStyle(Styles.flatt);
+        btnStyle.up = borderDraw;
+        btnStyle.over = tintDrawable(Tex.whiteui == null ? borderDraw : Tex.whiteui, Color.valueOf("2a2d2e"));
+        btnStyle.down = tintDrawable(Tex.whiteui == null ? borderDraw : Tex.whiteui, Color.valueOf("094771"));
+        btnStyle.fontColor = fg;
+
+        // Window 1: mode + threat.
+        overlayModeContent = new Table();
+        overlayModeContent.background(bgDraw);
+        overlayModeContent.margin(8f);
+        overlayModeContent.touchable = Touchable.disabled;
+        overlayModeContent.defaults().left();
+
+        overlayModeContent.table(t -> {
+            t.background(borderDraw);
+            t.margin(6f);
+            t.add("SP").color(accent).padRight(6f);
+            t.add("STATUS").color(key);
+        }).growX().row();
+
+        overlayModeContent.table(t -> {
+            t.left();
+            t.add("MODE").color(key).padRight(8f);
+            overlayModeValue = new Label("", Styles.outlineLabel);
+            overlayModeValue.setColor(value);
+            overlayModeValue.update(() -> overlayModeValue.setText(overlayPathModeText()));
+            t.add(overlayModeValue).left().growX();
+        }).padTop(6f).growX().row();
+
+        overlayModeContent.table(t -> {
+            t.left();
+            t.add("THREAT").color(key).padRight(8f);
+            overlayThreatValue = new Label("", Styles.outlineLabel);
+            overlayThreatValue.setColor(type);
+            overlayThreatValue.update(() -> overlayThreatValue.setText(threatModeDisplay(Core.settings.getInt(keyThreatMode, threatModeGround))));
+            t.add(overlayThreatValue).left().growX();
+        }).padTop(2f).growX().row();
+
+        // Window 2: damage.
+        overlayDamageContent = new Table();
+        overlayDamageContent.background(bgDraw);
+        overlayDamageContent.margin(8f);
+        overlayDamageContent.touchable = Touchable.disabled;
+        overlayDamageContent.defaults().left();
+
+        overlayDamageContent.table(t -> {
+            t.background(borderDraw);
+            t.margin(6f);
+            t.add("SP").color(accent).padRight(6f);
+            t.add("DAMAGE").color(key);
+        }).growX().row();
+
+        overlayDamageContent.table(t -> {
+            t.left();
+            t.add("DMG").color(key).padRight(8f);
+            overlayDamageValue = new Label("", Styles.outlineLabel);
+            overlayDamageValue.setColor(number);
+            overlayDamageValue.update(() -> overlayDamageValue.setText(Strings.autoFixed(Math.max(0f, lastDamage), 2)));
+            t.add(overlayDamageValue).left().growX();
+        }).padTop(6f).growX().row();
+
+        // Window 3: controls.
+        overlayControlsContent = new Table();
+        overlayControlsContent.background(bgDraw);
+        overlayControlsContent.margin(8f);
+        overlayControlsContent.touchable = Touchable.childrenOnly;
+        overlayControlsContent.defaults().left();
+
+        overlayControlsContent.table(t -> {
+            t.background(borderDraw);
+            t.margin(6f);
+            t.add("SP").color(accent).padRight(6f);
+            t.add("CONTROLS").color(key);
+        }).growX().row();
+
+        overlayControlsContent.table(t -> {
+            t.left();
+
+            arc.scene.ui.TextButton bx = new TextButton("X: Turrets", btnStyle);
+            bx.getLabel().setColor(accent);
+            bx.clicked(() -> {
+                lastIncludeUnits = false;
+                computePath(false, false);
+            });
+            bx.update(() -> bx.getLabel().setColor((autoMode == autoModeOff && !lastIncludeUnits) ? warn : accent));
+
+            arc.scene.ui.TextButton by = new TextButton("Y: All", btnStyle);
+            by.getLabel().setColor(accent);
+            by.clicked(() -> {
+                lastIncludeUnits = true;
+                computePath(true, false);
+            });
+            by.update(() -> by.getLabel().setColor((autoMode == autoModeOff && lastIncludeUnits) ? warn : accent));
+
+            arc.scene.ui.TextButton bn = new TextButton("N: Auto→Mouse", btnStyle);
+            bn.getLabel().setColor(fg);
+            bn.clicked(() -> toggleAutoMode(autoModeMouse));
+            bn.update(() -> bn.getLabel().setColor(autoMode == autoModeMouse ? warn : fg));
+
+            arc.scene.ui.TextButton bm = new TextButton("M: Auto→Attack", btnStyle);
+            bm.getLabel().setColor(fg);
+            bm.clicked(() -> toggleAutoMode(autoModeAttack));
+            bm.update(() -> bm.getLabel().setColor(autoMode == autoModeAttack ? warn : fg));
+
+            arc.scene.ui.TextButton bt = new TextButton("L: Threat", btnStyle);
+            bt.getLabel().setColor(type);
+            bt.clicked(this::cycleThreatMode);
+
+            t.add(bx).padRight(6f);
+            t.add(by).padRight(6f);
+            t.row();
+            t.add(bn).padTop(6f).padRight(6f);
+            t.add(bm).padTop(6f).padRight(6f);
+            t.add(bt).padTop(6f);
+        }).growX().row();
+    }
+
+    private static Drawable tintDrawable(Drawable base, Color tint){
+        if(base == null || tint == null) return base;
+        if(base instanceof arc.scene.style.TextureRegionDrawable){
+            return ((arc.scene.style.TextureRegionDrawable)base).tint(tint);
+        }
+        return base;
+    }
+
+    private String overlayPathModeText(){
+        if(autoMode == autoModeMouse) return "N / AUTO → MOUSE";
+        if(autoMode == autoModeAttack) return "M / AUTO → ATTACK";
+        return lastIncludeUnits ? "Y / PATH (TURRETS+UNITS)" : "X / PATH (TURRETS)";
+    }
+
+    /** Optional integration with MindustryX OverlayUI. Uses reflection so vanilla builds won't crash. */
+    private static class MindustryXOverlayUI{
+        private boolean initialized = false;
+        private boolean installed = false;
+        private Object instance;
+        private Method registerWindow;
+        private Method setAvailability;
+        private Method setResizable;
+        private Method setAutoHeight;
+        private Method getData;
+        private Method setEnabled;
+        private Method setPinned;
+
+        boolean isInstalled(){
+            if(initialized) return installed;
+            initialized = true;
+            try{
+                installed = mindustry.Vars.mods != null && mindustry.Vars.mods.locateMod("mindustryx") != null;
+            }catch(Throwable ignored){
+                installed = false;
+            }
+            if(!installed) return false;
+
+            try{
+                Class<?> c = Class.forName("mindustryX.features.ui.OverlayUI");
+                instance = c.getField("INSTANCE").get(null);
+                registerWindow = c.getMethod("registerWindow", String.class, Table.class);
+            }catch(Throwable t){
+                installed = false;
+                return false;
+            }
+            return true;
+        }
+
+        Object registerWindow(String name, Table table, Prov<Boolean> availability){
+            if(!isInstalled()) return null;
+            try{
+                Object window = registerWindow.invoke(instance, name, table);
+                tryInitWindowAccessors(window);
+                if(window != null && availability != null && setAvailability != null){
+                    setAvailability.invoke(window, availability);
+                }
+                return window;
+            }catch(Throwable t){
+                return null;
+            }
+        }
+
+        void setEnabledAndPinned(Object window, boolean enabled, boolean pinned){
+            if(window == null) return;
+            try{
+                tryInitWindowAccessors(window);
+                if(getData == null) return;
+                Object data = getData.invoke(window);
+                if(data == null) return;
+                if(setEnabled != null) setEnabled.invoke(data, enabled);
+                if(setPinned != null) setPinned.invoke(data, pinned);
+            }catch(Throwable ignored){
+            }
+        }
+
+        void tryConfigureWindow(Object window, boolean autoHeight, boolean resizable){
+            if(window == null) return;
+            try{
+                tryInitWindowAccessors(window);
+                if(setAutoHeight != null) setAutoHeight.invoke(window, autoHeight);
+                if(setResizable != null) setResizable.invoke(window, resizable);
+            }catch(Throwable ignored){
+            }
+        }
+
+        private void tryInitWindowAccessors(Object window){
+            if(window == null) return;
+            if(getData != null || setAvailability != null) return;
+            try{
+                Class<?> wc = window.getClass();
+                try{
+                    setAvailability = wc.getMethod("setAvailability", Prov.class);
+                }catch(Throwable ignored){
+                    setAvailability = null;
+                }
+                try{
+                    setResizable = wc.getMethod("setResizable", boolean.class);
+                }catch(Throwable ignored){
+                    setResizable = null;
+                }
+                try{
+                    setAutoHeight = wc.getMethod("setAutoHeight", boolean.class);
+                }catch(Throwable ignored){
+                    setAutoHeight = null;
+                }
+                getData = wc.getMethod("getData");
+
+                Object data = getData.invoke(window);
+                if(data != null){
+                    Class<?> dc = data.getClass();
+                    try{
+                        setEnabled = dc.getMethod("setEnabled", boolean.class);
+                    }catch(Throwable ignored){
+                        setEnabled = null;
+                    }
+                    try{
+                        setPinned = dc.getMethod("setPinned", boolean.class);
+                    }catch(Throwable ignored){
+                        setPinned = null;
+                    }
+                }
+            }catch(Throwable ignored){
+            }
+        }
     }
 
     // Settings widgets extracted into `StealthPathSettingsWidgets` (same behavior; smaller main file).

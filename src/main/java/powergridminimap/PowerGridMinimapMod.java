@@ -37,6 +37,7 @@ import arc.struct.IntSeq;
 import arc.struct.IntSet;
 import arc.struct.LongSeq;
 import arc.util.Structs;
+import arc.util.Strings;
 import mindustry.content.Blocks;
 import mindustry.core.UI;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -48,7 +49,9 @@ import mindustry.game.EventType.ConfigEvent;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.game.EventType.Trigger;
 import mindustry.graphics.Drawf;
+import mindustry.graphics.Pal;
 import mindustry.gen.Building;
+import mindustry.gen.Icon;
 import mindustry.gen.Player;
 import mindustry.mod.Scripts;
 import mindustry.ui.Fonts;
@@ -199,14 +202,14 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
             //MindustryX OverlayUI integration:
             //OverlayUI.Window visibility is controlled by its own persisted setting (`overlayUI.<name>`), not our PGMM setting.
-            //To keep UX consistent ("enable power table" == it shows up), we mirror our boolean into OverlayUI's enabled/pinned.
-            //Pinned makes it visible even when the OverlayUI edit mode is closed.
+            //To keep UX consistent ("enable power table" == it shows up), we mirror our boolean into OverlayUI's enabled.
+            //Important: only sync on setting changes so players can hide the window from OverlayUI without us forcing it back on.
             if(xPowerTableWindow != null){
                 boolean enabled = Core.settings.getBool(keyPowerTableEnabled, false);
                 if(enabled != lastPowerTableEnabled){
                     lastPowerTableEnabled = enabled;
                     if(enabled){
-                        xOverlayUi.setEnabledAndPinned(xPowerTableWindow, true, true);
+                        xOverlayUi.setEnabledAndPinned(xPowerTableWindow, true, false);
                     }else{
                         xOverlayUi.setEnabledAndPinned(xPowerTableWindow, false, false);
                     }
@@ -393,67 +396,50 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         if(bekBundled) return;
 
 
-        String defaultCategory = "Power Grid Minimap";
-        try{
-            //fallback in case bundles fail to load / missing key
-            if(Core.bundle != null && Core.bundle.getLocale() != null && "zh".equals(Core.bundle.getLocale().getLanguage())){
-                defaultCategory = "电网小地图";
-            }
-        }catch(Throwable ignored){
-        }
-
-        ui.settings.addCategory(Core.bundle.get("pgmm.category", defaultCategory), this::bekBuildSettings);
+        String category = Core.bundle.get("pgmm.category", "Power Grid Minimap");
+        ui.settings.addCategory(category, Icon.powerSmall, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-            table.checkPref(keyEnabled, true);
-            table.sliderPref(keyGridAlpha, 40, 0, 100, 5, v -> v + "%");
-            table.checkPref(keyShowBalance, true);
-            table.sliderPref(keyMarkerScale, 100, 50, 300, 10, v -> v + "%");
-            table.textPref(keyMarkerColor, "ffffff", v -> refreshMarkerColor());
-            table.sliderPref(keyHudMarkerFollowScale, 100, 0, 200, 10, v -> v + "%");
+            // Match MindustryX settings style (icon + Tex.button rows + wrapped titles).
+            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.basic", "Basic"), Icon.settings));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyGridAlpha, 40, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyShowBalance, true, Icon.infoSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyMarkerScale, 100, 50, 300, 10, Icon.resizeSmall, v -> v + "%", null));
+            table.pref(new PgmmSettingsWidgets.IconTextSetting(keyMarkerColor, "ffffff", Icon.effectSmall, v -> refreshMarkerColor()));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyHudMarkerFollowScale, 100, 0, 200, 10, Icon.moveSmall, v -> v + "%", null));
 
-            //MI2 minimap integration toggle (disabled if MI2 not installed).
-            table.row();
-            arc.scene.ui.CheckBox mi2Box = new arc.scene.ui.CheckBox(Core.bundle.get("setting." + keyDrawOnMi2Minimap + ".name", "Draw on MI2 minimap"));
-            ui.addDescTooltip(mi2Box, Core.bundle.getOrNull("setting." + keyDrawOnMi2Minimap + ".description"));
-            mi2Box.getLabel().setWrap(true);
-            mi2Box.getLabelCell().growX();
-            mi2Box.changed(() -> {
-                Core.settings.put(keyDrawOnMi2Minimap, mi2Box.isChecked());
+            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.integration", "Integration"), Icon.linkSmall));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyDrawOnMi2Minimap, false, Icon.mapSmall, v -> {
                 //If MI2 exists, attach/detach immediately; otherwise, no-op.
                 mi2.ensureAttached(cache, markerColor, alert, rescueAlert, rescueColor);
-            });
-            mi2Box.update(() -> mi2Box.setChecked(Core.settings.getBool(keyDrawOnMi2Minimap, false)));
-            table.add(mi2Box).width(Math.min(Core.graphics.getWidth() / 1.2f, 460f)).left().padTop(3f);
-            table.row();
+            }));
 
-            table.sliderPref(keyClaimDistance, 5, 1, 20, 1, v -> v + "");
-            table.sliderPref(keySplitAlertThreshold, 10000, 1000, 50000, 500, v -> v + "/s");
-            table.sliderPref(keySplitAlertWindowSeconds, 4, 1, 15, 1, v -> v + "s");
-            table.sliderPref(keyClusterMarkerDistance, 15, 0, 60, 1, v -> v + "");
-            table.sliderPref(keyReconnectStroke, 2, 1, 8, 1, v -> v + "");
-            table.textPref(keyReconnectColor, "ffa500", v -> refreshReconnectColor());
+            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.alerts", "Alerts & Markers"), Icon.warningSmall));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyClaimDistance, 5, 1, 20, 1, Icon.gridSmall, String::valueOf, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertThreshold, 10000, 1000, 50000, 500, Icon.warningSmall, v -> v + "/s", null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertWindowSeconds, 4, 1, 15, 1, Icon.refreshSmall, v -> v + "s", null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyClusterMarkerDistance, 15, 0, 60, 1, Icon.filterSmall, String::valueOf, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyReconnectStroke, 2, 1, 8, 1, Icon.pencilSmall, String::valueOf, null));
+            table.pref(new PgmmSettingsWidgets.IconTextSetting(keyReconnectColor, "ffa500", Icon.effectSmall, v -> refreshReconnectColor()));
 
-            table.row();
-            table.add("[accent]" + Core.bundle.get("setting.pgmm.rescue.section", "Power Rescue Advisor (Beta)") + "[]").left().padTop(6f);
-            table.row();
-            table.checkPref(keyRescueEnabled, false);
-            table.checkPref(keyRescueAggressive, false);
-            table.sliderPref(keyRescueWindowSeconds, 4, 1, 15, 1, v -> v + "s");
-            table.sliderPref(keyRescueClearWindowSeconds, 8, 0, 60, 1, v -> v + "s");
-            table.sliderPref(keyRescueTopK, 2, 1, 10, 1, v -> v + "");
-            table.sliderPref(keyRescueStroke, 2, 1, 8, 1, v -> v + "");
-            table.textPref(keyRescueColor, "ff3344", v -> refreshRescueColor());
+            table.pref(new PgmmSettingsWidgets.HeaderSetting("@setting.pgmm.rescue.section", Icon.powerSmall));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyRescueEnabled, false, Icon.warningSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyRescueAggressive, false, Icon.settingsSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyRescueWindowSeconds, 4, 1, 15, 1, Icon.refreshSmall, v -> v + "s", null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyRescueClearWindowSeconds, 8, 0, 60, 1, Icon.refreshSmall, v -> v + "s", null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyRescueTopK, 2, 1, 10, 1, Icon.listSmall, String::valueOf, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyRescueStroke, 2, 1, 8, 1, Icon.pencilSmall, String::valueOf, null));
+            table.pref(new PgmmSettingsWidgets.IconTextSetting(keyRescueColor, "ff3344", Icon.effectSmall, v -> refreshRescueColor()));
 
-            table.row();
-            table.add("[accent]" + Core.bundle.get("setting.pgmm.powertable.section", "Power Table") + "[]").left().padTop(6f);
-            table.row();
-            table.checkPref(keyPowerTableEnabled, false);
-            table.sliderPref(keyPowerTableThreshold, 10000, 0, 200000, 1000, v -> v + "/s");
-            table.sliderPref(keyPowerTableBgAlpha, 70, 0, 100, 5, v -> v + "%");
+            table.pref(new PgmmSettingsWidgets.HeaderSetting("@setting.pgmm.powertable.section", Icon.listSmall));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyPowerTableEnabled, false, Icon.listSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyPowerTableThreshold, 10000, 0, 200000, 1000, Icon.powerSmall, v -> v + "/s", null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyPowerTableBgAlpha, 70, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
 
-            table.sliderPref(keyUpdateWaitTenths, 10, 0, 50, 1, v -> (v / 10f) + "s");
+            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.performance", "Performance"), Icon.wrenchSmall));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyUpdateWaitTenths, 10, 0, 50, 1, Icon.refreshSmall, v -> Strings.autoFixed(v / 10f, 1) + "s", null));
         
     }
 
@@ -520,10 +506,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     xPowerTableWindow = xOverlayUi.registerWindow(powerTableName, powerTable, () -> state != null && state.isGame());
                     if(xPowerTableWindow != null){
                         xOverlayUi.tryConfigureWindow(xPowerTableWindow, false, true);
-                        //sync initial state immediately (so enabling the PGMM setting shows the panel without extra clicks)
-                        boolean enabled = Core.settings.getBool(keyPowerTableEnabled, false);
-                        lastPowerTableEnabled = enabled;
-                        xOverlayUi.setEnabledAndPinned(xPowerTableWindow, enabled, enabled);
                         Log.info("PGMM: power table registered to MindustryX OverlayUI.");
                         return;
                     }

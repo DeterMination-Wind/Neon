@@ -93,7 +93,7 @@ python tools/update_submods.py
 
 ### Release（自动构建）
 
-推送形如 `v5.0.0` 的 tag，会触发 GitHub Actions 自动构建并发布 Release。
+推送形如 `v2.0.0` 的 tag，会触发 GitHub Actions 自动构建并发布 Release。
 
 ---
 
@@ -139,4 +139,4 @@ It will:
 
 ### Release (CI)
 
-Push a tag like `v5.0.0` to trigger GitHub Actions to build and publish a Release automatically.
+Push a tag like `v2.0.0` to trigger GitHub Actions to build and publish a Release automatically.

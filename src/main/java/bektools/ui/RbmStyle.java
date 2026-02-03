@@ -85,20 +85,21 @@ public final class RbmStyle{
         public void add(SettingsMenuDialog.SettingsTable table){
             float width = prefWidth();
             table.row();
-            table.table(Tex.button, t -> {
-                t.left().margin(10f);
-
-                Image stripe = t.image(Tex.whiteui).size(4f, 18f).padRight(10f).get();
-                stripe.setScaling(Scaling.stretch);
-                stripe.update(() -> stripe.setColor(readHudColor()));
-
-                if(icon != null){
-                    Image ic = t.image(icon).size(18f).padRight(8f).get();
-                    ic.update(() -> ic.setColor(readHudColor()));
-                }
-
-                t.add(title).color(Color.lightGray).left().growX().minWidth(0f).wrap();
-            }).width(width).padTop(10f).padBottom(4f).left();
+            // Match MindustryX SettingsV2 category style: centered accent title + accent divider line.
+            table.table(t -> {
+                t.center();
+                t.table(inner -> {
+                    inner.center();
+                    if(icon != null){
+                        Image ic = inner.image(icon).size(20f).padRight(8f).get();
+                        ic.setScaling(Scaling.fit);
+                        ic.update(() -> ic.setColor(Pal.accent));
+                    }
+                    inner.add(title).color(Pal.accent).center().growX().minWidth(0f).wrap();
+                }).growX();
+            }).width(width).padTop(12f).padBottom(6f).left();
+            table.row();
+            table.image(Tex.whiteui).color(Pal.accent).height(3f).width(width).padBottom(10f).left();
             table.row();
         }
     }
@@ -115,9 +116,9 @@ public final class RbmStyle{
         public void add(SettingsMenuDialog.SettingsTable table){
             table.row();
             table.add(titleKeyOrText.startsWith("@") ? Core.bundle.get(titleKeyOrText.substring(1)) : titleKeyOrText)
-                .color(Color.gray)
-                .padTop(8f)
-                .padBottom(2f)
+                .color(Color.lightGray)
+                .padTop(6f)
+                .padBottom(4f)
                 .left()
                 .growX()
                 .minWidth(0f)
@@ -156,4 +157,3 @@ public final class RbmStyle{
         }
     }
 }
-

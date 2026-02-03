@@ -1304,7 +1304,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     xMobileToggleWindow = xOverlayUi.registerWindow(mobileWindowName, content, () -> state != null && state.isGame());
                     if(xMobileToggleWindow != null){
                         xOverlayUi.configureWindow(xMobileToggleWindow, true, false);
-                        xOverlayUi.setEnabledAndPinned(xMobileToggleWindow, true, true);
+                        // Auto-enable once, but don't force pinned (allow hiding/closing from OverlayUI).
+                        xOverlayUi.setEnabledAndPinned(xMobileToggleWindow, true, false);
                         return;
                     }
                 }catch(Throwable t){

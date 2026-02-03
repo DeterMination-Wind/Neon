@@ -417,43 +417,43 @@ public class StealthPathMod extends mindustry.mod.Mod{
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
             table.pref(new HeaderSetting("@sp.section.general", null));
-            table.pref(new IconCheckSetting(keyEnabled, true, Icon.ok, null));
-            table.pref(new IconCheckSetting(keyShowToasts, true, Icon.chat, null));
-            table.pref(new IconCheckSetting(keyProMode, false, Icon.settings, null));
+            table.pref(new IconCheckSetting(keyEnabled, true, null, null));
+            table.pref(new IconCheckSetting(keyShowToasts, true, null, null));
+            table.pref(new IconCheckSetting(keyProMode, false, null, null));
             table.pref(new HeaderSetting("@sp.setting.overlayui", null));
-            table.pref(new IconCheckSetting(keyOverlayWindowMode, true, Icon.list, null));
-            table.pref(new IconCheckSetting(keyOverlayWindowDamage, true, Icon.list, null));
-            table.pref(new IconCheckSetting(keyOverlayWindowControls, true, Icon.list, null));
-            table.pref(new IconSliderSetting(keyPathDuration, 10, 0, 60, 5, Icon.info, v -> v == 0 ? "inf" : v + "s", null));
-            table.pref(new IconSliderSetting(keyPathWidth, 2, 1, 6, 1, Icon.resize, v -> String.valueOf(v), null));
-            table.pref(new IconSliderSetting(keyPathAlpha, 85, 0, 100, 5, Icon.image, v -> v + "%", null));
-            table.pref(new IconCheckSetting(keyShowEndpoints, true, Icon.image, null));
-            table.pref(new IconSliderSetting(keyStartDotScale, 220, 0, 400, 10, Icon.right, v -> v + "%", null));
-            table.pref(new IconSliderSetting(keyEndDotScale, 260, 0, 400, 10, Icon.left, v -> v + "%", null));
-            table.pref(new IconCheckSetting(keyShowDamageText, true, Icon.info, null));
-            table.pref(new IconSliderSetting(keyDamageTextScale, 60, 20, 140, 5, Icon.resize, v -> v + "%", null));
-            table.pref(new IconCheckSetting(keyDamageLabelAtEnd, false, Icon.up, null));
-            table.pref(new IconSliderSetting(keyDamageTextOffsetScale, 100, 0, 300, 10, Icon.move, v -> v + "%", null));
-            table.pref(new IconSliderSetting(keyPreviewRefresh, 6, 1, 60, 1, Icon.refresh, v -> Strings.autoFixed(v / 60f, 2) + "s", null));
+            table.pref(new IconCheckSetting(keyOverlayWindowMode, true, null, null));
+            table.pref(new IconCheckSetting(keyOverlayWindowDamage, true, null, null));
+            table.pref(new IconCheckSetting(keyOverlayWindowControls, true, null, null));
+            table.pref(new IconSliderSetting(keyPathDuration, 10, 0, 60, 5, null, v -> v == 0 ? "inf" : v + "s", null));
+            table.pref(new IconSliderSetting(keyPathWidth, 2, 1, 6, 1, null, v -> String.valueOf(v), null));
+            table.pref(new IconSliderSetting(keyPathAlpha, 85, 0, 100, 5, null, v -> v + "%", null));
+            table.pref(new IconCheckSetting(keyShowEndpoints, true, null, null));
+            table.pref(new IconSliderSetting(keyStartDotScale, 220, 0, 400, 10, null, v -> v + "%", null));
+            table.pref(new IconSliderSetting(keyEndDotScale, 260, 0, 400, 10, null, v -> v + "%", null));
+            table.pref(new IconCheckSetting(keyShowDamageText, true, null, null));
+            table.pref(new IconSliderSetting(keyDamageTextScale, 60, 20, 140, 5, null, v -> v + "%", null));
+            table.pref(new IconCheckSetting(keyDamageLabelAtEnd, false, null, null));
+            table.pref(new IconSliderSetting(keyDamageTextOffsetScale, 100, 0, 300, 10, null, v -> v + "%", null));
+            table.pref(new IconSliderSetting(keyPreviewRefresh, 6, 1, 60, 1, null, v -> Strings.autoFixed(v / 60f, 2) + "s", null));
 
             table.pref(new HeaderSetting("@sp.section.colors", null));
-            table.pref(new IconTextSetting(keyGenPathColor, "3c7bff", Icon.effect, v -> refreshGenPathColor()));
-            table.pref(new IconTextSetting(keyMousePathColor, "a27ce5", Icon.zoom, v -> refreshMousePathColor()));
+            table.pref(new IconTextSetting(keyGenPathColor, "3c7bff", null, v -> refreshGenPathColor()));
+            table.pref(new IconTextSetting(keyMousePathColor, "a27ce5", null, v -> refreshMousePathColor()));
 
             table.pref(new HeaderSetting("@sp.section.auto", null));
-            table.pref(new IconSliderSetting(keyAutoSafeDamageThreshold, 10, 0, 200, 1, Icon.warning, v -> String.valueOf(v), null));
-            table.pref(new IconTextSetting(keyAutoColorSafe, "34c759", Icon.ok, v -> refreshAutoColors()));
-            table.pref(new IconTextSetting(keyAutoColorWarn, "ffd60a", Icon.warning, v -> refreshAutoColors()));
-            table.pref(new IconTextSetting(keyAutoColorDead, "ff3b30", Icon.cancel, v -> refreshAutoColors()));
-            table.pref(new IconCheckSetting(keyAutoMoveEnabled, true, Icon.commandRally, null));
-            table.pref(new IconSliderSetting(keyRtsUpdateInterval, 30, 1, 240, 1, Icon.refresh, v -> Strings.autoFixed(v / 60f, 2) + "s", null));
-            table.pref(new IconSliderSetting(keyRtsCommandSpacing, 2, 0, 10, 1, Icon.info, v -> Strings.autoFixed(v / 60f, 3) + "s", null));
-            table.pref(new IconSliderSetting(keyAutoThreatPaddingMax, 6, 0, 20, 1, Icon.warning, v -> v + " tiles", null));
+            table.pref(new IconSliderSetting(keyAutoSafeDamageThreshold, 10, 0, 200, 1, null, v -> String.valueOf(v), null));
+            table.pref(new IconTextSetting(keyAutoColorSafe, "34c759", null, v -> refreshAutoColors()));
+            table.pref(new IconTextSetting(keyAutoColorWarn, "ffd60a", null, v -> refreshAutoColors()));
+            table.pref(new IconTextSetting(keyAutoColorDead, "ff3b30", null, v -> refreshAutoColors()));
+            table.pref(new IconCheckSetting(keyAutoMoveEnabled, true, null, null));
+            table.pref(new IconSliderSetting(keyRtsUpdateInterval, 30, 1, 240, 1, null, v -> Strings.autoFixed(v / 60f, 2) + "s", null));
+            table.pref(new IconSliderSetting(keyRtsCommandSpacing, 2, 0, 10, 1, null, v -> Strings.autoFixed(v / 60f, 3) + "s", null));
+            table.pref(new IconSliderSetting(keyAutoThreatPaddingMax, 6, 0, 20, 1, null, v -> v + " tiles", null));
 
             table.pref(new HeaderSetting("@sp.section.gencluster", null));
-            table.pref(new IconSliderSetting(keyGenClusterMaxPaths, 3, 1, 10, 1, Icon.list, v -> String.valueOf(v), null));
-            table.pref(new IconSliderSetting(keyGenClusterMinSize, 2, 2, 10, 1, Icon.filter, v -> String.valueOf(v), null));
-            table.pref(new IconCheckSetting(keyGenClusterStartFromCore, false, Icon.players, null));
+            table.pref(new IconSliderSetting(keyGenClusterMaxPaths, 3, 1, 10, 1, null, v -> String.valueOf(v), null));
+            table.pref(new IconSliderSetting(keyGenClusterMinSize, 2, 2, 10, 1, null, v -> String.valueOf(v), null));
+            table.pref(new IconCheckSetting(keyGenClusterStartFromCore, false, null, null));
 
             table.pref(new HeaderSetting("@sp.section.target", null));
             addThreatModeRow(table);
@@ -476,32 +476,31 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
     private void buildAdvancedSettings(SettingsMenuDialog.SettingsTable table){
         table.pref(new HeaderSetting("@sp.section.advanced.pathfinding", null));
-        table.pref(new IconSliderSetting(keyAutoClusterSplitTiles, 5, 1, 30, 1, Icon.filter, v -> v + " tiles", null));
-        table.pref(new IconSliderSetting(keyFormationInflatePct, 125, 100, 300, 5, Icon.resize, v -> v + "%", null));
-        table.pref(new IconSliderSetting(keySafeCorridorBiasPct, 35, 0, 200, 5, Icon.info, v -> v + "%", null));
-        table.pref(new IconCheckSetting(keyComputeSafeDistance, true, Icon.grid, null));
+        table.pref(new IconSliderSetting(keyAutoClusterSplitTiles, 5, 1, 30, 1, null, v -> v + " tiles", null));
+        table.pref(new IconSliderSetting(keyFormationInflatePct, 125, 100, 300, 5, null, v -> v + "%", null));
+        table.pref(new IconSliderSetting(keySafeCorridorBiasPct, 35, 0, 200, 5, null, v -> v + "%", null));
+        table.pref(new IconCheckSetting(keyComputeSafeDistance, true, null, null));
 
         table.pref(new HeaderSetting("@sp.section.advanced.automove", null));
-        table.pref(new IconSliderSetting(keyRtsMaxWaypoints, 12, 2, 60, 1, Icon.list, v -> String.valueOf(v), null));
-        table.pref(new IconCheckSetting(keyAutoBatchEnabled, true, Icon.commandRally, null));
-        table.pref(new IconSliderSetting(keyAutoBatchSizePct, 100, 50, 200, 10, Icon.resize, v -> v + "%", null));
-        table.pref(new IconSliderSetting(keyAutoBatchDelayPct, 100, 0, 200, 10, Icon.refresh, v -> v + "%", null));
-        table.pref(new IconSliderSetting(keyAutoSlowMultiplier, 8, 1, 30, 1, Icon.refresh, v -> v + "x", null));
+        table.pref(new IconSliderSetting(keyRtsMaxWaypoints, 12, 2, 60, 1, null, v -> String.valueOf(v), null));
+        table.pref(new IconCheckSetting(keyAutoBatchEnabled, true, null, null));
+        table.pref(new IconSliderSetting(keyAutoBatchSizePct, 100, 50, 200, 10, null, v -> v + "%", null));
+        table.pref(new IconSliderSetting(keyAutoBatchDelayPct, 100, 0, 200, 10, null, v -> v + "%", null));
+        table.pref(new IconSliderSetting(keyAutoSlowMultiplier, 8, 1, 30, 1, null, v -> v + "x", null));
 
         table.pref(new HeaderSetting("@sp.section.advanced.cache", null));
-        table.pref(new IconSliderSetting(keyPassableCacheEntries, 8, 1, 24, 1, Icon.info, v -> String.valueOf(v), v -> invalidatePassableCache()));
+        table.pref(new IconSliderSetting(keyPassableCacheEntries, 8, 1, 24, 1, null, v -> String.valueOf(v), v -> invalidatePassableCache()));
 
         table.pref(new HeaderSetting("@sp.section.advanced.gencluster", null));
-        table.pref(new IconSliderSetting(keyGenClusterLinkDistTiles, defaultGenClusterLinkDistTiles, 1, 20, 1, Icon.list, v -> v + " tiles", null));
-        table.pref(new IconSliderSetting(keyGenClusterNearTurretDistTiles, defaultGenClusterNearTurretDistTiles, 1, 40, 1, Icon.warning, v -> v + " tiles", null));
-        table.pref(new IconSliderSetting(keyGenClusterMinDrawTiles, defaultGenClusterMinDrawTiles, 1, 60, 1, Icon.info, v -> v + " tiles", null));
-        table.pref(new IconSliderSetting(keyGenClusterFallbackBacktrackTiles, defaultGenClusterFallbackBacktrackTiles, 0, 60, 1, Icon.refresh, v -> v + " tiles", null));
+        table.pref(new IconSliderSetting(keyGenClusterLinkDistTiles, defaultGenClusterLinkDistTiles, 1, 20, 1, null, v -> v + " tiles", null));
+        table.pref(new IconSliderSetting(keyGenClusterNearTurretDistTiles, defaultGenClusterNearTurretDistTiles, 1, 40, 1, null, v -> v + " tiles", null));
+        table.pref(new IconSliderSetting(keyGenClusterMinDrawTiles, defaultGenClusterMinDrawTiles, 1, 60, 1, null, v -> v + " tiles", null));
+        table.pref(new IconSliderSetting(keyGenClusterFallbackBacktrackTiles, defaultGenClusterFallbackBacktrackTiles, 0, 60, 1, null, v -> v + " tiles", null));
     }
 
     private void addThreatModeRow(Table table){
         table.table(Tex.button, t -> {
             t.left().margin(10f);
-            t.image(Icon.warning).size(20f).padRight(8f);
             t.add("@sp.setting.threat.mode").left().width(170f);
 
             TextButton modeButton = t.button("", Styles.flatt, this::cycleThreatMode)
@@ -531,7 +530,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private void addTargetRow(Table table){
         table.table(Tex.button, t -> {
             t.left().margin(10f);
-            t.image(Icon.commandAttack).size(20f).padRight(8f);
             t.add("@sp.setting.target.mode").left().width(170f);
 
             TextButton modeButton = t.button("", Styles.flatt, this::cycleTargetMode)
@@ -546,7 +544,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
         table.row();
         table.table(Tex.button, t -> {
             t.left().margin(10f);
-            t.image(Icon.grid).size(20f).padRight(8f);
             t.add("@sp.setting.target.block").left().width(170f);
 
             TextButton selectButton = t.button("", Styles.flatt, () -> showBlockSelectDialog(block -> Core.settings.put(keyTargetBlock, block == null ? "" : block.name)))
@@ -639,7 +636,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
         dialog.cont.table(t -> {
             t.left();
-            t.image(Icon.zoom).padRight(8f);
             t.field("", text -> {
                 searchText[0] = text;
                 rebuild.run();

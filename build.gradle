@@ -48,29 +48,29 @@ tasks.register("jarAndroid", Jar){
     from(sourceSets.main.output)
 }
 
-// Keep a copy at the repo root for easy install.
-tasks.register("copyZipToRoot", Copy){
-    doNotTrackState("Copies into workspace build folder for convenience.")
+// Keep a copy in workspace root "构建/" (mod name + version).
+def buildOutDir = new File(rootDir.parentFile, "构建")
+
+tasks.register("copyZipToBuildDir", Copy){
+    doNotTrackState("Copies into build output folder for convenience.")
     dependsOn tasks.named("jar")
     from(tasks.named("jar").flatMap{ it.archiveFile })
-    into(new File(rootDir.parentFile, "构建"))
+    into(buildOutDir)
     rename{ _ -> "${project.name}-${project.version}.zip" }
 }
 
-tasks.register("copyJarToRoot", Copy){
-    doNotTrackState("Copies into workspace build folder for convenience.")
+tasks.register("copyJarToBuildDir", Copy){
+    doNotTrackState("Copies into build output folder for convenience.")
     dependsOn tasks.named("jarAndroid")
     from(tasks.named("jarAndroid").flatMap{ it.archiveFile })
-    into(new File(rootDir.parentFile, "构建"))
-    rename{ _ -> "${project.name}-${project.version}.jar" }
+    into(buildOutDir)
+    rename{ _ -> "${project.name}-${project.version}-android.jar" }
 }
 
 tasks.named("jar").configure{
-    finalizedBy tasks.named("copyZipToRoot")
+    finalizedBy tasks.named("copyZipToBuildDir")
 }
 
 tasks.named("jarAndroid").configure{
-    //Avoid Gradle validation warnings when building `jar` (finalizes copyZipToRoot) and `jarAndroid` together.
-    mustRunAfter tasks.named("copyZipToRoot")
-    finalizedBy tasks.named("copyJarToRoot")
+    finalizedBy tasks.named("copyJarToBuildDir")
 }

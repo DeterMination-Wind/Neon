@@ -126,12 +126,17 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private static final String keyGenClusterFallbackBacktrackTiles = "sp-gencluster-fallback-backtrack-tiles";
     private static final String keyAlwaysPlanNearestPath = "sp-always-plan-nearest-path";
     private static final String keyPathComputeSplitTicks = "sp-path-compute-split-ticks";
+    private static final String keyPathfinder = "sp-pathfinder";
+    private static final String keyCoreTargetCount = "sp-core-target-count";
 
     private enum PathMode{
         safeOnly, minDamage, nearest
     }
 
     private static final float safeRiskEps = 1e-6f;
+
+    private static final int pathfinderAStar = 0;
+    private static final int pathfinderDfs = 1;
 
     private static final int targetModeCore = 0;
     private static final int targetModeNearest = 1;
@@ -246,8 +251,26 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private int[] pathClosedStamp;
     private int pathStamp = 1;
     private final PriorityQueue<Node> pathOpen = new PriorityQueue<>();
+    private final IntSeq pathStack = new IntSeq();
 
     private static final Pattern coordPattern = Pattern.compile("\\((-?\\d+)\\s*,\\s*(-?\\d+)\\)");
+
+    private static final class PlanningStart{
+        final Unit unit;
+        final float worldX, worldY;
+        final float passClearanceWorld;
+        final float threatClearanceWorld;
+        final float speed;
+
+        PlanningStart(Unit unit, float worldX, float worldY, float passClearanceWorld, float threatClearanceWorld, float speed){
+            this.unit = unit;
+            this.worldX = worldX;
+            this.worldY = worldY;
+            this.passClearanceWorld = passClearanceWorld;
+            this.threatClearanceWorld = threatClearanceWorld;
+            this.speed = speed;
+        }
+    }
 
     public StealthPathMod(){
         Events.on(ClientLoadEvent.class, e -> {
@@ -322,6 +345,14 @@ public class StealthPathMod extends mindustry.mod.Mod{
         return clamp(Core.settings.getInt(keyPathComputeSplitTicks, 1), 1, 120);
     }
 
+    private static int pathfinderMode(){
+        return clamp(Core.settings.getInt(keyPathfinder, pathfinderAStar), pathfinderAStar, pathfinderDfs);
+    }
+
+    private static int coreTargetCount(){
+        return clamp(Core.settings.getInt(keyCoreTargetCount, 1), 1, 12);
+    }
+
     private static float formationInflate(){
         int pct = clamp(Core.settings.getInt(keyFormationInflatePct, 125), 100, 400);
         return pct / 100f;
@@ -367,6 +398,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyOverlayWindowDamage, true);
         Core.settings.defaults(keyOverlayWindowControls, true);
         Core.settings.defaults(keyAlwaysPlanNearestPath, false);
+        Core.settings.defaults(keyPathfinder, pathfinderAStar);
+        Core.settings.defaults(keyCoreTargetCount, 1);
         Core.settings.defaults(keyTargetMode, targetModeCore);
         Core.settings.defaults(keyTargetBlock, "");
         Core.settings.defaults(keyPathDuration, 10);
@@ -479,6 +512,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             table.pref(new HeaderSetting("@sp.section.target", null));
             addThreatModeRow(table);
             addTargetRow(table);
+            table.pref(new IconSliderSetting(keyCoreTargetCount, 1, 1, 12, 1, null, v -> String.valueOf(v), null));
 
             // Inline advanced settings (MindustryX-like: one screen; Pro Mode expands a collapsible section).
             table.pref(new HeaderSetting("@sp.setting.advanced.menu", null));
@@ -497,6 +531,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
     private void buildAdvancedSettings(SettingsMenuDialog.SettingsTable table){
         table.pref(new HeaderSetting("@sp.section.advanced.pathfinding", null));
+        addPathfinderRow(table);
         table.pref(new IconSliderSetting(keyAutoClusterSplitTiles, 5, 1, 30, 1, null, v -> v + " tiles", null));
         table.pref(new IconSliderSetting(keyFormationInflatePct, 125, 100, 300, 5, null, v -> v + "%", null));
         table.pref(new IconSliderSetting(keySafeCorridorBiasPct, 35, 0, 200, 5, null, v -> v + "%", null));
@@ -580,6 +615,39 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 selectButton.setText(block == null ? Core.bundle.get("sp.setting.target.block.none") : block.localizedName);
             });
         }).growX().padTop(6f);
+    }
+
+    private void addPathfinderRow(Table table){
+        table.table(Tex.button, t -> {
+            t.left().margin(10f);
+            t.add("@sp.setting.pathfinder").left().width(170f);
+
+            TextButton modeButton = t.button("", Styles.flatt, this::cyclePathfinder)
+                .growX()
+                .height(40f)
+                .padLeft(8f)
+                .get();
+
+            modeButton.update(() -> modeButton.setText(pathfinderDisplay(pathfinderMode())));
+        }).growX().padTop(6f);
+
+        table.row();
+    }
+
+    private void cyclePathfinder(){
+        int cur = pathfinderMode();
+        int next = cur == pathfinderAStar ? pathfinderDfs : pathfinderAStar;
+        Core.settings.put(keyPathfinder, next);
+    }
+
+    private static String pathfinderDisplay(int mode){
+        switch(mode){
+            case pathfinderDfs:
+                return Core.bundle.get("sp.setting.pathfinder.dfs");
+            case pathfinderAStar:
+            default:
+                return Core.bundle.get("sp.setting.pathfinder.astar");
+        }
     }
 
     private void cycleTargetMode(){
@@ -1565,40 +1633,93 @@ public class StealthPathMod extends mindustry.mod.Mod{
         lastDamage = 0f;
     }
 
+    private PlanningStart computeSelectedOrPlayerStart(){
+        if(!state.isGame() || player == null) return null;
+        Unit playerUnit = player.unit();
+
+        if(control == null || control.input == null || control.input.selectedUnits == null || !control.input.selectedUnits.any()){
+            if(playerUnit == null) return null;
+            float r = playerUnit.hitSize / 2f;
+            return new PlanningStart(playerUnit, playerUnit.x, playerUnit.y, r, r, playerUnit.speed());
+        }
+
+        tmpUnits.clear();
+        for(int i = 0; i < control.input.selectedUnits.size; i++){
+            Unit u = control.input.selectedUnits.get(i);
+            if(u == null) continue;
+            if(u.team != player.team()) continue;
+            if(!u.isAdded() || u.dead()) continue;
+            tmpUnits.add(u);
+        }
+
+        if(tmpUnits.isEmpty()){
+            if(playerUnit == null) return null;
+            float r = playerUnit.hitSize / 2f;
+            return new PlanningStart(playerUnit, playerUnit.x, playerUnit.y, r, r, playerUnit.speed());
+        }
+
+        ControlledCluster cluster = buildControlledCluster(tmpUnits);
+        if(cluster == null || cluster.moveUnit == null){
+            Unit fallback = playerUnit != null ? playerUnit : tmpUnits.first();
+            if(fallback == null) return null;
+            float r = fallback.hitSize / 2f;
+            return new PlanningStart(fallback, fallback.x, fallback.y, r, r, fallback.speed());
+        }
+
+        return new PlanningStart(cluster.moveUnit, cluster.x, cluster.y, cluster.maxHitRadiusWorld, cluster.threatClearanceWorld, cluster.speed);
+    }
+
     private void computePath(boolean includeUnits, boolean showToasts){
         clearPaths();
 
-        if(!state.isGame() || world == null || player == null || player.unit() == null){
+        if(!state.isGame() || world == null || player == null){
             if(showToasts) showToast("@sp.toast.no-path", 2.5f);
             return;
         }
 
-        Unit unit = player.unit();
-
-        int threatMode = Core.settings.getInt(keyThreatMode, threatModeGround);
-        boolean moveFlying = threatMode == threatModeAir;
-        boolean threatsAir = threatMode == threatModeAir || threatMode == threatModeBoth;
-        boolean threatsGround = threatMode == threatModeGround || threatMode == threatModeBoth;
-
         int mode = Core.settings.getInt(keyTargetMode, targetModeCore);
-        if(mode == targetModeGenCluster){
-            float r = unit.hitSize / 2f;
-            ThreatMap map = buildThreatMap(unit, includeUnits, moveFlying, threatsAir, threatsGround, r, r);
-            computeGenClusterPaths(unit, map, includeUnits, moveFlying, threatsAir, threatsGround, showToasts);
-            return;
-        }
+
+        // Player->mouse mode should always start from the player's current unit.
         if(mode == targetModeCoreMouse){
+            Unit unit = player.unit();
+            if(unit == null){
+                if(showToasts) showToast("@sp.toast.no-path", 2.5f);
+                return;
+            }
+            int threatMode = Core.settings.getInt(keyThreatMode, threatModeGround);
+            boolean moveFlying = threatMode == threatModeAir;
+            boolean threatsAir = threatMode == threatModeAir || threatMode == threatModeBoth;
+            boolean threatsGround = threatMode == threatModeGround || threatMode == threatModeBoth;
+
             float r = unit.hitSize / 2f;
             ThreatMap map = buildThreatMap(unit, includeUnits, moveFlying, threatsAir, threatsGround, r, r);
             computePlayerToMousePath(unit, map, moveFlying, showToasts);
             return;
         }
 
-        float r = unit.hitSize / 2f;
-        ThreatMap map = buildThreatMap(unit, includeUnits, moveFlying, threatsAir, threatsGround, r, r);
+        PlanningStart start = computeSelectedOrPlayerStart();
+        if(start == null || start.unit == null){
+            if(showToasts) showToast("@sp.toast.no-path", 2.5f);
+            return;
+        }
 
-        int startX = worldToTile(unit.x);
-        int startY = worldToTile(unit.y);
+        Unit unit = start.unit;
+
+        int threatMode = Core.settings.getInt(keyThreatMode, threatModeGround);
+        boolean moveFlying = threatMode == threatModeAir;
+        boolean threatsAir = threatMode == threatModeAir || threatMode == threatModeBoth;
+        boolean threatsGround = threatMode == threatModeGround || threatMode == threatModeBoth;
+
+        if(mode == targetModeGenCluster){
+            ThreatMap map = buildThreatMap(unit, includeUnits, moveFlying, threatsAir, threatsGround, start.passClearanceWorld, start.threatClearanceWorld);
+            computeGenClusterPaths(unit, start, map, includeUnits, moveFlying, threatsAir, threatsGround, showToasts);
+            return;
+        }
+
+        ThreatMap map = buildThreatMap(unit, includeUnits, moveFlying, threatsAir, threatsGround, start.passClearanceWorld, start.threatClearanceWorld);
+
+        int startX = worldToTile(start.worldX);
+        int startY = worldToTile(start.worldY);
         if(!inBounds(map, startX, startY)){
             if(showToasts) showToast("@sp.toast.no-path", 2.5f);
             return;
@@ -1614,44 +1735,73 @@ public class StealthPathMod extends mindustry.mod.Mod{
             startY = startIdx / map.width;
         }
 
-        Building target = findTarget(mode);
-        if(target == null){
+        Seq<Building> targets;
+        if(mode == targetModeCore){
+            targets = findNearestEnemyCores(start.worldX, start.worldY, coreTargetCount());
+        }else{
+            Building t = findTarget(mode, start.worldX, start.worldY);
+            targets = new Seq<>();
+            if(t != null) targets.add(t);
+        }
+
+        if(targets == null || targets.isEmpty()){
             if(showToasts) showToast("@sp.toast.no-target", 2.5f);
             return;
         }
 
-        IntSeq goals = buildGoalTiles(map, unit, target, moveFlying);
-        if(goals.isEmpty()){
+        float speed = Math.max(0.0001f, start.speed);
+        float bestDmg = Float.POSITIVE_INFINITY;
+        int paths = 0;
+        int firstPathTiles = 0;
+
+        for(int ti = 0; ti < targets.size; ti++){
+            Building target = targets.get(ti);
+            if(target == null) continue;
+
+            IntSeq goals = buildGoalTiles(map, unit, target, moveFlying);
+            if(goals.isEmpty()) continue;
+            boolean[] goalMask = buildGoalMask(map, goals);
+
+            PathResult safe = null;
+            PathResult result;
+            if(alwaysPlanNearestPath()){
+                result = findPath(map, startX, startY, goals, goalMask, PathMode.nearest, speed);
+            }else{
+                safe = findPath(map, startX, startY, goals, goalMask, PathMode.safeOnly, speed);
+                result = safe != null ? safe : findPath(map, startX, startY, goals, goalMask, PathMode.minDamage, speed);
+            }
+
+            if(result == null || result.path == null || result.path.isEmpty()) continue;
+
+            IntSeq compact = compactPath(result.path, map.width);
+            float dmg = estimateDamage(map, result.path, speed);
+            bestDmg = Math.min(bestDmg, dmg);
+
+            Seq<Pos> points = toWorldPointsFromTilesWithStart(compact, map.width, start.worldX, start.worldY, target);
+            drawPaths.add(new RenderPath(points, safe != null ? Pal.heal : Pal.remove, dmg));
+            if(paths == 0){
+                firstPathTiles = result.path.size;
+            }
+            paths++;
+        }
+
+        if(paths == 0){
             if(showToasts) showToast("@sp.toast.no-path", 2.5f);
             return;
         }
 
-        boolean[] goalMask = buildGoalMask(map, goals);
-
-        float speed = unit.speed();
-        PathResult safe = null;
-        PathResult result;
-        if(alwaysPlanNearestPath()){
-            result = findPath(map, startX, startY, goals, goalMask, PathMode.nearest, speed);
-        }else{
-            safe = findPath(map, startX, startY, goals, goalMask, PathMode.safeOnly, speed);
-            result = safe != null ? safe : findPath(map, startX, startY, goals, goalMask, PathMode.minDamage, speed);
-        }
-
-        if(result == null){
-            if(showToasts) showToast("@sp.toast.no-path", 2.5f);
-            return;
-        }
-
-        IntSeq compact = compactPath(result.path, map.width);
-        float dmg = estimateDamage(map, result.path, unit);
-        drawPaths.add(new RenderPath(toWorldPoints(compact, map.width, unit, target), safe != null ? Pal.heal : Pal.remove, dmg));
-        lastDamage = dmg;
+        lastDamage = Float.isFinite(bestDmg) ? bestDmg : 0f;
 
         int seconds = Core.settings.getInt(keyPathDuration, 10);
         drawUntil = seconds <= 0 ? Float.POSITIVE_INFINITY : Time.time + seconds * 60f;
 
-        if(showToasts) showToast(Core.bundle.format("sp.toast.path", result.path.size, Strings.autoFixed(lastDamage, 1)), 3f);
+        if(showToasts){
+            if(paths == 1){
+                showToast(Core.bundle.format("sp.toast.path", firstPathTiles, Strings.autoFixed(lastDamage, 1)), 3f);
+            }else{
+                showToast(Core.bundle.format("sp.toast.core.multi", paths, Strings.autoFixed(lastDamage, 1)), 3f);
+            }
+        }
     }
 
     private Seq<Building> anchorBuildings(){
@@ -1672,15 +1822,12 @@ public class StealthPathMod extends mindustry.mod.Mod{
         return tmpBuildings;
     }
 
-    private Building findTarget(int mode){
+    private Building findTarget(int mode, float px, float py){
         Block wanted = selectedTargetBlock();
         if(mode == targetModeBlock && wanted == null){
             // If no block is selected (or the saved block name is invalid), fall back to nearest enemy building.
             mode = targetModeNearest;
         }
-
-        float px = player.unit().x;
-        float py = player.unit().y;
 
         Seq<Building> builds = anchorBuildings();
 
@@ -1746,13 +1893,43 @@ public class StealthPathMod extends mindustry.mod.Mod{
         return best != null ? best : bestDerelict;
     }
 
-    private void computeGenClusterPaths(Unit unit, ThreatMap map, boolean includeUnits, boolean moveFlying, boolean threatsAir, boolean threatsGround, boolean showToasts){
+    private Seq<Building> findNearestEnemyCores(float px, float py, int k){
+        Seq<Building> builds = anchorBuildings();
+        Seq<Building> cores = new Seq<>();
+        Seq<Building> derelict = new Seq<>();
+
+        for(int i = 0; i < builds.size; i++){
+            Building b = builds.get(i);
+            if(b == null) continue;
+            if(b.team == player.team()) continue;
+            if(!(b.block instanceof CoreBlock)) continue;
+            if(b.team == Team.derelict){
+                derelict.add(b);
+            }else{
+                cores.add(b);
+            }
+        }
+
+        Seq<Building> src = cores.isEmpty() ? derelict : cores;
+        if(src.isEmpty()) return new Seq<>();
+
+        src.sort((a, b) -> Float.compare(Mathf.dst2(px, py, a.x, a.y), Mathf.dst2(px, py, b.x, b.y)));
+
+        Seq<Building> out = new Seq<>();
+        int take = Math.min(k, src.size);
+        for(int i = 0; i < take; i++){
+            out.add(src.get(i));
+        }
+        return out;
+    }
+
+    private void computeGenClusterPaths(Unit unit, PlanningStart start, ThreatMap map, boolean includeUnits, boolean moveFlying, boolean threatsAir, boolean threatsGround, boolean showToasts){
         int minSize = Math.max(2, Core.settings.getInt(keyGenClusterMinSize, 2));
         int maxPaths = Math.max(1, Core.settings.getInt(keyGenClusterMaxPaths, 3));
         boolean startFromPlayer = Core.settings.getBool(keyGenClusterStartFromCore, false);
 
-        float startWorldX = unit.x;
-        float startWorldY = unit.y;
+        float startWorldX = start == null ? unit.x : start.worldX;
+        float startWorldY = start == null ? unit.y : start.worldY;
 
         int startX = worldToTile(startWorldX);
         int startY = worldToTile(startWorldY);
@@ -1780,7 +1957,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
         Seq<Building> turrets = collectEnemyTurretBuildings(unit, threatsAir, threatsGround);
 
         Seq<ClusterPath> candidates = new Seq<>();
-        float speed = unit.speed();
+        float speed = start == null ? unit.speed() : start.speed;
+        speed = Math.max(0.0001f, speed);
 
         for(int i = 0; i < clusters.size; i++){
             Seq<Building> cluster = clusters.get(i);
@@ -1804,7 +1982,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             }
             if(result == null) continue;
 
-            float damage = estimateDamage(map, result.path, unit);
+            float damage = estimateDamage(map, result.path, speed);
             candidates.add(new ClusterPath(target, result.path, safe != null, damage));
         }
 
@@ -1839,7 +2017,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 }
             }
 
-            float dmg = estimateDamage(map, segment, unit);
+            float dmg = estimateDamage(map, segment, speed);
             if(dmg < bestDamage) bestDamage = dmg;
 
             IntSeq compact = compactPath(segment, map.width);
@@ -2838,6 +3016,12 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private PathResult findPath(ThreatMap map, int startX, int startY, IntSeq goals, boolean[] goalMask, PathMode mode, float speed){
+        return pathfinderMode() == pathfinderDfs
+            ? findPathDfs(map, startX, startY, goals, goalMask, mode, speed)
+            : findPathAStar(map, startX, startY, goals, goalMask, mode, speed);
+    }
+
+    private PathResult findPathAStar(ThreatMap map, int startX, int startY, IntSeq goals, boolean[] goalMask, PathMode mode, float speed){
         int startIdx = startX + startY * map.width;
         if(!map.passable[startIdx]) return null;
         boolean safeOnly = mode == PathMode.safeOnly;
@@ -2928,6 +3112,101 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         return null;
+    }
+
+    private PathResult findPathDfs(ThreatMap map, int startX, int startY, IntSeq goals, boolean[] goalMask, PathMode mode, float speed){
+        int startIdx = startX + startY * map.width;
+        if(!map.passable[startIdx]) return null;
+
+        boolean safeOnly = mode == PathMode.safeOnly;
+        boolean nearest = mode == PathMode.nearest;
+        if(safeOnly && map.risk != null && map.risk[startIdx] > safeRiskEps) return null;
+
+        ensurePathScratch(map.size);
+        int stamp = nextPathStamp();
+
+        pathStack.clear();
+        pathStack.add(startIdx);
+
+        pathBestStamp[startIdx] = stamp;
+        pathBest[startIdx] = 0f;
+        pathParent[startIdx] = -1;
+
+        float bestGoal = Float.POSITIVE_INFINITY;
+        int bestGoalIdx = -1;
+
+        while(pathStack.size > 0){
+            int idx = pathStack.pop();
+            if(pathBestStamp[idx] != stamp) continue;
+
+            float g = pathBest[idx];
+            if(g >= bestGoal) continue;
+
+            if(goalMask[idx]){
+                bestGoal = g;
+                bestGoalIdx = idx;
+                continue;
+            }
+
+            int x = idx % map.width;
+            int y = idx / map.width;
+
+            for(int dy = -1; dy <= 1; dy++){
+                for(int dx = -1; dx <= 1; dx++){
+                    if(dx == 0 && dy == 0) continue;
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if(nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+
+                    int nidx = nx + ny * map.width;
+                    if(!map.passable[nidx]) continue;
+                    if(safeOnly && map.risk[nidx] > safeRiskEps) continue;
+
+                    // No cutting corners through blocked tiles.
+                    if(dx != 0 && dy != 0){
+                        int aidx = (x + dx) + y * map.width;
+                        int bidx = x + (y + dy) * map.width;
+                        if(!map.passable[aidx] || !map.passable[bidx]) continue;
+                        if(safeOnly && (map.risk[aidx] > safeRiskEps || map.risk[bidx] > safeRiskEps)) continue;
+                    }
+
+                    float step = (dx == 0 || dy == 0) ? 1f : Mathf.sqrt2;
+
+                    float ng;
+                    if(safeOnly || nearest){
+                        float tie = step * 0.0001f;
+                        ng = g + step + tie;
+
+                        if(safeOnly && map.safeDist != null && map.safeBias > 0.0001f){
+                            int sd = map.safeDist[nidx];
+                            float centerBias = map.safeBias * safeCorridorBiasFactor();
+                            ng += centerBias / (Math.max(0f, sd) + 1f);
+                        }
+                    }else{
+                        float distWorld = tilesize * step;
+                        float avgRisk = (map.risk[idx] + map.risk[nidx]) * 0.5f;
+                        float v = Math.max(0.0001f, speed);
+
+                        float dmg = avgRisk * (distWorld / (v * 60f));
+                        float tie = step * 0.001f;
+                        ng = g + dmg + tie;
+                    }
+
+                    if(ng >= bestGoal) continue;
+
+                    float prev = (pathBestStamp[nidx] == stamp) ? pathBest[nidx] : Float.POSITIVE_INFINITY;
+                    if(ng >= prev) continue;
+
+                    pathBestStamp[nidx] = stamp;
+                    pathBest[nidx] = ng;
+                    pathParent[nidx] = idx;
+                    pathStack.add(nidx);
+                }
+            }
+        }
+
+        if(bestGoalIdx == -1) return null;
+        return new PathResult(reconstruct(pathParent, bestGoalIdx));
     }
 
     private static float heuristic(ThreatMap map, int x, int y, IntSeq goals, PathMode mode){

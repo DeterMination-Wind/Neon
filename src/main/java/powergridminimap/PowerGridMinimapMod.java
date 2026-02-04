@@ -2608,6 +2608,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
                 table(row -> {
                     row.left();
+                    row.defaults().left();
                     row.image(whiteDrawable).size(6f).color(gridColor);
 
                     TextButton idButton = row.button("#" + gid, Styles.cleart, () -> {
@@ -2615,16 +2616,21 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                         if(hostedByOverlayUI){
                             focusGridCenter(info);
                         }
-                    }).padLeft(4f).get();
+                    }).padLeft(4f).padRight(8f).minWidth(52f).get();
                     idButton.getLabel().setColor(cId);
+                    idButton.getLabel().setWrap(false);
+                    idButton.getLabel().setEllipsis(true);
 
-                    row.add("in").color(cKey).padLeft(8f);
+                    row.add("in").color(cKey);
                     row.add(UI.formatAmount((long)powerIn)).color(cKey);
 
-                    row.add("now").color(cKey).padLeft(8f);
-                    row.add((now >= 0f ? "+" : "") + UI.formatAmount((long)now)).color(now >= 0f ? cPos : cNeg);
+                    row.row();
+                    row.add().colspan(2);
 
-                    row.add("min").color(cKey).padLeft(8f);
+                    row.add("now").color(cKey);
+                    row.add((now >= 0f ? "+" : "") + UI.formatAmount((long)now)).color(now >= 0f ? cPos : cNeg).padRight(8f);
+
+                    row.add("min").color(cKey);
                     row.add((min >= 0f ? "+" : "") + UI.formatAmount((long)min)).color(min >= 0f ? cPos : cNeg);
                 }).padTop(2f).row();
 

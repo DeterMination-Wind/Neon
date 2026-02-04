@@ -26,7 +26,7 @@ Color each disconnected power network on the minimap/full map and show its power
 根据敌方炮塔/单位射程计算并绘制最安全/最少受伤路线。  
 Compute and draw safest/lowest-damage paths using enemy turret/unit ranges.
 
-当前版本 / Current version: `4.0.0`
+当前版本 / Current version: `4.1.0`
 
 热键 / Hotkeys（可在“设置 → 控制”中查看/改绑）：
 

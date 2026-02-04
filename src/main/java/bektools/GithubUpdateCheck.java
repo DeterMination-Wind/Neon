@@ -7,6 +7,8 @@ import arc.util.Strings;
 import arc.util.serialization.Jval;
 import mindustry.Vars;
 import mindustry.mod.Mods;
+import mindustry.gen.Icon;
+import mindustry.ui.dialogs.BaseDialog;
 
 import java.util.ArrayList;
 import java.util.regex.Matcher;
@@ -20,6 +22,8 @@ final class GithubUpdateCheck{
     private static final String owner = "DeterMination-Wind";
     private static final String repo = "BEK-Tools";
     private static final String modName = "bek-tools";
+
+    private static final String keyIgnoreVersion = "bek-update-ignore-version";
 
     private static final Pattern numberPattern = Pattern.compile("\\d+");
     private static boolean checked;
@@ -39,32 +43,87 @@ final class GithubUpdateCheck{
         String current = Strings.stripColors(mod.meta.version);
         if(current == null || current.isEmpty()) return;
 
+        String ignore = Core.settings.getString(keyIgnoreVersion, "");
+        String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
+
+        // Prefer GitHub Releases (matches "latest release" users should install).
+        String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases/latest";
+
+        Http.get(apiUrl)
+            .header("User-Agent", "Mindustry")
+            .error(e -> fetchFromMainModJson(mod, current, ignore, releasesUrl))
+            .submit(res -> {
+                try{
+                    Jval json = Jval.read(res.getResultAsString());
+                    String tag = Strings.stripColors(json.getString("tag_name", ""));
+                    String htmlUrl = Strings.stripColors(json.getString("html_url", releasesUrl));
+                    String latest = normalizeVersion(tag);
+                    if(latest == null || latest.isEmpty()) return;
+                    onLatestResolved(mod, current, latest, ignore, htmlUrl);
+                }catch(Throwable t){
+                    fetchFromMainModJson(mod, current, ignore, releasesUrl);
+                }
+            });
+    }
+
+    private static void fetchFromMainModJson(Mods.LoadedMod mod, String current, String ignore, String releasesUrl){
         String url = "https://raw.githubusercontent.com/" + owner + "/" + repo + "/main/src/main/resources/mod.json";
 
         Http.get(url)
-        .error(e -> {
-            // No internet/offline/etc. -> silently skip.
-        })
-        .submit(res -> {
-            try{
-                Jval json = Jval.read(res.getResultAsString());
-                String latest = Strings.stripColors(json.getString("version", ""));
-                if(latest == null || latest.isEmpty()) return;
-
-                if(compareVersions(latest, current) > 0){
-                    String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
-                    Log.info("[{0}] Update available: {1} -> {2}", mod.meta.displayName, current, latest);
-                    Core.app.post(() -> {
-                        if(Vars.ui != null){
-                            Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest + " (GitHub)", 8f);
-                        }
-                        Log.info(releasesUrl);
-                    });
+            .error(e -> {
+                // No internet/offline/etc. -> silently skip.
+            })
+            .submit(res -> {
+                try{
+                    Jval json = Jval.read(res.getResultAsString());
+                    String latest = Strings.stripColors(json.getString("version", ""));
+                    if(latest == null || latest.isEmpty()) return;
+                    onLatestResolved(mod, current, latest, ignore, releasesUrl);
+                }catch(Throwable t){
+                    // Bad JSON/format/etc. -> skip.
                 }
-            }catch(Throwable t){
-                // Bad JSON/format/etc. -> skip.
-            }
+            });
+    }
+
+    private static void onLatestResolved(Mods.LoadedMod mod, String current, String latest, String ignore, String openUrl){
+        if(compareVersions(latest, current) <= 0) return;
+        if(ignore != null && !ignore.isEmpty() && compareVersions(latest, ignore) <= 0) return;
+
+        Log.info("[{0}] Update available: {1} -> {2}", mod.meta.displayName, current, latest);
+
+        Core.app.post(() -> showUpdateDialog(mod, current, latest, openUrl));
+    }
+
+    private static void showUpdateDialog(Mods.LoadedMod mod, String current, String latest, String openUrl){
+        if(Vars.ui == null) return;
+
+        // Toast for quick visibility (like MindustryX/MI2U), plus a clickable dialog.
+        Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest, 8f);
+
+        BaseDialog dialog = new BaseDialog("@bektools.update.title");
+        dialog.cont.pane(p -> {
+            p.left().defaults().left();
+            p.add(Core.bundle.format("bektools.update.text", mod.meta.displayName, current, latest)).wrap().growX();
+        }).width(520f).row();
+
+        dialog.buttons.defaults().size(180f, 54f);
+        dialog.buttons.button("@bektools.update.open", Icon.link, () -> Core.app.openURI(openUrl));
+        dialog.buttons.button("@bektools.update.ignore", Icon.cancel, () -> {
+            Core.settings.put(keyIgnoreVersion, latest);
+            dialog.hide();
         });
+        dialog.buttons.button("@bektools.update.later", Icon.ok, dialog::hide);
+
+        dialog.show();
+    }
+
+    private static String normalizeVersion(String raw){
+        if(raw == null) return "";
+        String v = raw.trim();
+        if(v.startsWith("v") || v.startsWith("V")){
+            v = v.substring(1).trim();
+        }
+        return v;
     }
 
     private static int compareVersions(String a, String b){
@@ -94,4 +153,3 @@ final class GithubUpdateCheck{
         return out;
     }
 }
-

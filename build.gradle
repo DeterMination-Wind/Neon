@@ -50,17 +50,19 @@ tasks.register("jarAndroid", Jar){
 
 // Keep a copy at the repo root for easy install.
 tasks.register("copyZipToRoot", Copy){
-    doNotTrackState("Copies into root directory which may contain unreadable Gradle lock files.")
+    doNotTrackState("Copies into workspace build folder for convenience.")
     dependsOn tasks.named("jar")
     from(tasks.named("jar").flatMap{ it.archiveFile })
-    into(rootDir.parentFile)
+    into(new File(rootDir.parentFile, "构建"))
+    rename{ _ -> "${project.name}-${project.version}.zip" }
 }
 
 tasks.register("copyJarToRoot", Copy){
-    doNotTrackState("Copies into root directory which may contain unreadable Gradle lock files.")
+    doNotTrackState("Copies into workspace build folder for convenience.")
     dependsOn tasks.named("jarAndroid")
     from(tasks.named("jarAndroid").flatMap{ it.archiveFile })
-    into(rootDir.parentFile)
+    into(new File(rootDir.parentFile, "构建"))
+    rename{ _ -> "${project.name}-${project.version}.jar" }
 }
 
 tasks.named("jar").configure{

@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-02-04T12:16:14Z",
+  "generatedAtUtc": "2026-02-04T12:32:35Z",
   "mods": {
     "pgmm": {
       "head": "fda65ce6d7f0fe4f437e78468141880fa97dfa22",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Power-Grid-Minimap-repo-clone"
     },
     "sp": {
-      "head": "a5857aac880fac8a3598a3d48c4117f3f6e8ddfb",
+      "head": "bdccd474c9abc1fe85984111549947cbeb495a0b",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\StealthPath"
     },
     "rbm": {

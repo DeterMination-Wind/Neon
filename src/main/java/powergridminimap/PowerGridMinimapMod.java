@@ -69,6 +69,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
+import static mindustry.Vars.control;
 import static mindustry.Vars.player;
 import static mindustry.Vars.renderer;
 import static mindustry.Vars.state;
@@ -544,7 +545,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
         Core.app.post(() -> {
             if(!state.isGame() || world == null || world.isGenerating() || player == null) return;
-            if(Core.camera == null) return;
+            if(control == null || control.input == null) return;
 
             if(!computeGridCenter(info, tmpGridCenter)) return;
 
@@ -555,8 +556,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             float x = Mathf.clamp(tmpGridCenter.x, minx, maxx);
             float y = Mathf.clamp(tmpGridCenter.y, miny, maxy);
 
-            Core.camera.position.set(x, y);
-            Core.camera.update();
+            control.input.panCamera(Tmp.v1.set(x, y));
         });
     }
 
@@ -2480,7 +2480,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
         void setHostedByOverlayUI(boolean hosted){
             hostedByOverlayUI = hosted;
-            touchable = hostedByOverlayUI ? Touchable.enabled : Touchable.disabled;
+            touchable = hostedByOverlayUI ? Touchable.childrenOnly : Touchable.disabled;
         }
 
         @Override
@@ -2610,18 +2610,13 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     row.left();
                     row.image(whiteDrawable).size(6f).color(gridColor);
 
-                    TextButton idButton = new TextButton("#" + gid, Styles.cleart);
-                    idButton.getLabel().setColor(cId);
-                    idButton.addListener(new ClickListener(){
-                        @Override
-                        public void clicked(InputEvent event, float x, float y){
-                            //Only make this interactive when hosted by OverlayUI, so the HUD-anchored fallback stays click-through.
-                            if(hostedByOverlayUI){
-                                focusGridCenter(info);
-                            }
+                    TextButton idButton = row.button("#" + gid, Styles.cleart, () -> {
+                        //Only make this interactive when hosted by OverlayUI, so the HUD-anchored fallback stays click-through.
+                        if(hostedByOverlayUI){
+                            focusGridCenter(info);
                         }
-                    });
-                    row.add(idButton).padLeft(4f);
+                    }).padLeft(4f).get();
+                    idButton.getLabel().setColor(cId);
 
                     row.add("in").color(cKey).padLeft(8f);
                     row.add(UI.formatAmount((long)powerIn)).color(cKey);

@@ -45,4 +45,4 @@ jobs:
           files: |
             build/libs/BEK-Tools.zip
             build/libs/BEK-Tools.jar
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md

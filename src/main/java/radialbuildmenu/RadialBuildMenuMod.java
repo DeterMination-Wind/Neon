@@ -235,6 +235,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             table.pref(new HeaderSetting(Core.bundle.get("rbm.section.slotgroups"), mindustry.gen.Icon.refresh));
             table.pref(new IconCheckSetting(keyToggleSlotGroupsEnabled, false, mindustry.gen.Icon.refresh));
             table.pref(new ToggleSlotGroupHotkeySetting());
+            table.pref(new SlotGroupsButtonSetting(RadialBuildMenuMod.this));
 
             table.pref(new HeaderSetting(Core.bundle.get("rbm.section.appearance"), mindustry.gen.Icon.pencil));
             table.pref(new IconSliderSetting(keyHudScale, 100, 50, 200, 5, mindustry.gen.Icon.resizeSmall, v -> v + "%"));
@@ -261,6 +262,27 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         
     }
 
+
+    void showSlotGroupsDialog(){
+        BaseDialog dialog = new BaseDialog("@rbm.slotgroups.title");
+        dialog.addCloseButton();
+
+        SettingsMenuDialog.SettingsTable groups = new SettingsMenuDialog.SettingsTable();
+        groups.pref(new SubHeaderSetting("@rbm.slotgroup.a"));
+        for(int i = 0; i < maxSlots; i++) groups.pref(new SlotSetting(i, keyToggleSlotGroupASlotPrefix, "rbm.setting.slot"));
+        groups.pref(new SubHeaderSetting("@rbm.slotgroup.b"));
+        for(int i = 0; i < maxSlots; i++) groups.pref(new SlotSetting(i, keyToggleSlotGroupBSlotPrefix, "rbm.setting.slot"));
+
+        ScrollPane pane = new ScrollPane(groups);
+        pane.setFadeScrollBars(false);
+        pane.setScrollingDisabled(true, false);
+        pane.setOverscroll(false, false);
+        dialog.cont.table(t -> {
+            t.center();
+            t.add(pane).width(prefWidth()).growY().minHeight(380f);
+        }).grow();
+        dialog.show();
+    }
 
     void showAdvancedDialog(){
         BaseDialog dialog = new BaseDialog("@rbm.advanced.title");
@@ -423,6 +445,32 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     return Core.bundle.get(g == 0 ? "rbm.slotgroup.a" : "rbm.slotgroup.b");
                 }).color(Pal.accent).padLeft(8f);
                 t.button("@rbm.setting.opencontrols", Styles.flatt, () -> ui.controls.show())
+                    .width(190f)
+                    .height(40f)
+                    .padLeft(10f);
+            }).width(prefWidth).padTop(6f);
+            table.row();
+        }
+    }
+
+    private class SlotGroupsButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final RadialBuildMenuMod mod;
+
+        public SlotGroupsButtonSetting(RadialBuildMenuMod mod){
+            super("rbm-slot-groups-open");
+            this.mod = mod;
+            title = Core.bundle.get("rbm.setting.slotgroups");
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            float prefWidth = prefWidth();
+            table.table(Tex.button, t -> {
+                t.left().margin(10f);
+
+                t.image(mindustry.gen.Icon.list).size(20f).padRight(8f);
+                t.add(title).left().growX().minWidth(0f).wrap();
+                t.button("@rbm.slotgroups.open", Styles.flatt, mod::showSlotGroupsDialog)
                     .width(190f)
                     .height(40f)
                     .padLeft(10f);

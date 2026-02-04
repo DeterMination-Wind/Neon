@@ -30,7 +30,12 @@ def run(args: List[str], cwd: Optional[Path] = None) -> str:
 def git_ls_files() -> List[str]:
     out = run(["git", "ls-files"], cwd=ROOT)
     files = [line.strip() for line in out.splitlines() if line.strip()]
-    return files
+    # Avoid recursively documenting generated docs.
+    return [
+        f
+        for f in files
+        if not (f == "INDEX_dox.md" or f.endswith("_dox.md"))
+    ]
 
 
 def dox_name_for_path(relpath: str) -> str:
@@ -352,6 +357,18 @@ def write_index(dox_files: List[Tuple[str, str]]) -> None:
     lines.append("python tools/generate_dox.py")
     lines.append("```")
     lines.append("")
+
+    # Handwritten repo-level dox files (kept in repo root).
+    manual = sorted(
+        p.name
+        for p in ROOT.glob("*_dox.md")
+        if p.name != "INDEX_dox.md" and not p.name.startswith("dox__")
+    )
+    if manual:
+        lines.append("## 仓库级文档 / Repo-Level Docs")
+        for name in manual:
+            lines.append(f"- `{name}`")
+        lines.append("")
 
     for d in sorted(by_dir.keys()):
         lines.append(f"## `{d}`")

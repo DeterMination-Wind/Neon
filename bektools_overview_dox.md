@@ -26,5 +26,4 @@ BEK-Tools 是一个 **客户端工具整合包**（JavaMod），把以下 3 个�
 - 本地构建：`./gradlew.bat --no-daemon clean jar jarAndroid`
   - 输出：`build/libs/BEK-Tools.zip`（桌面/通用）、`build/libs/BEK-Tools.jar`（Android）
 - GitHub Actions 发布：`.github/workflows/release.yml`
-  - 推送 tag（如 `v2.0.2`）触发自动构建并创建 Release
-
+  - 推送 tag（如 `v2.0.0`）触发自动构建并创建 Release

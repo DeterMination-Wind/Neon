@@ -7,6 +7,12 @@
 python tools/generate_dox.py
 ```
 
+## 仓库级文档 / Repo-Level Docs
+- `bektools_api_dox.md`
+- `bektools_files_dox.md`
+- `bektools_overview_dox.md`
+- `bektools_sync_release_dox.md`
+
 ## `.`
 - `.gitattributes` -> `dox___gitattributes_dox.md`
 - `.gitignore` -> `dox___gitignore_dox.md`
@@ -96,6 +102,7 @@ python tools/generate_dox.py
 - `src/main/resources/bundles/bundle_zh_TW.properties` -> `dox__src__main__resources__bundles__bundle_zh_TW_properties_dox.md`
 
 ## `tools`
+- `tools/generate_dox.py` -> `dox__tools__generate_dox_py_dox.md`
 - `tools/submods.json` -> `dox__tools__submods_json_dox.md`
 - `tools/submods.lock.json` -> `dox__tools__submods_lock_json_dox.md`
 - `tools/update_submods.py` -> `dox__tools__update_submods_py_dox.md`

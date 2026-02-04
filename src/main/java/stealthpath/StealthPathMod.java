@@ -516,18 +516,42 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
             // Inline advanced settings (MindustryX-like: one screen; Pro Mode expands a collapsible section).
             table.pref(new HeaderSetting("@sp.setting.advanced.menu", null));
+            table.pref(new AdvancedSectionSetting());
+        
+    }
+
+
+    private final class AdvancedSectionSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        AdvancedSectionSetting(){
+            super("sp-advanced-section");
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            Table locked = new Table();
+            locked.left().margin(10f);
+            locked.add("@sp.toast.pro-required").left().growX().wrap();
+            locked.button("@sp.setting.advanced.locked", Styles.flatt, () -> Core.settings.put(keyProMode, true))
+                .height(40f)
+                .padLeft(8f);
+
+            Collapser lockedCollapser = new Collapser(locked, false);
+            lockedCollapser.setCollapsed(Core.settings.getBool(keyProMode, false));
+            lockedCollapser.update(() -> lockedCollapser.setCollapsed(Core.settings.getBool(keyProMode, false)));
 
             SettingsMenuDialog.SettingsTable advanced = new SettingsMenuDialog.SettingsTable();
             advanced.left();
             buildAdvancedSettings(advanced);
+            advanced.rebuild();
 
-            Collapser collapser = new Collapser(advanced, true);
-            collapser.setCollapsed(() -> !Core.settings.getBool(keyProMode, false));
+            Collapser advancedCollapser = new Collapser(advanced, false);
+            advancedCollapser.setCollapsed(!Core.settings.getBool(keyProMode, false));
+            advancedCollapser.update(() -> advancedCollapser.setCollapsed(!Core.settings.getBool(keyProMode, false)));
 
-            table.add(collapser).growX().row();
-        
+            table.add(lockedCollapser).growX().padTop(6f).row();
+            table.add(advancedCollapser).growX().row();
+        }
     }
-
 
     private void buildAdvancedSettings(SettingsMenuDialog.SettingsTable table){
         table.pref(new HeaderSetting("@sp.section.advanced.pathfinding", null));

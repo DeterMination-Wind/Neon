@@ -17,6 +17,7 @@ import arc.scene.Element;
 import arc.scene.event.ClickListener;
 import arc.scene.event.InputEvent;
 import arc.scene.style.TextureRegionDrawable;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectSet;
@@ -2608,31 +2609,46 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
                 table(row -> {
                     row.left();
-                    row.defaults().left();
-                    row.image(whiteDrawable).size(6f).color(gridColor);
+                    row.defaults().padRight(6f);
 
-                    TextButton idButton = row.button("#" + gid, Styles.cleart, () -> {
-                        //Only make this interactive when hosted by OverlayUI, so the HUD-anchored fallback stays click-through.
-                        if(hostedByOverlayUI){
-                            focusGridCenter(info);
-                        }
-                    }).padLeft(4f).padRight(8f).minWidth(52f).get();
-                    idButton.getLabel().setColor(cId);
-                    idButton.getLabel().setWrap(false);
-                    idButton.getLabel().setEllipsis(true);
+                    row.table(left -> {
+                        left.setClip(true);
+                        left.left();
+                        left.defaults().left().padRight(6f);
 
-                    row.add("in").color(cKey);
-                    row.add(UI.formatAmount((long)powerIn)).color(cKey);
+                        left.image(whiteDrawable).size(6f).color(gridColor);
 
-                    row.row();
-                    row.add().colspan(2);
+                        TextButton idButton = left.button("#" + gid, Styles.cleart, () -> {
+                            //Only make this interactive when hosted by OverlayUI, so the HUD-anchored fallback stays click-through.
+                            if(hostedByOverlayUI){
+                                focusGridCenter(info);
+                            }
+                        }).padLeft(4f).padRight(8f).get();
+                        idButton.getLabel().setColor(cId);
+                        idButton.getLabel().setWrap(false);
+                        idButton.getLabel().setEllipsis(true);
 
-                    row.add("now").color(cKey);
-                    row.add((now >= 0f ? "+" : "") + UI.formatAmount((long)now)).color(now >= 0f ? cPos : cNeg).padRight(8f);
+                        left.add("in").color(cKey);
+                        left.add(UI.formatAmount((long)powerIn)).color(cKey);
+                    }).growX().fillX().left();
 
-                    row.add("min").color(cKey);
-                    row.add((min >= 0f ? "+" : "") + UI.formatAmount((long)min)).color(min >= 0f ? cPos : cNeg);
-                }).padTop(2f).row();
+                    row.table(right -> {
+                        right.right();
+                        right.defaults().right().padLeft(6f);
+
+                        right.add("now").color(cKey);
+                        Label nowLabel = right.add((now >= 0f ? "+" : "") + UI.formatAmount((long)now)).color(now >= 0f ? cPos : cNeg).right().get();
+                        nowLabel.setAlignment(Align.right);
+                        nowLabel.setWrap(false);
+                        nowLabel.setEllipsis(true);
+
+                        right.add("min").color(cKey);
+                        Label minLabel = right.add((min >= 0f ? "+" : "") + UI.formatAmount((long)min)).color(min >= 0f ? cPos : cNeg).right().get();
+                        minLabel.setAlignment(Align.right);
+                        minLabel.setWrap(false);
+                        minLabel.setEllipsis(true);
+                    }).right();
+                }).growX().fillX().padTop(2f).row();
 
                 shown++;
                 if(shown >= 12) break;

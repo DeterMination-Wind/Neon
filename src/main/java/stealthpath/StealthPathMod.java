@@ -73,7 +73,7 @@ import static mindustry.Vars.ui;
 import static mindustry.Vars.world;
 
 public class StealthPathMod extends mindustry.mod.Mod{
-    /** When true, this mod is running as a bundled component inside BEK-Tools. */
+    /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
 
 

@@ -40,5 +40,5 @@
   - `public void draw()`
 
 ## 维护要点 / Maintainer Notes
-- 包含 `bekBuildSettings`：供 BEK-Tools 整合设置页调用。
+- 包含 `bekBuildSettings`：供 Neon 整合设置页调用。
 - 包含 OverlayUI（MindustryX）集成：窗口可由 OverlayUI 管理。

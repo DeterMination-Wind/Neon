@@ -1,6 +1,6 @@
 # DOX Index
 
-该目录下的 `*_dox.md` 文件为 BEK-Tools 仓库的逐文件说明文档（自动生成，可手工补充）。
+该目录下的 `*_dox.md` 文件为 Neon 仓库的逐文件说明文档（自动生成，可手工补充）。
 
 ## 生成方式 / Regeneration
 ```bash

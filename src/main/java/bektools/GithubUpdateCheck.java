@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  */
 final class GithubUpdateCheck{
     private static final String owner = "DeterMination-Wind";
-    private static final String repo = "BEK-Tools";
+    private static final String repo = "Neon";
     private static final String modName = "bek-tools";
 
     private static final String keyIgnoreVersion = "bek-update-ignore-version";

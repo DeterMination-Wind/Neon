@@ -1,4 +1,4 @@
-# BEK-Tools
+# Neon
 
 ## 反馈 / Feedback
 
@@ -8,7 +8,7 @@
 
 ## 中文说明
 
-BEK-Tools 是一个 Mindustry 客户端工具集（JavaMod），将以下 3 个模组合并为一个（无需分别安装）：
+Neon 是一个 Mindustry 客户端工具集（JavaMod），将以下 3 个模组合并为一个（无需分别安装）：
 
 - Power Grid Minimap（电网小地图叠加）
 - Stealth Path（偷袭小道 / 安全路径）
@@ -66,14 +66,14 @@ Hold the hotkey to open a radial HUD around your cursor. Release to quickly swit
 
 ### 安装 / Install
 
-将 `BEK-Tools.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。  
-Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
+将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。  
+Put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
 
 #### 安卓 / Android
 
-安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `BEK-Tools.jar` 并放入 Mindustry 的 `mods` 目录。
+安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `Neon.jar` 并放入 Mindustry 的 `mods` 目录。
 
-Android requires a mod package that contains `classes.dex`. Download `BEK-Tools.jar` from Releases and put it into Mindustry's `mods` folder.
+Android requires a mod package that contains `classes.dex`. Download `Neon.jar` from Releases and put it into Mindustry's `mods` folder.
 
 ### 构建
 
@@ -81,7 +81,7 @@ Android requires a mod package that contains `classes.dex`. Download `BEK-Tools.
 ./gradlew jar
 ```
 
-输出文件：`build/libs/BEK-Tools.zip`
+输出文件：`build/libs/Neon.zip`
 
 ### Android build（classes.dex）
 
@@ -89,7 +89,7 @@ Android requires a mod package that contains `classes.dex`. Download `BEK-Tools.
 ./gradlew jarAndroid
 ```
 
-输出文件：`build/libs/BEK-Tools.jar`
+输出文件：`build/libs/Neon.jar`
 
 ### 同步上游更新（维护脚本）
 
@@ -102,7 +102,7 @@ python tools/update_submods.py
 
 它会：
 
-- 更新 3 个主类源码并自动重新注入 BEK-Tools 的整合钩子
+- 更新 3 个主类源码并自动重新注入 Neon 的整合钩子
 - 合并 `bundles/*.properties` 并生成 `tools/submods.lock.json`（记录上游 commit）
 
 ### Release（自动构建）
@@ -113,7 +113,7 @@ python tools/update_submods.py
 
 ## English
 
-BEK-Tools is a Mindustry client-side toolkit (Java mod) that bundles:
+Neon is a Mindustry client-side toolkit (Java mod) that bundles:
 
 - Power Grid Minimap
 - Stealth Path
@@ -127,7 +127,7 @@ BEK-Tools is a Mindustry client-side toolkit (Java mod) that bundles:
 
 ### Install
 
-Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
+Put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
 
 ### Build
 
@@ -135,7 +135,7 @@ Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
 ./gradlew jar
 ```
 
-Output: `build/libs/BEK-Tools.zip`
+Output: `build/libs/Neon.zip`
 
 ### Android build (classes.dex)
 
@@ -143,7 +143,7 @@ Output: `build/libs/BEK-Tools.zip`
 ./gradlew jarAndroid
 ```
 
-Output: `build/libs/BEK-Tools.jar`
+Output: `build/libs/Neon.jar`
 
 ### Sync upstream updates (maintainer script)
 
@@ -156,7 +156,7 @@ python tools/update_submods.py
 
 It will:
 
-- Refresh the 3 main Java sources and re-inject BEK-Tools integration hooks
+- Refresh the 3 main Java sources and re-inject Neon integration hooks
 - Merge `bundles/*.properties` and write `tools/submods.lock.json` (upstream commit lock)
 
 ### Release (CI)

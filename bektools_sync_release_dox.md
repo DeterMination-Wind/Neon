@@ -1,6 +1,6 @@
-# BEK-Tools 同步与发布流程（sync/release dox）
+# Neon 同步与发布流程（sync/release dox）
 
-## 1. 同步子模组（本地仓库 → BEK-Tools）
+## 1. 同步子模组（本地仓库 → Neon）
 
 配置文件：`tools/submods.json`
 
@@ -9,7 +9,7 @@
 典型流程：
 
 ```powershell
-cd BEK-Tools
+cd Neon
 python tools/update_submods.py --check
 python tools/update_submods.py
 ```
@@ -21,7 +21,7 @@ python tools/update_submods.py
   - Java 包目录（如 `src/main/java/stealthpath`）
   - bundles（合并到 `src/main/resources/bundles`）
 - 写入 `tools/submods.lock.json` 记录每个子模组的 git HEAD
-- 注入 BEK-Tools 需要的聚合钩子（`bekBundled`、`bekBuildSettings`）
+- 注入 Neon 需要的聚合钩子（`bekBundled`、`bekBuildSettings`）
 
 ## 2. 版本号更新
 

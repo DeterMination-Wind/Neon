@@ -1,6 +1,6 @@
-# BEK-Tools 文件说明（files dox）
+# Neon 文件说明（files dox）
 
-本文件按“仓库根目录相对路径”列出 BEK-Tools 的主要文件/目录作用。
+本文件按“仓库根目录相对路径”列出 Neon 的主要文件/目录作用。
 
 ## 根目录
 
@@ -20,7 +20,7 @@
 - `bektools/BekToolsMod.java`
   - 主入口：创建 PGMM/SP/RBM 实例；合并设置页面；转发 client commands
 - `bektools/GithubUpdateCheck.java`
-  - BEK-Tools 自身更新检查（若存在）
+  - Neon 自身更新检查（若存在）
 - `bektools/ui/RbmStyle.java`
   - 用于设置页的统一样式与组件（Header/Spacer 等）
 
@@ -42,5 +42,5 @@
 - `tools/submods.json`：子模组同步配置（本地仓库路径、包目录、主类文件、bundles 目录等）
 - `tools/submods.lock.json`：锁文件（记录每个子模组同步时的 git HEAD 与时间）
 - `tools/update_submods.py`：同步脚本（不访问 GitHub，只读本地仓库）
-- `tools/bektools-bundles/*`：BEK-Tools 自己的 bundles（不会来自子模组）
+- `tools/bektools-bundles/*`：Neon 自己的 bundles（不会来自子模组）
 

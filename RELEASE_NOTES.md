@@ -1,4 +1,4 @@
-# 🧰 BEK-Tools 更新日志 / Release Notes
+# 🧰 Neon 更新日志 / Release Notes
 
 ## 🆕 v2.0.11
 - 🧩 Radial Build Menu：合并 RBM v5.1.2（槽位组切换/显示空槽位；无需“专业模式”也能配置槽位组；修复中文设置项不显示）
@@ -8,7 +8,7 @@
 - 📝 需要写“本次新增/修复”时，直接在这里追加即可（保留下面的“功能总览”）。
 
 ## ✨ 功能总览（历史累计）
-BEK-Tools 是一个整合包（Java Mod），将以下 3 个模块合并为一个安装包：
+Neon 是一个整合包（Java Mod），将以下 3 个模块合并为一个安装包：
 
 ### ⚡ Power Grid Minimap（电网小地图）
 - 🗺️ 在小地图/大地图上为每个独立电网着色，并显示电力盈亏信息。
@@ -33,4 +33,4 @@ BEK-Tools 是一个整合包（Java Mod），将以下 3 个模块合并为一�
 - 🌐 开启游戏后检查 GitHub Releases 最新版本，发现更新会弹窗提示并支持一键跳转/忽略该版本。
 
 ## 🔗 链接
-- GitHub Releases：https://github.com/DeterMination-Wind/BEK-Tools/releases
+- GitHub Releases：https://github.com/DeterMination-Wind/Neon/releases

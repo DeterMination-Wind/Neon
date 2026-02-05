@@ -39,16 +39,16 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BEK-Tools
+          name: Neon
           path: |
-            build/libs/BEK-Tools.zip
-            build/libs/BEK-Tools.jar
+            build/libs/Neon.zip
+            build/libs/Neon.jar
 
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/libs/BEK-Tools.zip
-            build/libs/BEK-Tools.jar
+            build/libs/Neon.zip
+            build/libs/Neon.jar
           body_path: RELEASE_NOTES.md

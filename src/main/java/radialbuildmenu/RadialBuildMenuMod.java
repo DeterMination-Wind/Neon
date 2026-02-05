@@ -58,7 +58,7 @@ import static mindustry.Vars.mobile;
 import static mindustry.Vars.control;
 
 public class RadialBuildMenuMod extends mindustry.mod.Mod{
-    /** When true, this mod is running as a bundled component inside BEK-Tools. */
+    /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
 
 

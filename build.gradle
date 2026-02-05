@@ -37,13 +37,13 @@ tasks.withType(JavaCompile).configureEach{
 jar{
     // A Mindustry Java mod is a zip/jar archive with classes + resources.
     // Use .zip extension for distribution.
-    archiveFileName = "BEK-Tools.zip"
+    archiveFileName = "Neon.zip"
 }
 
 tasks.register("jarAndroid", Jar){
     group = "build"
-    description = "Packages BEK-Tools as a .jar for Mindustry Android (classes.dex)."
-    archiveFileName = "BEK-Tools.jar"
+    description = "Packages Neon as a .jar for Mindustry Android (classes.dex)."
+    archiveFileName = "Neon.jar"
 }
 
 // Keep a copy in workspace root "构建/" (mod name + version).

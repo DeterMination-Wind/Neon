@@ -183,7 +183,7 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
     if "public static boolean bekBundled" not in java_src:
         java_src = (
             java_src[:insert_at]
-            + "\n    /** When true, this mod is running as a bundled component inside BEK-Tools. */\n"
+            + "\n    /** When true, this mod is running as a bundled component inside Neon. */\n"
             + "    public static boolean bekBundled = false;\n\n"
             + java_src[insert_at:]
         )
@@ -350,7 +350,7 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
                 origins[k] = "bek"
 
         header = [
-            "# Auto-merged for BEK-Tools",
+            "# Auto-merged for Neon",
             "# Sources: pgmm + sp + rbm",
             "",
         ]
@@ -383,7 +383,7 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
 
 
 def main(argv: List[str]) -> int:
-    ap = argparse.ArgumentParser(description="Sync BEK-Tools with local sub-mod git checkouts (pgmm/sp/rbm).")
+    ap = argparse.ArgumentParser(description="Sync Neon with local sub-mod git checkouts (pgmm/sp/rbm).")
     ap.add_argument("--check", action="store_true", help="Only check for updates; do not write files.")
     ap.add_argument("--force", action="store_true", help="Force rewrite even if lock matches.")
     args = ap.parse_args(argv)

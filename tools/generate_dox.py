@@ -230,7 +230,7 @@ def default_purpose(relpath: str) -> str:
     if base == "mod.json":
         return "Mindustry mod metadata (name/version/entrypoint)."
     if base == "build.gradle":
-        return "Gradle build configuration for BEK-Tools packaging."
+        return "Gradle build configuration for Neon packaging."
     if base == "settings.gradle":
         return "Gradle settings (project name / included builds)."
     if p.startswith(".github/workflows/"):
@@ -307,7 +307,7 @@ def write_doc(relpath: str) -> None:
         if "registerClientCommands" in text:
             hint.append("包含 `registerClientCommands`：提供客户端命令入口。")
         if "bekBuildSettings" in text:
-            hint.append("包含 `bekBuildSettings`：供 BEK-Tools 整合设置页调用。")
+            hint.append("包含 `bekBuildSettings`：供 Neon 整合设置页调用。")
         if "OverlayUI" in text or "MindustryXOverlayUI" in text:
             hint.append("包含 OverlayUI（MindustryX）集成：窗口可由 OverlayUI 管理。")
         if "Trigger.update" in text or "Trigger.draw" in text or "Trigger.uiDrawEnd" in text:
@@ -350,7 +350,7 @@ def write_index(dox_files: List[Tuple[str, str]]) -> None:
     lines: List[str] = []
     lines.append("# DOX Index")
     lines.append("")
-    lines.append("该目录下的 `*_dox.md` 文件为 BEK-Tools 仓库的逐文件说明文档（自动生成，可手工补充）。")
+    lines.append("该目录下的 `*_dox.md` 文件为 Neon 仓库的逐文件说明文档（自动生成，可手工补充）。")
     lines.append("")
     lines.append("## 生成方式 / Regeneration")
     lines.append("```bash")

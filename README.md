@@ -1,135 +1,165 @@
-# Neon
+# Neon / 氖 (Mindustry Mod)
 
-## 反馈 / Feedback
+- [中文](#中文)
+- [English](#english)
+
+## 中文
+
+### 简介
+
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 3 个模组合并为一个安装包：
+
+- Power Grid Minimap（电网小地图）
+- Stealth Path（偷袭小道 / 安全路径）
+- Radial Build Menu（圆盘快捷建造）
+
+如果你只想安装一次、一次性获得这三类常用“信息叠加 + 操作效率”功能，Neon 会更省事。
+
+提示：Neon 已包含上述 3 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+
+### 功能一览
+
+#### 1) 电网小地图（Power Grid Minimap）
+
+- 小地图/全屏大地图电网着色：每个独立电网用不同颜色标识，快速定位断网与“跨网误接”。
+- 电力盈亏标记：在电网中心显示净盈亏数值（支持字号/颜色/透明度等调整）。
+- 断网告警与建议连接点：大电网分裂且出现负电时，提示并标记建议重连位置。
+- 缺电救援建议（Beta）：缺电持续时可显示“正电岛”隔离建议、以及可能的冲击反应堆禁用提示。
+- 电力表：以列表汇总大电网的概览信息（当前盈亏/近期最低等），便于快速找出最糟糕的电网。
+
+#### 2) 偷袭小道（Stealth Path）
+
+- 路线叠加预览：在地图上绘制更安全/受伤更少的路线；线宽/透明度/显示时长可调。
+- 多模式与过滤：可切换显示模式与威胁过滤（陆军/空军/全部），更贴合不同单位。
+- 自动模式（单位集群）：自动规划单位集群到鼠标/聊天坐标，并可使用“自动移动”热键下达沿路线前进的移动指令（可在设置中开关）。
+- 可选信息窗：在安装 MindustryX 时，可通过 OverlayUI 显示模式/伤害/控制等窗口；未安装则回退 HUD。
+
+#### 3) 圆盘快捷建造（Radial Build Menu）
+
+- 长按热键弹出圆盘 HUD：松开即可切换建造方块。
+- 16 槽位（内圈 8 + 外圈 8）：可按需要配置/清空；外圈在配置后自动显示。
+- 多套槽位配置与切换：支持按时长/星球/条件切换；也支持槽位组 A/B 通过热键即时切换。
+- 外观与交互可调：缩放、透明度、半径、图标大小、方向选择等；支持 JSON 导入/导出。
+
+### 快速上手
+
+1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
+
+2) 改键：在 `设置 → 控制` 中找到对应条目并改成你习惯的按键：
+
+- 偷袭小道：`X/Y/N/M/K/L` 等（条目名以游戏语言显示为准）
+- 圆盘快捷建造：打开圆盘 HUD 的热键（以及可选的“切换槽位组”热键）
+
+3) 设置：在 `设置 → 模组` 下分别进入各模块分类进行调整：
+
+- 电网小地图（Power Grid Minimap）
+- 偷袭小道（Stealth Path）
+- 圆盘快捷建造（Radial Build Menu）
+
+### 多人游戏
+
+Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适合多人游戏环境。
+
+### 安卓
+
+安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `Neon.jar` 并放入 Mindustry 的 `mods` 目录。
+
+### 反馈
 
 【BEK辅助mod反馈群】：https://qm.qq.com/q/cZWzPa4cTu
 
 ![BEK辅助mod反馈群二维码](docs/bek-feedback-group.png)
 
-## 中文说明
+### 构建（可选，开发者）
 
-Neon 是一个 Mindustry 客户端工具集（JavaMod），将以下 3 个模组合并为一个（无需分别安装）：
-
-- Power Grid Minimap（电网小地图叠加）
-- Stealth Path（偷袭小道 / 安全路径）
-- Radial Build Menu（圆盘快捷建造）
-
-### 功能一览（融合自 3 个模组的 README）
-
-#### 1) 电网小地图 / Power Grid Minimap
-
-在小地图/大地图上为每个电网分别着色，并在每个电网中心显示电力盈亏；支持电网断开告警与建议连接点。  
-Color each disconnected power network on the minimap/full map and show its power balance at the grid center; includes split alerts and reconnect hints.
-
-#### 2) 偷袭小道 / Stealth Path
-
-根据敌方炮塔/单位射程计算并绘制最安全/最少受伤路线。  
-Compute and draw safest/lowest-damage paths using enemy turret/unit ranges.
-
-当前版本 / Current version: `4.1.0`
-
-热键 / Hotkeys（可在“设置 → 控制”中查看/改绑）：
-
-- `X` (`sp_path_turrets`)：仅敌方炮塔（长按实时预览） / turrets only (hold for live preview)
-- `Y` (`sp_path_all`)：敌方炮塔 + 单位（长按实时预览） / turrets + units (hold for live preview)
-- `N` (`sp_auto_mouse`)：自动模式（单位群→鼠标） / auto mode (unit cluster → mouse)
-- `M` (`sp_auto_attack`)：自动模式（单位群→`<Attack>(x,y)`） / auto mode (unit cluster → `<Attack>(x,y)`)
-- `K` (`sp_mode_cycle`)：点按轮流切换显示模式 / tap to cycle display mode
-- `L` (`sp_threat_cycle`)：切换威胁计算（陆军/空军/一起） / cycle threat filter (ground/air/both)
-
-自动模式要点 / Auto modes notes：
-
-- 自动模式以“单位群中心”为起点（优先框选单位，否则玩家当前单位），自动识别空军/陆军/混合，并按 Y 模式（炮塔+单位威胁）计算最少受伤路径。  
-  Auto mode starts from the unit cluster center (selected units if any, otherwise your current unit) and computes a Y-mode lowest-damage path.
-- 自动模式刷新频率：**设置 → 偷袭小道 → 预览刷新间隔**。  
-  Refresh rate: **Settings → Stealth Path → Preview refresh interval**.
-- 攻击聊天目标格式：在聊天发送 `"<Attack>(x,y)"`（x,y 为格子坐标）；仅客户端解析你自己发出的消息。  
-  Chat target: send `"<Attack>(x,y)"` (tile coords); only your own message is parsed client-side.
-
-设置入口 / Settings: `Settings → Stealth Path`（`设置 → 偷袭小道`）
-
-多人游戏 / Multiplayer：这是纯客户端叠加显示 mod（`mod.json` 使用 `"hidden": true` 以避免服务器/客户端 mod 不匹配检查）。
-
-#### 3) 圆盘快捷建造 / Radial Build Menu
-
-按住热键在鼠标周围打开圆盘 HUD，松开即可快速切换当前选中的建造建筑。  
-Hold the hotkey to open a radial HUD around your cursor. Release to quickly switch the selected build block.
-
-功能 / Features：
-
-- 最多 16 个可配置槽位（内圈 8 + 外圈 8；外圈默认空） / Up to 16 configurable slots (8 inner + 8 outer; outer defaults empty)
-- 热键可在“设置 → 控制”中绑定 / Hotkey is configurable in Settings → Controls
-- HUD 可调：缩放、透明度、内圈半径、外圈半径、颜色 / Adjustable HUD: scale, opacity, inner/outer radius, color
-- 仅使用 8 个槽位时支持“按方向快捷选择”（不必精确悬停图标） / With only 8 slots, supports direction-based selection
-- 规则切换：按地图时长/星球切换到另一套槽位 / Rule switching by map time or planet
-- 槽位配置可导出/导入（JSON） / Export/import slots config (JSON)
-
-### 安装 / Install
-
-将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。  
-Put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
-
-#### 安卓 / Android
-
-安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `Neon.jar` 并放入 Mindustry 的 `mods` 目录。
-
-Android requires a mod package that contains `classes.dex`. Download `Neon.jar` from Releases and put it into Mindustry's `mods` folder.
-
-### 构建
+构建桌面端 zip：
 
 ```bash
 ./gradlew jar
 ```
 
-输出文件：`build/libs/Neon.zip`
+输出：`build/libs/Neon.zip`
 
-### Android build（classes.dex）
+构建安卓 jar（含 classes.dex）：
 
 ```bash
 ./gradlew jarAndroid
 ```
 
-输出文件：`build/libs/Neon.jar`
-
-### 同步上游更新（维护脚本）
-
-仓库内提供 `tools/update_submods.py` 用于自动检测并合并 3 个本地子模组仓库（PGMM / StealthPath / RBM）的更新到本仓库（不访问 GitHub，直接读取本地 git HEAD）：
-
-```bash
-python tools/update_submods.py --check
-python tools/update_submods.py
-```
-
-它会：
-
-- 更新 3 个主类源码并自动重新注入 Neon 的整合钩子
-- 合并 `bundles/*.properties` 并生成 `tools/submods.lock.json`（记录上游 commit）
-
-### Release（自动构建）
-
-推送形如 `v2.0.0` 的 tag，会触发 GitHub Actions 自动构建并发布 Release。
+输出：`build/libs/Neon.jar`
 
 ---
 
 ## English
 
-Neon is a Mindustry client-side toolkit (Java mod) that bundles:
+### Overview
+
+Neon is a client-side Mindustry toolkit (Java mod) that bundles three popular QoL modules into a single install:
 
 - Power Grid Minimap
 - Stealth Path
 - Radial Build Menu
 
-### Feature overview (merged from the 3 mods' READMEs)
+If you prefer installing once and getting all three “overlay + workflow” features together, Neon is the convenient option.
 
-- Power Grid Minimap: color each disconnected power network on the minimap/full map, show its power balance at the grid center; includes split alerts and reconnect hints.
-- Stealth Path: compute/draw safest or lowest-damage paths based on enemy turret/unit ranges (hotkeys: X/Y/N/M/K/L; settings under Settings → Stealth Path).
-- Radial Build Menu: hold a hotkey to open a radial HUD to quickly switch the selected build block (up to 16 slots; configurable HUD; export/import JSON).
+Note: since Neon already includes these modules, you should avoid enabling the standalone versions at the same time to prevent duplicated UI or conflicts.
 
-### Install
+### What You Get
 
-Put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
+#### 1) Power Grid Minimap
 
-### Build
+- Colors each separate power network on the minimap/full map for quick grid visibility.
+- Shows net power balance markers at grid centers (configurable size/color/opacity).
+- Split alerts with reconnect hints when a large grid breaks and goes negative.
+- Power rescue hints (Beta) for sustained deficits (e.g. outlining positive islands or suggesting disabling Impact Reactors when relevant).
+- A compact power table listing large grids (current balance / recent minimum, etc.) to help locate the worst grid quickly.
+
+#### 2) Stealth Path
+
+- Route overlay previews for safer / lower-damage paths, with configurable visuals.
+- Multiple modes and threat filters (ground/air/both).
+- Auto modes for unit clusters (to mouse or to chat coordinates), plus an optional auto-move keybind to command units along the preview path.
+- Optional overlay windows: when MindustryX is installed, mode/damage/controls windows can be shown via OverlayUI; otherwise it falls back to regular HUD.
+
+#### 3) Radial Build Menu
+
+- Hold a hotkey to open a radial HUD; release to switch the selected build block.
+- Up to 16 configurable slots (8 inner + 8 outer; outer appears when configured).
+- Multiple profiles and switching rules (time / planet / conditional), plus optional Slot Group A/B instant toggling via a hotkey.
+- Customizable appearance and interaction; JSON import/export for sharing.
+
+### Quick Start
+
+1) Install: put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
+
+2) Rebind keys in `Settings → Controls`:
+
+- Stealth Path hotkeys (X/Y/N/M/K/L, etc.)
+- Radial Build Menu hotkey (and optional “Toggle Slot Group” hotkey)
+
+3) Configure settings under `Settings → Mods`:
+
+- Power Grid Minimap
+- Stealth Path
+- Radial Build Menu
+
+### Multiplayer
+
+Neon is client-side overlay and assistance; no server install required.
+
+### Android
+
+Android requires a mod package that contains `classes.dex`. Download `Neon.jar` from Releases and put it into Mindustry's `mods` folder.
+
+### Feedback
+
+BEK mods feedback group (QQ): https://qm.qq.com/q/cZWzPa4cTu
+
+![BEK mods feedback group QR](docs/bek-feedback-group.png)
+
+### Build (Optional)
+
+Build desktop zip:
 
 ```bash
 ./gradlew jar
@@ -137,28 +167,10 @@ Put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
 
 Output: `build/libs/Neon.zip`
 
-### Android build (classes.dex)
+Build Android jar (with classes.dex):
 
 ```bash
 ./gradlew jarAndroid
 ```
 
 Output: `build/libs/Neon.jar`
-
-### Sync upstream updates (maintainer script)
-
-This repo includes `tools/update_submods.py` to auto-detect and merge updates from 3 local git checkouts (PGMM / StealthPath / RBM). It does NOT access GitHub; it reads local git HEADs:
-
-```bash
-python tools/update_submods.py --check
-python tools/update_submods.py
-```
-
-It will:
-
-- Refresh the 3 main Java sources and re-inject Neon integration hooks
-- Merge `bundles/*.properties` and write `tools/submods.lock.json` (upstream commit lock)
-
-### Release (CI)
-
-Push a tag like `v2.0.0` to trigger GitHub Actions to build and publish a Release automatically.

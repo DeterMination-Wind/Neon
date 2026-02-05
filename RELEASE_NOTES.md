@@ -1,7 +1,10 @@
 # 🧰 Neon 更新日志 / Release Notes
 
-## 🆕 v2.0.11
-- 🧩 Radial Build Menu：合并 RBM v5.1.2（槽位组切换/显示空槽位；无需“专业模式”也能配置槽位组；修复中文设置项不显示）
+## 🆕 v2.1.0
+- ⚡ Power Grid Minimap：合并 PGMM v1.10.0（新增高级设置「忽略面积小于 X 的电网」，用于过滤小电网显示）。
+- 🧩 StealthPath：合并 v4.2.0（更新检测弹窗增强）。
+- 🧩 Radial Build Menu：合并 v5.2.0（更新检测弹窗增强）。
+- 🔔 整合包更新检测弹窗增强：展示 assets、镜像下载开关、下载并自动安装重启（桌面端）。
 
 ## 🆕 本次版本（持续维护）
 - ✅ 这个文件会作为每次 GitHub Release 的说明文本。

@@ -113,6 +113,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private static final String keyPowerTableBgAlpha = "pgmm-power-table-bgalpha";
     //debounce cache rebuilds after block changes (tenths of a second)
     private static final String keyUpdateWaitTenths = "pgmm-updatewait";
+    //Ignore power grids whose functional area (producers/consumers/batteries) is below this threshold (tiles^2).
+    private static final String keyIgnoreAreaTiles = "pgmm-ignore-area";
 
     private final PowerGridCache cache = new PowerGridCache();
     private final Color markerColor = new Color(Color.white);
@@ -170,6 +172,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Core.settings.defaults(keyPowerTableThreshold, 10000);
             Core.settings.defaults(keyPowerTableBgAlpha, 70);
             Core.settings.defaults(keyUpdateWaitTenths, 10);
+            Core.settings.defaults(keyIgnoreAreaTiles, 0);
             GithubUpdateCheck.applyDefaults();
 
             registerSettings();
@@ -434,6 +437,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyClusterMarkerDistance, 15, 0, 60, 1, Icon.filterSmall, String::valueOf, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyReconnectStroke, 2, 1, 8, 1, Icon.pencilSmall, String::valueOf, null));
             table.pref(new PgmmSettingsWidgets.IconTextSetting(keyReconnectColor, "ffa500", Icon.effectSmall, v -> refreshReconnectColor()));
+
+            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.advanced", "Advanced"), Icon.settingsSmall));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyIgnoreAreaTiles, 0, 0, 500, 1, Icon.filterSmall, String::valueOf, null));
 
             table.pref(new PgmmSettingsWidgets.HeaderSetting("@setting.pgmm.rescue.section", Icon.powerSmall));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyRescueEnabled, false, Icon.warningSmall, null));
@@ -1325,6 +1331,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         private final IntQueue tmpQueue = new IntQueue();
         private final Seq<ClusterInfo> tmpClusters = new Seq<>();
 
+        //reused scratch objects for area-based filtering
+        private final IntSet tmpAreaSeen = new IntSet();
+
         //reused scratch arrays for MST/partitioning (clusters are capped)
         private static final int maxMarkersPerGraph = 64;
         private final int[] mstParent = new int[maxMarkersPerGraph];
@@ -1342,6 +1351,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         private float nextUpdateTime = 0f;
         private boolean basicDirty = true;
         private boolean fullDirty = true;
+
+        private int lastIgnoreAreaTiles = Integer.MIN_VALUE;
 
         //fullscreen overlay cache
         private float nextFullUpdateTime = 0f;
@@ -1376,6 +1387,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             nextFullUpdateTime = 0f;
             basicDirty = true;
             fullDirty = true;
+            lastIgnoreAreaTiles = Integer.MIN_VALUE;
 
             if(fullOverlayPixmap != null){
                 fullOverlayPixmap.dispose();
@@ -1422,6 +1434,15 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 return;
             }
 
+            int ignoreAreaTiles = Mathf.clamp(Core.settings.getInt(keyIgnoreAreaTiles, 0), 0, 1000000);
+            if(ignoreAreaTiles != lastIgnoreAreaTiles){
+                lastIgnoreAreaTiles = ignoreAreaTiles;
+                basicDirty = true;
+                fullDirty = true;
+                nextUpdateTime = 0f;
+                nextFullUpdateTime = 0f;
+            }
+
             if(basicDirty && Time.time < nextUpdateTime) return;
             if(!basicDirty && Time.time < nextUpdateTime) return;
             if(!basicDirty && Time.time >= nextUpdateTime){
@@ -1463,6 +1484,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 }
                 if(buildCount <= 1) continue;
 
+                if(ignoreAreaTiles > 0 && graphAreaTiles(graph) < ignoreAreaTiles) continue;
+
                 GridInfo info = new GridInfo();
                 info.graph = graph;
                 grids.add(info);
@@ -1470,6 +1493,31 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 //For sparse laser-linked grids, render one balance marker per contiguous "chunk" of buildings.
                 addClusterMarkers(info);
             }
+        }
+
+        private int graphAreaTiles(PowerGraph graph){
+            if(graph == null) return 0;
+            tmpAreaSeen.clear();
+            int area = 0;
+            area += addAreaTiles(graph.producers);
+            area += addAreaTiles(graph.consumers);
+            area += addAreaTiles(graph.batteries);
+            return area;
+        }
+
+        private int addAreaTiles(Seq<Building> builds){
+            if(builds == null || builds.isEmpty()) return 0;
+            int sum = 0;
+            for(int i = 0; i < builds.size; i++){
+                Building b = builds.get(i);
+                if(b == null || b.team != player.team() || b.block == null) continue;
+                int pos = b.pos();
+                if(tmpAreaSeen.contains(pos)) continue;
+                tmpAreaSeen.add(pos);
+                int size = Math.max(1, b.block.size);
+                sum += size * size;
+            }
+            return sum;
         }
 
         private void addClusterMarkers(GridInfo info){

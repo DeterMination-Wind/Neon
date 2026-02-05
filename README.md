@@ -69,6 +69,12 @@ Hold the hotkey to open a radial HUD around your cursor. Release to quickly swit
 将 `BEK-Tools.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。  
 Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
 
+#### 安卓 / Android
+
+安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `BEK-Tools.jar` 并放入 Mindustry 的 `mods` 目录。
+
+Android requires a mod package that contains `classes.dex`. Download `BEK-Tools.jar` from Releases and put it into Mindustry's `mods` folder.
+
 ### 构建
 
 ```bash
@@ -76,6 +82,14 @@ Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
 ```
 
 输出文件：`build/libs/BEK-Tools.zip`
+
+### Android build（classes.dex）
+
+```bash
+./gradlew jarAndroid
+```
+
+输出文件：`build/libs/BEK-Tools.jar`
 
 ### 同步上游更新（维护脚本）
 
@@ -122,6 +136,14 @@ Put `BEK-Tools.zip` into Mindustry's `mods` folder and enable it in-game.
 ```
 
 Output: `build/libs/BEK-Tools.zip`
+
+### Android build (classes.dex)
+
+```bash
+./gradlew jarAndroid
+```
+
+Output: `build/libs/BEK-Tools.jar`
 
 ### Sync upstream updates (maintainer script)
 

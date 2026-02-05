@@ -42,10 +42,8 @@ jar{
 
 tasks.register("jarAndroid", Jar){
     group = "build"
-    description = "Packages BEK-Tools as a .jar for Mindustry Android."
-    dependsOn classes
+    description = "Packages BEK-Tools as a .jar for Mindustry Android (classes.dex)."
     archiveFileName = "BEK-Tools.jar"
-    from(sourceSets.main.output)
 }
 
 // Keep a copy in workspace root "构建/" (mod name + version).
@@ -73,4 +71,84 @@ tasks.named("jar").configure{
 
 tasks.named("jarAndroid").configure{
     finalizedBy tasks.named("copyJarToBuildDir")
+}
+
+def isWindows = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows")
+
+def findD8 = {
+    def explicit = System.getenv("D8_PATH")
+    if(explicit){
+        def f = new File(explicit)
+        if(f.exists()) return f
+    }
+
+    def sdkRoot = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+    if(sdkRoot){
+        def buildToolsDir = new File(sdkRoot, "build-tools")
+        if(buildToolsDir.isDirectory()){
+            def toolName = isWindows ? "d8.bat" : "d8"
+            def candidates = (buildToolsDir.listFiles() ?: [])
+                .findAll{ it.isDirectory() }
+                .sort{ a, b -> b.name <=> a.name }
+
+            for(def dir : candidates){
+                def exe = new File(dir, toolName)
+                if(exe.exists()) return exe
+            }
+        }
+    }
+
+    if(isWindows){
+        def workspaceRoot = rootDir.parentFile
+        def matches = (workspaceRoot.listFiles() ?: [])
+            .findAll{ it.isDirectory() && it.name.startsWith("commandlinetools-win-") }
+            .sort{ a, b -> b.name <=> a.name }
+
+        for(def dir : matches){
+            def exe = new File(dir, "cmdline-tools/bin/d8.bat")
+            if(exe.exists()) return exe
+        }
+    }
+
+    return null
+}
+
+def androidDexOutDir = layout.buildDirectory.dir("d8").get().asFile
+
+tasks.register("d8InputJar", Jar){
+    group = "build"
+    description = "Builds a jar used only as input for D8 (no dist side effects)."
+    dependsOn tasks.named("classes")
+    archiveFileName = "${project.name}-d8-input.jar"
+    destinationDirectory = layout.buildDirectory.dir("d8-input")
+    from(sourceSets.main.output)
+}
+
+tasks.register("dexAndroid", Exec){
+    group = "build"
+    description = "Compiles Java bytecode into classes.dex for Mindustry Android mod loading."
+    dependsOn tasks.named("d8InputJar")
+
+    doFirst{
+        def d8 = findD8()
+        if(d8 == null){
+            throw new GradleException("D8 not found. Set ANDROID_SDK_ROOT/ANDROID_HOME or D8_PATH (or keep commandlinetools-win-* in workspace root on Windows).")
+        }
+        delete(androidDexOutDir)
+        androidDexOutDir.mkdirs()
+
+        def programZip = tasks.named("d8InputJar").get().archiveFile.get().asFile
+
+        commandLine d8.absolutePath
+        args "--min-api", "14", "--release", "--output", androidDexOutDir.absolutePath
+        args programZip.absolutePath
+    }
+}
+
+tasks.named("jarAndroid").configure{
+    dependsOn tasks.named("dexAndroid")
+    from(androidDexOutDir){
+        include "classes.dex"
+    }
+    from(sourceSets.main.output.resourcesDir)
 }

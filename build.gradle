@@ -3,7 +3,7 @@ plugins{
 }
 
 group = "bektools"
-version = "2.1.0"
+version = "2.2.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_1_8

@@ -3,7 +3,9 @@ package bektools;
 import arc.Core;
 import arc.files.Fi;
 import arc.scene.ui.ButtonGroup;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton;
+import arc.scene.ui.layout.Table;
 import arc.util.Http;
 import arc.util.Log;
 import arc.util.OS;
@@ -104,7 +106,7 @@ final class GithubUpdateCheck{
         String ignore = Strings.stripColors(Core.settings.getString(keyIgnoreVersion, ""));
         String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
 
-        String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases/latest";
+        String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases?per_page=30";
         Http.get(apiUrl)
             .timeout(30000)
             .header("User-Agent", "Mindustry")
@@ -112,9 +114,11 @@ final class GithubUpdateCheck{
             .submit(res -> {
                 try{
                     Jval json = Jval.read(res.getResultAsString());
-                    ReleaseInfo rel = parseRelease(json, releasesUrl);
-                    if(rel.version.isEmpty()) return;
-                    onLatestResolved(mod, current, rel, ignore);
+                    ArrayList<ReleaseInfo> releases = parseReleasesList(json);
+                    if(releases.isEmpty()) return;
+                    ReleaseInfo latest = pickLatestRelease(releases);
+                    if(latest == null || latest.version.isEmpty()) return;
+                    onLatestResolved(mod, current, latest, releases, ignore);
                 }catch(Throwable t){
                     fetchFromMainModJson(mod, current, ignore, releasesUrl);
                 }
@@ -133,43 +137,65 @@ final class GithubUpdateCheck{
                     Jval json = Jval.read(res.getResultAsString());
                     String latest = Strings.stripColors(json.getString("version", ""));
                     if(latest == null || latest.isEmpty()) return;
-                    onLatestResolved(mod, current, new ReleaseInfo(latest, "", "", "", releasesUrl, "", false, new ArrayList<>()), ignore);
+                    ReleaseInfo rel = new ReleaseInfo(latest, "", "", "", releasesUrl, "", false, new ArrayList<>());
+                    ArrayList<ReleaseInfo> releases = new ArrayList<>();
+                    releases.add(rel);
+                    onLatestResolved(mod, current, rel, releases, ignore);
                 }catch(Throwable ignoredErr){
                     //bad json/etc.
                 }
             });
     }
 
-    private static void onLatestResolved(Mods.LoadedMod mod, String current, ReleaseInfo rel, String ignore){
-        if(compareVersions(rel.version, current) <= 0) return;
-        if(ignore != null && !ignore.isEmpty() && compareVersions(rel.version, ignore) <= 0) return;
+    private static void onLatestResolved(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, String ignore){
+        if(compareVersions(latest.version, current) <= 0) return;
+        if(ignore != null && !ignore.isEmpty() && compareVersions(latest.version, ignore) <= 0) return;
 
-        Log.info("[{0}] Update available: {1} -> {2}", mod.meta.displayName, current, rel.version);
-        Core.app.post(() -> showUpdateDialog(mod, current, rel));
+        Log.info("[{0}] Update available: {1} -> {2}", mod.meta.displayName, current, latest.version);
+        Core.app.post(() -> showUpdateDialog(mod, current, latest, releases, latest));
     }
 
-    private static void showUpdateDialog(Mods.LoadedMod mod, String current, ReleaseInfo rel){
+    private static void showUpdateDialog(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, ReleaseInfo selectedRelease){
         if(Vars.ui == null) return;
 
-        Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + rel.version, 8f);
+        Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest.version, 8f);
 
         BaseDialog dialog = new BaseDialog("@bektools.update.title");
         dialog.cont.margin(12f);
 
-        dialog.cont.add(Core.bundle.format("bektools.update.text", mod.meta.displayName, current, rel.version))
-            .left().wrap().width(520f).row();
+        Table content = new Table();
+        content.left().defaults().left();
+        ScrollPane pane = new ScrollPane(content);
+        pane.setFadeScrollBars(false);
+
+        dialog.cont.add(pane).width(560f).maxHeight(Core.graphics.getHeight() * 0.8f).growY().row();
+
+        content.add(Core.bundle.format("bektools.update.text", mod.meta.displayName, current, latest.version)).wrap().width(520f).row();
+
+        content.image().color(Pal.gray).fillX().height(2f).padTop(8f).padBottom(6f).row();
+        content.add("正式版").padBottom(4f).row();
+        buildReleaseList(content, mod, current, latest, releases, selectedRelease, false, dialog);
+
+        content.image().color(Pal.gray).fillX().height(2f).padTop(8f).padBottom(6f).row();
+        content.add("预览版").padBottom(4f).row();
+        buildReleaseList(content, mod, current, latest, releases, selectedRelease, true, dialog);
+
+        content.image().color(Pal.gray).fillX().height(2f).padTop(8f).padBottom(6f).row();
+
+        ReleaseInfo rel = selectedRelease == null ? latest : selectedRelease;
+        content.add("已选择版本： " + rel.version + (rel == latest ? "（最新）" : "")).wrap().width(520f).padBottom(2f).row();
 
         if(!rel.publishedAt.isEmpty()){
-            dialog.cont.add("发布时间： " + rel.publishedAt).left().padTop(6f).row();
+            content.add("发布时间： " + rel.publishedAt).wrap().width(520f).row();
         }
 
         if(!rel.name.isEmpty() && !rel.name.equals(rel.tag)){
-            dialog.cont.add("标题： " + rel.name).left().wrap().width(520f).row();
+            content.add("标题： " + rel.name).wrap().width(520f).row();
         }
 
         if(!rel.body.isEmpty()){
-            dialog.cont.add("更新内容：").left().padTop(8f).row();
-            dialog.cont.pane(p -> p.add(rel.body).wrap().growX().left())
+            content.add("更新内容：").padTop(8f).row();
+            content.pane(p -> p.add(rel.body).wrap().growX().left())
                 .height(Math.min(Core.graphics.getHeight() * 0.35f, 260f))
                 .width(520f)
                 .row();
@@ -181,8 +207,7 @@ final class GithubUpdateCheck{
         final arc.scene.ui.TextField[] urlFieldRef = {null};
 
         if(!rel.assets.isEmpty()){
-            dialog.cont.add(Core.bundle.get("bektools.update.asset", "Download file") + "：")
-                .left().padTop(8f).row();
+            content.add(Core.bundle.get("bektools.update.asset", "Download file") + "：").padTop(8f).row();
             ButtonGroup<TextButton> group = new ButtonGroup<>();
             group.setMaxCheckCount(1);
             group.setMinCheckCount(1);
@@ -194,12 +219,12 @@ final class GithubUpdateCheck{
                 if(!size.isEmpty()) label += " (" + size + ")";
                 if(a.downloadCount > 0) label += " · " + a.downloadCount + " downloads";
 
-                TextButton b = dialog.cont.button(label, Styles.togglet, () -> {
+                TextButton b = content.button(label, Styles.togglet, () -> {
                     selected[0] = a;
                     url[0] = buildDownloadUrl(a.url, useMirror[0]);
                     if(urlFieldRef[0] != null) urlFieldRef[0].setText(url[0]);
                 }).width(520f).left().get();
-                dialog.cont.row();
+                content.row();
                 group.add(b);
                 if(selected[0] == a){
                     b.setChecked(true);
@@ -207,13 +232,12 @@ final class GithubUpdateCheck{
             }
         }
 
-        dialog.cont.add(Core.bundle.get("bektools.update.url", "Download URL") + "：")
-            .left().padTop(8f).row();
-        arc.scene.ui.TextField urlField = dialog.cont.field(url[0], v -> url[0] = v).width(520f).get();
+        content.add(Core.bundle.get("bektools.update.url", "Download URL") + "：").padTop(8f).row();
+        arc.scene.ui.TextField urlField = content.field(url[0], v -> url[0] = v).width(520f).get();
         urlFieldRef[0] = urlField;
-        dialog.cont.row();
+        content.row();
 
-        dialog.cont.check(Core.bundle.get("bektools.update.mirror", "Use mirror download") + "（ghfile.geekertao.top）", useMirror[0], v -> {
+        content.check(Core.bundle.get("bektools.update.mirror", "Use mirror download") + "（ghfile.geekertao.top）", useMirror[0], v -> {
             useMirror[0] = v;
             Core.settings.put(keyUpdateCheckUseMirror, v);
             if(selected[0] != null){
@@ -222,8 +246,8 @@ final class GithubUpdateCheck{
             }
         }).left().padTop(6f).row();
 
-        dialog.cont.add(Core.bundle.get("bektools.update.hint", "The game will restart after update is installed. Save first."))
-            .left().wrap().width(520f).padTop(8f).row();
+        content.add(Core.bundle.get("bektools.update.hint", "The game will restart after update is installed. Save first."))
+            .wrap().width(520f).padTop(8f).row();
 
         dialog.buttons.defaults().size(200f, 54f).pad(6f);
         dialog.buttons.button("@bektools.update.open", Icon.link, () -> Core.app.openURI(rel.htmlUrl));
@@ -236,12 +260,59 @@ final class GithubUpdateCheck{
             startDownloadAndInstall(mod, selected[0], url[0]);
         });
         dialog.buttons.button("@bektools.update.ignore", Icon.cancel, () -> {
-            Core.settings.put(keyIgnoreVersion, rel.version);
+            Core.settings.put(keyIgnoreVersion, latest.version);
             dialog.hide();
         });
         dialog.buttons.button("@bektools.update.later", Icon.ok, dialog::hide);
 
         dialog.show();
+    }
+
+    private static void buildReleaseList(Table content, Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, ReleaseInfo selectedRelease, boolean preRelease, BaseDialog parent){
+        boolean any = false;
+        for(ReleaseInfo r : releases){
+            if(r == null) continue;
+            if(r.preRelease != preRelease) continue;
+            any = true;
+
+            String label = r.version;
+            if(r == latest) label += "（最新）";
+
+            final ReleaseInfo rel = r;
+            final String labelText = label;
+
+            content.table(row -> {
+                row.left().defaults().left();
+                row.check(labelText, rel == selectedRelease, v -> {
+                    parent.hide();
+                    showUpdateDialog(mod, current, latest, releases, rel);
+                }).growX().left();
+
+                if(rel.body != null && !rel.body.isEmpty()){
+                    row.button(Icon.infoSmall, () -> showReleaseNotesDialog(mod.meta.displayName, rel)).size(32f).padRight(4f);
+                }
+                row.button(Icon.link, () -> Core.app.openURI(rel.htmlUrl)).size(32f);
+            }).width(520f).left().row();
+        }
+
+        if(!any){
+            content.add("（无）").padBottom(4f).row();
+        }
+    }
+
+    private static void showReleaseNotesDialog(String title, ReleaseInfo rel){
+        BaseDialog d = new BaseDialog(title + " - " + rel.version);
+        d.cont.margin(12f);
+        if(rel.body == null || rel.body.isEmpty()){
+            d.cont.add("（无发布说明）").wrap().width(520f).row();
+        }else{
+            d.cont.pane(p -> p.add(rel.body).wrap().growX().left())
+                .height(Math.min(Core.graphics.getHeight() * 0.6f, 420f))
+                .width(520f)
+                .row();
+        }
+        d.addCloseButton();
+        d.show();
     }
 
     private static void startDownloadAndInstall(Mods.LoadedMod mod, AssetInfo asset, String url){
@@ -351,6 +422,59 @@ final class GithubUpdateCheck{
         }
 
         Core.app.exit();
+    }
+
+    private static ArrayList<ReleaseInfo> parseReleasesList(Jval json){
+        ArrayList<ReleaseInfo> out = new ArrayList<>();
+        if(json == null || !json.isArray()) return out;
+
+        String fallbackHtmlUrl = "https://github.com/" + owner + "/" + repo + "/releases";
+        for(Jval r : json.asArray()){
+            if(r == null || !r.isObject()) continue;
+            if(r.getBool("draft", false)) continue;
+            try{
+                ReleaseInfo rel = parseRelease(r, fallbackHtmlUrl);
+                if(rel != null && rel.version != null && !rel.version.isEmpty()){
+                    out.add(rel);
+                }
+            }catch(Throwable ignored){
+            }
+        }
+
+        Collections.sort(out, (a, b) -> {
+            if(a == null && b == null) return 0;
+            if(a == null) return 1;
+            if(b == null) return -1;
+            int c = compareVersions(b.version, a.version);
+            if(c != 0) return c;
+            if(a.preRelease != b.preRelease) return a.preRelease ? 1 : -1;
+            return a.tag.compareToIgnoreCase(b.tag);
+        });
+
+        return out;
+    }
+
+    private static ReleaseInfo pickLatestRelease(ArrayList<ReleaseInfo> releases){
+        if(releases == null || releases.isEmpty()) return null;
+
+        ReleaseInfo bestStable = null;
+        ReleaseInfo bestAny = null;
+        for(ReleaseInfo r : releases){
+            if(r == null) continue;
+            if(r.version == null || r.version.isEmpty()) continue;
+
+            if(bestAny == null || compareVersions(r.version, bestAny.version) > 0){
+                bestAny = r;
+            }
+
+            if(!r.preRelease){
+                if(bestStable == null || compareVersions(r.version, bestStable.version) > 0){
+                    bestStable = r;
+                }
+            }
+        }
+
+        return bestStable != null ? bestStable : bestAny;
     }
 
     private static ReleaseInfo parseRelease(Jval json, String fallbackHtmlUrl){

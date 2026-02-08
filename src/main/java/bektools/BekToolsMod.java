@@ -29,6 +29,7 @@ public class BekToolsMod extends Mod{
         radialBuildMenu = new RadialBuildMenuMod();
 
         Events.on(ClientLoadEvent.class, e -> {
+            GithubUpdateCheck.applyDefaults();
             registerSettings();
             GithubUpdateCheck.checkOnce();
         });
@@ -48,6 +49,10 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, pgmm::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, stealthPath::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, radialBuildMenu::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.update", "Update"), Icon.refresh, st -> {
+                st.checkPref(GithubUpdateCheck.enabledKey(), true);
+                st.checkPref(GithubUpdateCheck.showDialogKey(), true);
+            });
         });
     }
 

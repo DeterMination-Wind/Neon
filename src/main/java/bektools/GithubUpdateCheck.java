@@ -27,8 +27,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Checks this mod's version against GitHub Releases.
- * Shows a rich update dialog (release notes/assets) and can auto-download + restart.
+ * Checks this mod's version against the version declared in the GitHub repository.
+ * Runs asynchronously and should be triggered once per game startup.
  */
 final class GithubUpdateCheck{
     private static final String owner = "DeterMination-Wind";
@@ -37,13 +37,16 @@ final class GithubUpdateCheck{
 
     private static final String mirrorPrefix = "https://ghfile.geekertao.top/";
 
-    private static final String keyIgnoreVersion = "bek-update-ignore-version";
-    private static final String keyUpdateCheckLastAt = "bek-update-lastAt";
-    private static final String keyUpdateCheckUseMirror = "bek-update-mirror";
-    private static final long checkIntervalMs = 6L * 60L * 60L * 1000L; //6 hours
-
     private static final Pattern numberPattern = Pattern.compile("\\d+");
     private static boolean checked;
+
+    private static final String keyUpdateCheckEnabled = "bek-updatecheck";
+    private static final String keyUpdateCheckShowDialog = "bek-updatecheck-dialog";
+    private static final String keyUpdateCheckLastAt = "bek-updatecheck-lastAt";
+    private static final String keyUpdateCheckIgnoreVersion = "bek-updatecheck-ignore";
+    private static final String keyUpdateCheckUseMirror = "bek-updatecheck-mirror";
+    //avoid hammering GitHub; also prevents repeated prompts when user returns to main menu etc.
+    private static final long checkIntervalMs = 6L * 60L * 60L * 1000L; //6 hours
 
     private static final class AssetInfo{
         final String name;
@@ -84,6 +87,20 @@ final class GithubUpdateCheck{
     private GithubUpdateCheck(){
     }
 
+    static void applyDefaults(){
+        Core.settings.defaults(keyUpdateCheckEnabled, true);
+        Core.settings.defaults(keyUpdateCheckShowDialog, true);
+        Core.settings.defaults(keyUpdateCheckUseMirror, false);
+    }
+
+    static String enabledKey(){
+        return keyUpdateCheckEnabled;
+    }
+
+    static String showDialogKey(){
+        return keyUpdateCheckShowDialog;
+    }
+
     static void checkOnce(){
         if(checked) return;
         checked = true;
@@ -91,7 +108,8 @@ final class GithubUpdateCheck{
         if(Vars.headless) return;
         if(Vars.mods == null) return;
 
-        Core.settings.defaults(keyUpdateCheckUseMirror, false);
+        applyDefaults();
+        if(!Core.settings.getBool(keyUpdateCheckEnabled, true)) return;
 
         long now = System.currentTimeMillis();
         long last = Core.settings.getLong(keyUpdateCheckLastAt, 0L);
@@ -103,64 +121,91 @@ final class GithubUpdateCheck{
         String current = Strings.stripColors(mod.meta.version);
         if(current == null || current.isEmpty()) return;
 
-        String ignore = Strings.stripColors(Core.settings.getString(keyIgnoreVersion, ""));
-        String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
+        String ignored = Strings.stripColors(Core.settings.getString(keyUpdateCheckIgnoreVersion, ""));
 
+        //Prefer GitHub releases list API (lets users select historical versions).
         String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases?per_page=30";
         Http.get(apiUrl)
-            .timeout(30000)
-            .header("User-Agent", "Mindustry")
-            .error(e -> fetchFromMainModJson(mod, current, ignore, releasesUrl))
-            .submit(res -> {
-                try{
-                    Jval json = Jval.read(res.getResultAsString());
-                    ArrayList<ReleaseInfo> releases = parseReleasesList(json);
-                    if(releases.isEmpty()) return;
-                    ReleaseInfo latest = pickLatestRelease(releases);
-                    if(latest == null || latest.version.isEmpty()) return;
-                    onLatestResolved(mod, current, latest, releases, ignore);
-                }catch(Throwable t){
-                    fetchFromMainModJson(mod, current, ignore, releasesUrl);
+        .timeout(30000)
+        .header("User-Agent", "Mindustry")
+        .error(e -> {
+            //ignore; fallback below
+            checkFromRawModJson(mod, current, ignored);
+        })
+        .submit(res -> {
+            try{
+                Jval json = Jval.read(res.getResultAsString());
+                ArrayList<ReleaseInfo> releases = parseReleasesList(json);
+                if(releases.isEmpty()){
+                    checkFromRawModJson(mod, current, ignored);
+                    return;
                 }
-            });
+
+                ReleaseInfo latest = pickLatestRelease(releases);
+                if(latest == null || latest.version.isEmpty()){
+                    checkFromRawModJson(mod, current, ignored);
+                    return;
+                }
+
+                if(ignored != null && !ignored.isEmpty() && compareVersions(latest.version, ignored) == 0){
+                    return;
+                }
+
+                if(compareVersions(latest.version, current) > 0){
+                    notifyUpdate(mod, current, latest, releases);
+                }
+            }catch(Throwable t){
+                checkFromRawModJson(mod, current, ignored);
+            }
+        });
     }
 
-    private static void fetchFromMainModJson(Mods.LoadedMod mod, String current, String ignore, String releasesUrl){
+    private static void checkFromRawModJson(Mods.LoadedMod mod, String current, String ignored){
         String url = "https://raw.githubusercontent.com/" + owner + "/" + repo + "/main/src/main/resources/mod.json";
         Http.get(url)
-            .timeout(30000)
-            .error(e -> {
-                //offline/etc. -> skip
-            })
-            .submit(res -> {
-                try{
-                    Jval json = Jval.read(res.getResultAsString());
-                    String latest = Strings.stripColors(json.getString("version", ""));
-                    if(latest == null || latest.isEmpty()) return;
+        .timeout(30000)
+        .error(e -> {
+            //No internet/offline/etc. -> silently skip.
+        })
+        .submit(res -> {
+            try{
+                Jval json = Jval.read(res.getResultAsString());
+                String latest = Strings.stripColors(json.getString("version", ""));
+                if(latest == null || latest.isEmpty()) return;
+                if(ignored != null && !ignored.isEmpty() && compareVersions(latest, ignored) == 0) return;
+
+                if(compareVersions(latest, current) > 0){
+                    String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
                     ReleaseInfo rel = new ReleaseInfo(latest, "", "", "", releasesUrl, "", false, new ArrayList<>());
                     ArrayList<ReleaseInfo> releases = new ArrayList<>();
                     releases.add(rel);
-                    onLatestResolved(mod, current, rel, releases, ignore);
-                }catch(Throwable ignoredErr){
-                    //bad json/etc.
+                    notifyUpdate(mod, current, rel, releases);
                 }
-            });
+            }catch(Throwable ignoredErr){
+                //Bad JSON/format/etc. -> skip.
+            }
+        });
     }
 
-    private static void onLatestResolved(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, String ignore){
-        if(compareVersions(latest.version, current) <= 0) return;
-        if(ignore != null && !ignore.isEmpty() && compareVersions(latest.version, ignore) <= 0) return;
-
+    private static void notifyUpdate(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases){
         Log.info("[{0}] Update available: {1} -> {2}", mod.meta.displayName, current, latest.version);
-        Core.app.post(() -> showUpdateDialog(mod, current, latest, releases, latest));
+
+        Core.app.post(() -> {
+            if(Vars.ui == null) return;
+
+            if(!Core.settings.getBool(keyUpdateCheckShowDialog, true)){
+                Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest.version + " (GitHub)", 8f);
+                return;
+            }
+
+            showUpdateDialog(mod, current, latest, releases, latest);
+        });
     }
 
     private static void showUpdateDialog(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, ReleaseInfo selectedRelease){
         if(Vars.ui == null) return;
 
-        Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest.version, 8f);
-
-        BaseDialog dialog = new BaseDialog("@bektools.update.title");
+        BaseDialog dialog = new BaseDialog(mod.meta.displayName + " 更新");
         dialog.cont.margin(12f);
 
         Table content = new Table();
@@ -170,7 +215,8 @@ final class GithubUpdateCheck{
 
         dialog.cont.add(pane).width(560f).maxHeight(Core.graphics.getHeight() * 0.8f).growY().row();
 
-        content.add(Core.bundle.format("bektools.update.text", mod.meta.displayName, current, latest.version)).wrap().width(520f).row();
+        content.add("当前版本： " + current).wrap().width(520f).row();
+        content.add("发现新版本： " + current + " -> " + latest.version).wrap().width(520f).padTop(4f).row();
 
         content.image().color(Pal.gray).fillX().height(2f).padTop(8f).padBottom(6f).row();
         content.add("正式版").padBottom(4f).row();
@@ -207,7 +253,7 @@ final class GithubUpdateCheck{
         final arc.scene.ui.TextField[] urlFieldRef = {null};
 
         if(!rel.assets.isEmpty()){
-            content.add(Core.bundle.get("bektools.update.asset", "Download file") + "：").padTop(8f).row();
+            content.add("下载文件：").padTop(8f).row();
             ButtonGroup<TextButton> group = new ButtonGroup<>();
             group.setMaxCheckCount(1);
             group.setMinCheckCount(1);
@@ -230,14 +276,16 @@ final class GithubUpdateCheck{
                     b.setChecked(true);
                 }
             }
+        }else{
+            content.add("未找到可自动下载的 Release 文件（assets）。").wrap().width(520f).padTop(8f).row();
         }
 
-        content.add(Core.bundle.get("bektools.update.url", "Download URL") + "：").padTop(8f).row();
+        content.add("下载地址：").padTop(8f).row();
         arc.scene.ui.TextField urlField = content.field(url[0], v -> url[0] = v).width(520f).get();
         urlFieldRef[0] = urlField;
         content.row();
 
-        content.check(Core.bundle.get("bektools.update.mirror", "Use mirror download") + "（ghfile.geekertao.top）", useMirror[0], v -> {
+        content.check("使用镜像下载（ghfile.geekertao.top）", useMirror[0], v -> {
             useMirror[0] = v;
             Core.settings.put(keyUpdateCheckUseMirror, v);
             if(selected[0] != null){
@@ -246,12 +294,12 @@ final class GithubUpdateCheck{
             }
         }).left().padTop(6f).row();
 
-        content.add(Core.bundle.get("bektools.update.hint", "The game will restart after update is installed. Save first."))
+        content.add("提示：下载完成后将自动安装并重启游戏以应用更新。建议先保存/回到主菜单。")
             .wrap().width(520f).padTop(8f).row();
 
         dialog.buttons.defaults().size(200f, 54f).pad(6f);
-        dialog.buttons.button("@bektools.update.open", Icon.link, () -> Core.app.openURI(rel.htmlUrl));
-        dialog.buttons.button("@bektools.update.download", Icon.download, () -> {
+        dialog.buttons.button("打开发布页", Icon.link, () -> Core.app.openURI(rel.htmlUrl));
+        dialog.buttons.button("下载并重启", Icon.download, () -> {
             if(selected[0] == null){
                 Core.app.openURI(rel.htmlUrl);
                 return;
@@ -259,18 +307,17 @@ final class GithubUpdateCheck{
             dialog.hide();
             startDownloadAndInstall(mod, selected[0], url[0]);
         });
-        dialog.buttons.button("@bektools.update.ignore", Icon.cancel, () -> {
-            Core.settings.put(keyIgnoreVersion, latest.version);
+        dialog.buttons.button("忽略此版本", Icon.cancel, () -> {
+            Core.settings.put(keyUpdateCheckIgnoreVersion, latest.version);
             dialog.hide();
         });
-        dialog.buttons.button("@bektools.update.later", Icon.ok, dialog::hide);
-
+        dialog.addCloseButton();
         dialog.show();
     }
 
     private static void buildReleaseList(Table content, Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, ReleaseInfo selectedRelease, boolean preRelease, BaseDialog parent){
         boolean any = false;
-        for(ReleaseInfo r : releases){
+        for(final ReleaseInfo r : releases){
             if(r == null) continue;
             if(r.preRelease != preRelease) continue;
             any = true;
@@ -278,6 +325,8 @@ final class GithubUpdateCheck{
             String label = r.version;
             if(r == latest) label += "（最新）";
 
+            // Java's enhanced-for variable is not reliably treated as effectively-final across
+            // all toolchains used for Mindustry mod builds. Capture a final alias for lambdas.
             final ReleaseInfo rel = r;
             final String labelText = label;
 
@@ -320,6 +369,7 @@ final class GithubUpdateCheck{
 
         Fi dir = Vars.tmpDirectory.child("mod-update");
         dir.mkdirs();
+        //keep folder tidy; only keep current download target
         for(Fi f : dir.list()){
             if(!f.name().equals(asset.name)){
                 try{ f.delete(); }catch(Throwable ignored){}
@@ -355,6 +405,7 @@ final class GithubUpdateCheck{
                 long total = res.getContentLength();
                 lengthMb[0] = total > 0 ? (total / 1024f / 1024f) : 0f;
 
+                //Skip download if same size already exists.
                 if(total > 0 && file.exists() && file.length() == total){
                     dialog.hide();
                     Core.app.post(() -> installAndRestart(mod, file));
@@ -406,6 +457,7 @@ final class GithubUpdateCheck{
     }
 
     private static void restartApp(){
+        //Mobile platforms generally can't be restarted programmatically.
         if(OS.isAndroid || Vars.mobile){
             Core.app.exit();
             return;
@@ -441,12 +493,14 @@ final class GithubUpdateCheck{
             }
         }
 
+        // Sort by version desc for stable ordering in the selection UI.
         Collections.sort(out, (a, b) -> {
             if(a == null && b == null) return 0;
             if(a == null) return 1;
             if(b == null) return -1;
             int c = compareVersions(b.version, a.version);
             if(c != 0) return c;
+            // If same version, show stable before prerelease.
             if(a.preRelease != b.preRelease) return a.preRelease ? 1 : -1;
             return a.tag.compareToIgnoreCase(b.tag);
         });
@@ -511,7 +565,9 @@ final class GithubUpdateCheck{
         }catch(Throwable ignored){
         }
 
+        //stable ordering for UI
         Collections.sort(assets, (a, b) -> a.name.compareToIgnoreCase(b.name));
+
         return new ReleaseInfo(version, tag, name, body, htmlUrl, publishedAt, pre, assets);
     }
 

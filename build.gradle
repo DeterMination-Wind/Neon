@@ -3,7 +3,7 @@ plugins{
 }
 
 group = "bektools"
-version = "2.2.0"
+version = "2.3.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -12,6 +12,7 @@ java{
 
 repositories{
     mavenCentral()
+    maven{ url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
     maven{ url "https://jitpack.io" }
 }
 
@@ -22,7 +23,7 @@ dependencies{
     }else{
         // Standalone build: fetch Mindustry core from JitPack.
         def mindustryVersion = (findProperty("mindustryVersion") ?: "v154.3").toString()
-        compileOnly "com.github.Anuken.MindustryJitpack:core:$mindustryVersion"
+        compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
     }
 }
 

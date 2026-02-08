@@ -1,5 +1,11 @@
 # 🧰 Neon 更新日志 / Release Notes
 
+## 🆕 v2.3.0
+- ⚡ Power Grid Minimap：合并 PGMM v1.13.1（包含 v1.13.0 的多人断电提醒设置，并修复构建依赖源）。
+- 🥷 StealthPath：合并本地最新更新（含自动模式寻路相关性能优化）。
+- 🧭 Radial Build Menu：合并本地最新更新（更新检测能力继续对齐最新实现）。
+- 🔒 submods lock 更新：同步 pgmm / sp / rbm 三个子模组当前本地 HEAD。
+
 ## 🆕 v2.1.0
 - ⚡ Power Grid Minimap：合并 PGMM v1.10.0（新增高级设置「忽略面积小于 X 的电网」，用于过滤小电网显示）。
 - 🧩 StealthPath：合并 v4.2.0（更新检测弹窗增强）。

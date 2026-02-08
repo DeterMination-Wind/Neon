@@ -55,6 +55,8 @@ final class ThreatMap{
     final int width, height, size;
     final boolean[] passable;
     final float[] risk;
+    final float[] floorRisk;
+    final float[] drownRate;
     short[] safeDist;
     float safeBias;
 
@@ -64,6 +66,8 @@ final class ThreatMap{
         this.size = width * height;
         this.passable = new boolean[size];
         this.risk = new float[size];
+        this.floorRisk = new float[size];
+        this.drownRate = new float[size];
     }
 }
 
@@ -182,4 +186,3 @@ final class ControlledCluster{
         this.threatClearanceWorld = threatClearanceWorld;
     }
 }
-

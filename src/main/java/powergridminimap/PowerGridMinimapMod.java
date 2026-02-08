@@ -52,9 +52,11 @@ import mindustry.game.EventType.BuildTeamChangeEvent;
 import mindustry.game.EventType.ConfigEvent;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.game.EventType.Trigger;
+import mindustry.game.Team;
 import mindustry.graphics.Drawf;
 import mindustry.graphics.Pal;
 import mindustry.gen.Building;
+import mindustry.gen.Call;
 import mindustry.gen.Icon;
 import mindustry.gen.Player;
 import mindustry.mod.Scripts;
@@ -98,6 +100,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private static final String keySplitAlertEnabled = "pgmm-splitalert";
     private static final String keySplitAlertThreshold = "pgmm-splitalertthreshold";
     private static final String keySplitAlertWindowSeconds = "pgmm-splitwindow";
+    private static final String keySplitAlertMultiplayerEnabled = "pgmm-splitalert-multiplayer";
+    private static final String keySplitAlertMultiplayerIntervalSeconds = "pgmm-splitalert-multiplayer-interval";
     private static final String keyClusterMarkerDistance = "pgmm-clustermarkerdistance";
     private static final String keyReconnectStroke = "pgmm-markerstroke";
     private static final String keyReconnectColor = "pgmm-markerlinecolor";
@@ -141,6 +145,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
     private Object xPowerTableWindow = null;
     private boolean lastPowerTableEnabled = false;
+    private float nextSplitAlertMultiplayerChatAt = 0f;
     private final Mi2MinimapIntegration mi2 = new Mi2MinimapIntegration();
     private final PgmmConsoleApi consoleApi = new PgmmConsoleApi(this);
     private boolean consoleApiLogged = false;
@@ -158,6 +163,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Core.settings.defaults(keySplitAlertEnabled, true);
             Core.settings.defaults(keySplitAlertThreshold, 10000);
             Core.settings.defaults(keySplitAlertWindowSeconds, 4);
+            Core.settings.defaults(keySplitAlertMultiplayerEnabled, false);
+            Core.settings.defaults(keySplitAlertMultiplayerIntervalSeconds, 8);
             Core.settings.defaults(keyClusterMarkerDistance, 15);
             Core.settings.defaults(keyReconnectStroke, 2);
             Core.settings.defaults(keyReconnectColor, "ffa500");
@@ -192,6 +199,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             cache.clear();
             rescueAlert.clear();
             rescueAdvisor.reset();
+            nextSplitAlertMultiplayerChatAt = 0f;
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensurePowerTableAttached);
         });
@@ -367,6 +375,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }catch(Throwable ignored){
         }
 
+        nextSplitAlertMultiplayerChatAt = 0f;
+
         try{
             rescueAdvisor.reset();
         }catch(Throwable ignored){
@@ -434,6 +444,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keySplitAlertEnabled, true, Icon.warningSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertThreshold, 10000, 1000, 50000, 500, Icon.warningSmall, v -> v + "/s", null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertWindowSeconds, 4, 1, 15, 1, Icon.refreshSmall, v -> v + "s", null));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keySplitAlertMultiplayerEnabled, false, Icon.chatSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertMultiplayerIntervalSeconds, 8, 1, 60, 1, Icon.refreshSmall, v -> v + "s", null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyClusterMarkerDistance, 15, 0, 60, 1, Icon.filterSmall, String::valueOf, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyReconnectStroke, 2, 1, 8, 1, Icon.pencilSmall, String::valueOf, null));
             table.pref(new PgmmSettingsWidgets.IconTextSetting(keyReconnectColor, "ffa500", Icon.effectSmall, v -> refreshReconnectColor()));
@@ -487,6 +499,18 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         if(!tryParseHexColor(value, out)){
             out.set(Color.scarlet);
         }
+    }
+
+    private void trySendSplitAlertMultiplayerChat(int tileX, int tileY){
+        if(!Core.settings.getBool(keySplitAlertMultiplayerEnabled, false)) return;
+        if(mindustry.Vars.net == null || !mindustry.Vars.net.active()) return;
+        if(player == null || state == null || !state.isGame()) return;
+        if(Time.time < nextSplitAlertMultiplayerChatAt) return;
+
+        int intervalSeconds = Mathf.clamp(Core.settings.getInt(keySplitAlertMultiplayerIntervalSeconds, 8), 1, 60);
+        nextSplitAlertMultiplayerChatAt = Time.time + intervalSeconds * 60f;
+
+        Call.sendChatMessage("<PGMM><[red]断电建议连接点[]>(" + tileX + "," + tileY + ")");
     }
 
     private void ensureOverlayAttached(){
@@ -587,10 +611,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
         float sumx = 0f, sumy = 0f;
         int count = 0;
+        Team team = info.team;
         Seq<mindustry.gen.Building> all = graph.all;
         for(int i = 0; i < all.size; i++){
             mindustry.gen.Building b = all.get(i);
-            if(b == null || b.team != player.team()) continue;
+            if(b == null || team != null && b.team != team) continue;
             sumx += b.x;
             sumy += b.y;
             count++;
@@ -1491,7 +1516,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
             for(int i = 0; i < mindustry.gen.Groups.build.size(); i++){
                 mindustry.gen.Building build = mindustry.gen.Groups.build.index(i);
-                if(build == null || build.team != player.team() || build.power == null) continue;
+                if(build == null || build.power == null) continue;
                 if(build.power.graph == null || build.power.graph.all == null || build.power.graph.all.isEmpty()) continue;
                 graphs.add(build.power.graph);
             }
@@ -1499,21 +1524,25 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             for(PowerGraph graph : graphs){
                 if(graph == null || graph.all == null) continue;
 
+                Team team = graphTeam(graph);
+                if(team == null) continue;
+
                 //Ignore "single-building grids" to reduce minimap noise; they are often stray nodes and not useful to render.
                 int buildCount = 0;
                 Seq<mindustry.gen.Building> all = graph.all;
                 for(int bi = 0; bi < all.size; bi++){
                     mindustry.gen.Building b = all.get(bi);
-                    if(b == null || b.team != player.team()) continue;
+                    if(b == null || b.team != team) continue;
                     buildCount++;
                     if(buildCount > 1) break;
                 }
                 if(buildCount <= 1) continue;
 
-                if(ignoreAreaTiles > 0 && graphAreaTiles(graph) < ignoreAreaTiles) continue;
+                if(ignoreAreaTiles > 0 && graphAreaTiles(graph, team) < ignoreAreaTiles) continue;
 
                 GridInfo info = new GridInfo();
                 info.graph = graph;
+                info.team = team;
                 grids.add(info);
 
                 //For sparse laser-linked grids, render one balance marker per contiguous "chunk" of buildings.
@@ -1521,22 +1550,32 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
         }
 
-        private int graphAreaTiles(PowerGraph graph){
+        private Team graphTeam(PowerGraph graph){
+            if(graph == null || graph.all == null) return null;
+            Seq<Building> all = graph.all;
+            for(int i = 0; i < all.size; i++){
+                Building b = all.get(i);
+                if(b != null && b.team != null) return b.team;
+            }
+            return null;
+        }
+
+        private int graphAreaTiles(PowerGraph graph, Team team){
             if(graph == null) return 0;
             tmpAreaSeen.clear();
             int area = 0;
-            area += addAreaTiles(graph.producers);
-            area += addAreaTiles(graph.consumers);
-            area += addAreaTiles(graph.batteries);
+            area += addAreaTiles(graph.producers, team);
+            area += addAreaTiles(graph.consumers, team);
+            area += addAreaTiles(graph.batteries, team);
             return area;
         }
 
-        private int addAreaTiles(Seq<Building> builds){
+        private int addAreaTiles(Seq<Building> builds, Team team){
             if(builds == null || builds.isEmpty()) return 0;
             int sum = 0;
             for(int i = 0; i < builds.size; i++){
                 Building b = builds.get(i);
-                if(b == null || b.team != player.team() || b.block == null) continue;
+                if(b == null || b.team != team || b.block == null) continue;
                 int pos = b.pos();
                 if(tmpAreaSeen.contains(pos)) continue;
                 tmpAreaSeen.add(pos);
@@ -1549,6 +1588,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         private void addClusterMarkers(GridInfo info){
             PowerGraph graph = info.graph;
             if(graph == null || graph.all == null || graph.all.isEmpty()) return;
+            Team team = info.team;
+            if(team == null) return;
             info.colorKey = graph.getID();
             info.hasCenter = false;
 
@@ -1559,7 +1600,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Seq<mindustry.gen.Building> all = graph.all;
             for(int i = 0; i < all.size; i++){
                 mindustry.gen.Building b = all.get(i);
-                if(b == null || b.team != player.team() || b.tile == null) continue;
+                if(b == null || b.team != team || b.tile == null) continue;
                 b.tile.getLinkedTiles(t -> {
                     int pos = t.pos();
                     if(!tmpOccupied.contains(pos)){
@@ -1859,18 +1900,25 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             int[] overlayOwner = tmpOverlayOwner;
             int[] ownerClaim = tmpOwnerClaim;
             boolean[] claimedBuild = tmpClaimedBuild;
+            Team[] gridTeams = new Team[grids.size];
+            for(int gi = 0; gi < grids.size; gi++){
+                gridTeams[gi] = grids.get(gi).team;
+            }
             Arrays.fill(ownerPower, -1);
             Arrays.fill(overlayOwner, -1);
 
             // Step 1) Seed power-using building tiles.
             for(int gi = 0; gi < grids.size; gi++){
                 final int gridIndex = gi;
-                PowerGraph graph = grids.get(gi).graph;
+                GridInfo gridInfo = grids.get(gi);
+                Team team = gridTeams[gi];
+                PowerGraph graph = gridInfo == null ? null : gridInfo.graph;
+                if(team == null) continue;
                 if(graph == null || graph.all == null) continue;
                 Seq<mindustry.gen.Building> all = graph.all;
                 for(int bi = 0; bi < all.size; bi++){
                     mindustry.gen.Building b = all.get(bi);
-                    if(b == null || b.team != player.team()) continue;
+                    if(b == null || b.team != team) continue;
                     if(b.tile == null) continue;
                     b.tile.getLinkedTiles(t -> {
                         int idx = t.x + t.y * w;
@@ -1890,7 +1938,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             nonPower.clear();
             for(int i = 0; i < mindustry.gen.Groups.build.size(); i++){
                 mindustry.gen.Building b = mindustry.gen.Groups.build.index(i);
-                if(b == null || b.team != player.team()) continue;
+                if(b == null || b.team == null) continue;
                 if(b.power != null) continue;
                 if(b.tile == null) continue;
                 nonPower.add(b);
@@ -1914,10 +1962,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     int ty = idx / w;
 
                     //4-dir adjacency
-                    ncount = addNeighborGrid(ownerPower, w, h, tx + 1, ty, neighborGrids, ncount);
-                    ncount = addNeighborGrid(ownerPower, w, h, tx - 1, ty, neighborGrids, ncount);
-                    ncount = addNeighborGrid(ownerPower, w, h, tx, ty + 1, neighborGrids, ncount);
-                    ncount = addNeighborGrid(ownerPower, w, h, tx, ty - 1, neighborGrids, ncount);
+                    Team team = b.team;
+                    ncount = addNeighborGrid(ownerPower, gridTeams, team, w, h, tx + 1, ty, neighborGrids, ncount);
+                    ncount = addNeighborGrid(ownerPower, gridTeams, team, w, h, tx - 1, ty, neighborGrids, ncount);
+                    ncount = addNeighborGrid(ownerPower, gridTeams, team, w, h, tx, ty + 1, neighborGrids, ncount);
+                    ncount = addNeighborGrid(ownerPower, gridTeams, team, w, h, tx, ty - 1, neighborGrids, ncount);
                     if(ncount > 1) break;
                 }
 
@@ -1975,7 +2024,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     int cidx = cx + cy * w;
                     int d = dist[cidx];
                     int g = ownerNear[cidx];
-                    if(d >= 0 && d < claimDistance && g >= 0){
+                    if(d >= 0 && d < claimDistance && g >= 0 && g < gridTeams.length && gridTeams[g] == b.team){
                         tmpTiles.clear();
                         b.tile.getLinkedTiles(t -> tmpTiles.add(t.x + t.y * w));
                         for(int ti = 0; ti < tmpTiles.size; ti++){
@@ -2124,10 +2173,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             return arr;
         }
 
-        private static int addNeighborGrid(int[] ownerPower, int w, int h, int x, int y, int[] out, int count){
+        private static int addNeighborGrid(int[] ownerPower, Team[] gridTeams, Team buildTeam, int w, int h, int x, int y, int[] out, int count){
             if(x < 0 || y < 0 || x >= w || y >= h) return count;
             int g = ownerPower[x + y * w];
             if(g < 0) return count;
+            if(g >= gridTeams.length || gridTeams[g] != buildTeam) return count;
             for(int i = 0; i < count; i++){
                 if(out[i] == g) return count;
             }
@@ -2212,6 +2262,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             //MindustryX integration: add a map mark with tile coordinates (no-op on vanilla).
             int tileX = Mathf.clamp((int)(midWorldX / tilesize), 0, world.width() - 1);
             int tileY = Mathf.clamp((int)(midWorldY / tilesize), 0, world.height() - 1);
+            trySendSplitAlertMultiplayerChat(tileX, tileY);
             xMarkers.markReconnect(tileX, tileY);
         }
 
@@ -3335,6 +3386,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             for(int i = 0; i < cache.grids.size; i++){
                 GridInfo info = cache.grids.get(i);
                 PowerGraph graph = info == null ? null : info.graph;
+                if(info == null || info.team != player.team()) continue;
                 if(graph == null) continue;
                 if(!graph.hasPowerBalanceSamples()) continue;
 
@@ -3371,7 +3423,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             PowerGraph worstGraph = null;
             for(int i = 0; i < cache.grids.size; i++){
                 GridInfo info = cache.grids.get(i);
-                if(info != null && info.graph != null && info.graph.getID() == worstId){
+                if(info != null && info.team == player.team() && info.graph != null && info.graph.getID() == worstId){
                     worstGraph = info.graph;
                     break;
                 }

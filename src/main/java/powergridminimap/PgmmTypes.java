@@ -2,6 +2,7 @@ package powergridminimap;
 
 import arc.util.Log;
 import arc.math.geom.Rect;
+import mindustry.game.Team;
 import mindustry.world.blocks.power.PowerGraph;
 
 import java.lang.reflect.Field;
@@ -15,6 +16,7 @@ import java.lang.reflect.Field;
  */
 final class GridInfo{
     PowerGraph graph;
+    Team team;
     int colorKey;
     float centerX, centerY;
     boolean hasCenter;

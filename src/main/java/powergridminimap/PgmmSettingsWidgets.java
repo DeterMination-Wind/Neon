@@ -2,6 +2,7 @@ package powergridminimap;
 
 import arc.Core;
 import arc.func.Cons;
+import arc.math.Mathf;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.CheckBox;
@@ -172,5 +173,69 @@ final class PgmmSettingsWidgets{
             table.row();
         }
     }
-}
 
+    static final class IconIntFieldSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final int def;
+        private final int min;
+        private final int max;
+        private final Drawable icon;
+        private final arc.func.Intc changed;
+
+        IconIntFieldSetting(String name, int def, int min, int max, Drawable icon, arc.func.Intc changed){
+            super(name);
+            this.def = def;
+            this.min = min;
+            this.max = max;
+            this.icon = icon;
+            this.changed = changed;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            final TextField[] fieldRef = {null};
+            final boolean[] updatingText = {false};
+
+            int stored = Core.settings.getInt(name, def);
+            int clamped = Mathf.clamp(stored, min, max);
+            if(clamped != stored){
+                Core.settings.put(name, clamped);
+            }
+
+            table.table(Tex.button, t -> {
+                t.left().margin(10f);
+                if(icon != null) t.image(icon).size(20f).padRight(8f);
+
+                t.add(title).left().growX().minWidth(0f).wrap();
+
+                TextField field = t.field(String.valueOf(clamped), text -> {
+                    if(updatingText[0]) return;
+                    int parsed;
+                    try{
+                        parsed = Integer.parseInt(text.trim());
+                    }catch(Throwable ignored){
+                        return;
+                    }
+
+                    int value = Mathf.clamp(parsed, min, max);
+                    Core.settings.put(name, value);
+                    if(changed != null) changed.get(value);
+
+                    String normalized = String.valueOf(value);
+                    if(!normalized.equals(fieldRef[0].getText())){
+                        updatingText[0] = true;
+                        fieldRef[0].setText(normalized);
+                        fieldRef[0].setCursorPosition(normalized.length());
+                        updatingText[0] = false;
+                    }
+                }).growX().minWidth(140f).get();
+
+                field.setMessageText(String.valueOf(def));
+                field.setFilter((f, c) -> Character.isDigit(c) || (c == '-' && f.getCursorPosition() == 0 && !f.getText().contains("-")));
+                fieldRef[0] = field;
+            }).width(prefWidth()).left().padTop(6f);
+
+            if(fieldRef[0] != null) addDesc(fieldRef[0]);
+            table.row();
+        }
+    }
+}

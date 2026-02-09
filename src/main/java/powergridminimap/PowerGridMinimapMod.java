@@ -85,9 +85,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     public static boolean bekBundled = false;
 
 
-    private static final String overlayName = "pgmm-overlay";
-    private static final String mi2OverlayName = "pgmm-overlay-mi2-minimap";
-    private static final String powerTableName = "pgmm-power-table";
+    private static final String overlayName = "neon-pgmm-minimap-overlay";
+    private static final String mi2OverlayName = "neon-pgmm-mi2-overlay";
+    private static final String powerTableName = "neon-pgmm-power-table";
 
     private static final String keyEnabled = "pgmm-enabled";
     private static final String keyGridAlpha = "pgmm-gridalpha";
@@ -99,6 +99,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private static final String keyClaimDistance = "pgmm-claimdistance";
     private static final String keySplitAlertEnabled = "pgmm-splitalert";
     private static final String keySplitAlertThreshold = "pgmm-splitalertthreshold";
+    private static final String keySplitAlertNegativeThreshold = "pgmm-splitalert-negative-threshold";
     private static final String keySplitAlertWindowSeconds = "pgmm-splitwindow";
     private static final String keySplitAlertMultiplayerEnabled = "pgmm-splitalert-multiplayer";
     private static final String keySplitAlertMultiplayerIntervalSeconds = "pgmm-splitalert-multiplayer-interval";
@@ -162,6 +163,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Core.settings.defaults(keyClaimDistance, 5);
             Core.settings.defaults(keySplitAlertEnabled, true);
             Core.settings.defaults(keySplitAlertThreshold, 10000);
+            Core.settings.defaults(keySplitAlertNegativeThreshold, 0);
             Core.settings.defaults(keySplitAlertWindowSeconds, 4);
             Core.settings.defaults(keySplitAlertMultiplayerEnabled, false);
             Core.settings.defaults(keySplitAlertMultiplayerIntervalSeconds, 8);
@@ -443,6 +445,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyClaimDistance, 5, 1, 20, 1, Icon.gridSmall, String::valueOf, null));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keySplitAlertEnabled, true, Icon.warningSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertThreshold, 10000, 1000, 50000, 500, Icon.warningSmall, v -> v + "/s", null));
+            table.pref(new PgmmSettingsWidgets.IconIntFieldSetting(keySplitAlertNegativeThreshold, 0, -200000, 0, Icon.warningSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertWindowSeconds, 4, 1, 15, 1, Icon.refreshSmall, v -> v + "s", null));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keySplitAlertMultiplayerEnabled, false, Icon.chatSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keySplitAlertMultiplayerIntervalSeconds, 8, 1, 60, 1, Icon.refreshSmall, v -> v + "s", null));
@@ -2747,10 +2750,13 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 whiteDrawable = new TextureRegionDrawable(Core.atlas.white());
             }
 
+            Team playerTeam = player == null ? null : player.team();
+
             int shown = 0;
             for(int i = 0; i < cache.grids.size; i++){
                 GridInfo info = cache.grids.get(i);
                 PowerGraph graph = info == null ? null : info.graph;
+                if(info == null || playerTeam == null || info.team != playerTeam) continue;
                 if(graph == null) continue;
                 if(!graph.hasPowerBalanceSamples()) continue;
 
@@ -2988,6 +2994,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
 
             int threshold = Core.settings.getInt(keySplitAlertThreshold, 10000);
+            int configuredNegativeThreshold = Core.settings.getInt(keySplitAlertNegativeThreshold, 0);
+            int negativeThreshold = Math.min(configuredNegativeThreshold, 0);
+            if(configuredNegativeThreshold != negativeThreshold){
+                Core.settings.put(keySplitAlertNegativeThreshold, negativeThreshold);
+            }
             int windowSeconds = Core.settings.getInt(keySplitAlertWindowSeconds, 4);
             float windowFrames = Math.max(1f, windowSeconds) * 60f;
 
@@ -3053,6 +3064,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     pending.createdAt = Time.time;
                     pending.expiresAt = Time.time + windowFrames;
                     pending.resultIds.clear();
+                    pending.belowSince.clear();
                     tmpResultIds.each(pending.resultIds::add);
                     pendingSplits.put(prevId, pending);
                 }else{
@@ -3067,23 +3079,38 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 PendingSplit pending = e.value;
                 if(pending == null) continue;
 
-                if(Time.time > pending.expiresAt){
-                    tmpToRemove.add(pending.prevId);
-                    continue;
-                }
+                boolean expired = Time.time > pending.expiresAt + scanInterval;
 
                 final int[] negativeId = {-1};
-                final float[] mostNegative = {0f};
+                final float[] mostNegative = {Float.POSITIVE_INFINITY};
 
                 pending.resultIds.each(id -> {
+                    if(!currentIds.contains(id)){
+                        pending.belowSince.remove(id);
+                        return;
+                    }
                     float bal = currentBalance.get(id, 0f);
-                    if(bal < mostNegative[0]){
-                        mostNegative[0] = bal;
-                        negativeId[0] = id;
+                    if(bal <= negativeThreshold){
+                        float belowAt = pending.belowSince.get(id, -1f);
+                        if(belowAt < 0f){
+                            pending.belowSince.put(id, Time.time);
+                            belowAt = Time.time;
+                        }
+                        if(Time.time - belowAt >= windowFrames && bal < mostNegative[0]){
+                            mostNegative[0] = bal;
+                            negativeId[0] = id;
+                        }
+                    }else{
+                        pending.belowSince.remove(id);
                     }
                 });
 
-                if(negativeId[0] == -1) continue;
+                if(negativeId[0] == -1){
+                    if(expired){
+                        tmpToRemove.add(pending.prevId);
+                    }
+                    continue;
+                }
 
                 //pick a "stable" other side to reconnect to: highest power-in per second
                 final int[] bestOther = {-1};
@@ -3100,6 +3127,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
                 int aId = negativeId[0];
                 int bId = bestOther[0];
+                if(currentPowerIn.get(aId, 0f) >= currentPowerIn.get(bId, 0f)) continue;
 
                 ReconnectResult reconnect = findReconnectPoint(aId, bId);
                 if(reconnect == null){
@@ -3109,6 +3137,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     pending.resultIds.each(id -> {
                         if(found[0] != null) return;
                         if(id == aId) return;
+                        if(currentPowerIn.get(aId, 0f) >= currentPowerIn.get(id, 0f)) return;
                         ReconnectResult r = findReconnectPoint(aId, id);
                         if(r != null){
                             found[0] = r;
@@ -3141,6 +3170,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             float createdAt;
             float expiresAt;
             IntSet resultIds = new IntSet();
+            IntMap<Float> belowSince = new IntMap<>();
         }
 
         private ReconnectResult findReconnectPoint(int graphA, int graphB){

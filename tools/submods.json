@@ -23,6 +23,24 @@
       "javaPackageDir": "src/main/java/radialbuildmenu",
       "mainClassFile": "RadialBuildMenuMod.java",
       "bundlesDir": "src/main/resources/bundles"
+    },
+    {
+      "id": "bmm",
+      "name": "betterMiniMap",
+      "localPath": "../betterMiniMap",
+      "javaPackageDir": "src/main/java/betterminimap",
+      "mainClassFile": "BetterMiniMapMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "spdb",
+      "name": "ServerPlayerDataBase",
+      "localPath": "../ServerPlayerDataBase",
+      "javaPackageDir": "src/main/java/serverplayerdatabase",
+      "mainClassFile": "ServerPlayerDataBaseMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "allowNoGit": true
     }
   ]
 }

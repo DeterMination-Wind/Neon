@@ -27,25 +27,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Checks this mod's version against GitHub Releases.
- * Shows a rich update dialog (release notes/assets) and can auto-download + restart.
+ * Checks this mod's version against the version declared in the GitHub repository.
+ * Runs asynchronously and should be triggered once per game startup.
  */
 final class GithubUpdateCheck{
     private static final String owner = "DeterMination-Wind";
     private static final String repo = "StealthPath";
     private static final String modName = "stealth-path";
-    private static final String desktopAssetName = "stealth-path.zip";
-    private static final String androidAssetName = "stealth-path-android.jar";
 
     private static final String mirrorPrefix = "https://ghfile.geekertao.top/";
 
-    private static final String keyIgnoreVersion = "sp-update-ignore-version";
-    private static final String keyUpdateCheckLastAt = "sp-update-lastAt";
-    private static final String keyUpdateCheckUseMirror = "sp-update-mirror";
-    private static final long checkIntervalMs = 6L * 60L * 60L * 1000L; //6 hours
-
     private static final Pattern numberPattern = Pattern.compile("\\d+");
     private static boolean checked;
+
+    private static final String keyUpdateCheckEnabled = "sp-updatecheck";
+    private static final String keyUpdateCheckShowDialog = "sp-updatecheck-dialog";
+    private static final String keyUpdateCheckLastAt = "sp-updatecheck-lastAt";
+    private static final String keyUpdateCheckIgnoreVersion = "sp-updatecheck-ignore";
+    private static final String keyUpdateCheckUseMirror = "sp-updatecheck-mirror";
+    //avoid hammering GitHub; also prevents repeated prompts when user returns to main menu etc.
+    private static final long checkIntervalMs = 6L * 60L * 60L * 1000L; //6 hours
 
     private static final class AssetInfo{
         final String name;
@@ -86,6 +87,20 @@ final class GithubUpdateCheck{
     private GithubUpdateCheck(){
     }
 
+    static void applyDefaults(){
+        Core.settings.defaults(keyUpdateCheckEnabled, true);
+        Core.settings.defaults(keyUpdateCheckShowDialog, true);
+        Core.settings.defaults(keyUpdateCheckUseMirror, false);
+    }
+
+    static String enabledKey(){
+        return keyUpdateCheckEnabled;
+    }
+
+    static String showDialogKey(){
+        return keyUpdateCheckShowDialog;
+    }
+
     static void checkOnce(){
         if(checked) return;
         checked = true;
@@ -93,7 +108,8 @@ final class GithubUpdateCheck{
         if(Vars.headless) return;
         if(Vars.mods == null) return;
 
-        Core.settings.defaults(keyUpdateCheckUseMirror, false);
+        applyDefaults();
+        if(!Core.settings.getBool(keyUpdateCheckEnabled, true)) return;
 
         long now = System.currentTimeMillis();
         long last = Core.settings.getLong(keyUpdateCheckLastAt, 0L);
@@ -105,64 +121,91 @@ final class GithubUpdateCheck{
         String current = Strings.stripColors(mod.meta.version);
         if(current == null || current.isEmpty()) return;
 
-        String ignore = Strings.stripColors(Core.settings.getString(keyIgnoreVersion, ""));
-        String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
+        String ignored = Strings.stripColors(Core.settings.getString(keyUpdateCheckIgnoreVersion, ""));
 
+        //Prefer GitHub releases list API (lets users select historical versions).
         String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases?per_page=30";
         Http.get(apiUrl)
-            .timeout(30000)
-            .header("User-Agent", "Mindustry")
-            .error(e -> fetchFromMainModJson(mod, current, ignore, releasesUrl))
-            .submit(res -> {
-                try{
-                    Jval json = Jval.read(res.getResultAsString());
-                    ArrayList<ReleaseInfo> releases = parseReleasesList(json);
-                    if(releases.isEmpty()) return;
-                    ReleaseInfo latest = pickLatestRelease(releases);
-                    if(latest == null || latest.version.isEmpty()) return;
-                    onLatestResolved(mod, current, latest, releases, ignore);
-                }catch(Throwable t){
-                    fetchFromMainModJson(mod, current, ignore, releasesUrl);
+        .timeout(30000)
+        .header("User-Agent", "Mindustry")
+        .error(e -> {
+            //ignore; fallback below
+            checkFromRawModJson(mod, current, ignored);
+        })
+        .submit(res -> {
+            try{
+                Jval json = Jval.read(res.getResultAsString());
+                ArrayList<ReleaseInfo> releases = parseReleasesList(json);
+                if(releases.isEmpty()){
+                    checkFromRawModJson(mod, current, ignored);
+                    return;
                 }
-            });
+
+                ReleaseInfo latest = pickLatestRelease(releases);
+                if(latest == null || latest.version.isEmpty()){
+                    checkFromRawModJson(mod, current, ignored);
+                    return;
+                }
+
+                if(ignored != null && !ignored.isEmpty() && compareVersions(latest.version, ignored) == 0){
+                    return;
+                }
+
+                if(compareVersions(latest.version, current) > 0){
+                    notifyUpdate(mod, current, latest, releases);
+                }
+            }catch(Throwable t){
+                checkFromRawModJson(mod, current, ignored);
+            }
+        });
     }
 
-    private static void fetchFromMainModJson(Mods.LoadedMod mod, String current, String ignore, String releasesUrl){
+    private static void checkFromRawModJson(Mods.LoadedMod mod, String current, String ignored){
         String url = "https://raw.githubusercontent.com/" + owner + "/" + repo + "/main/src/main/resources/mod.json";
         Http.get(url)
-            .timeout(30000)
-            .error(e -> {
-                //offline/etc. -> skip
-            })
-            .submit(res -> {
-                try{
-                    Jval json = Jval.read(res.getResultAsString());
-                    String latest = Strings.stripColors(json.getString("version", ""));
-                    if(latest == null || latest.isEmpty()) return;
+        .timeout(30000)
+        .error(e -> {
+            //No internet/offline/etc. -> silently skip.
+        })
+        .submit(res -> {
+            try{
+                Jval json = Jval.read(res.getResultAsString());
+                String latest = Strings.stripColors(json.getString("version", ""));
+                if(latest == null || latest.isEmpty()) return;
+                if(ignored != null && !ignored.isEmpty() && compareVersions(latest, ignored) == 0) return;
+
+                if(compareVersions(latest, current) > 0){
+                    String releasesUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest";
                     ReleaseInfo rel = new ReleaseInfo(latest, "", "", "", releasesUrl, "", false, new ArrayList<>());
                     ArrayList<ReleaseInfo> releases = new ArrayList<>();
                     releases.add(rel);
-                    onLatestResolved(mod, current, rel, releases, ignore);
-                }catch(Throwable ignoredErr){
-                    //bad json/etc.
+                    notifyUpdate(mod, current, rel, releases);
                 }
-            });
+            }catch(Throwable ignoredErr){
+                //Bad JSON/format/etc. -> skip.
+            }
+        });
     }
 
-    private static void onLatestResolved(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, String ignore){
-        if(compareVersions(latest.version, current) <= 0) return;
-        if(ignore != null && !ignore.isEmpty() && compareVersions(latest.version, ignore) <= 0) return;
-
+    private static void notifyUpdate(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases){
         Log.info("[{0}] Update available: {1} -> {2}", mod.meta.displayName, current, latest.version);
-        Core.app.post(() -> showUpdateDialog(mod, current, latest, releases, latest));
+
+        Core.app.post(() -> {
+            if(Vars.ui == null) return;
+
+            if(!Core.settings.getBool(keyUpdateCheckShowDialog, true)){
+                Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest.version + " (GitHub)", 8f);
+                return;
+            }
+
+            showUpdateDialog(mod, current, latest, releases, latest);
+        });
     }
 
     private static void showUpdateDialog(Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, ReleaseInfo selectedRelease){
         if(Vars.ui == null) return;
 
-        Vars.ui.showInfoToast(mod.meta.displayName + ": " + current + " -> " + latest.version, 8f);
-
-        BaseDialog dialog = new BaseDialog("@sp.update.title");
+        BaseDialog dialog = new BaseDialog(mod.meta.displayName + " 更新");
         dialog.cont.margin(12f);
 
         Table content = new Table();
@@ -172,7 +215,8 @@ final class GithubUpdateCheck{
 
         dialog.cont.add(pane).width(560f).maxHeight(Core.graphics.getHeight() * 0.8f).growY().row();
 
-        content.add(Core.bundle.format("sp.update.text", mod.meta.displayName, current, latest.version)).wrap().width(520f).row();
+        content.add("当前版本： " + current).wrap().width(520f).row();
+        content.add("发现新版本： " + current + " -> " + latest.version).wrap().width(520f).padTop(4f).row();
 
         content.image().color(Pal.gray).fillX().height(2f).padTop(8f).padBottom(6f).row();
         content.add("正式版").padBottom(4f).row();
@@ -203,7 +247,7 @@ final class GithubUpdateCheck{
                 .row();
         }
 
-        final AssetInfo[] selected = {pickAssetForRelease(rel)};
+        final AssetInfo[] selected = {pickDefaultAsset(rel.assets)};
         final boolean[] useMirror = {Core.settings.getBool(keyUpdateCheckUseMirror, false)};
         final String[] url = {selected[0] == null ? rel.htmlUrl : buildDownloadUrl(selected[0].url, useMirror[0])};
         final arc.scene.ui.TextField[] urlFieldRef = {null};
@@ -232,6 +276,8 @@ final class GithubUpdateCheck{
                     b.setChecked(true);
                 }
             }
+        }else{
+            content.add("未找到可自动下载的 Release 文件（assets）。").wrap().width(520f).padTop(8f).row();
         }
 
         content.add("下载地址：").padTop(8f).row();
@@ -245,9 +291,6 @@ final class GithubUpdateCheck{
             if(selected[0] != null){
                 url[0] = buildDownloadUrl(selected[0].url, v);
                 urlField.setText(url[0]);
-            }else{
-                url[0] = buildDownloadUrl(url[0], v);
-                urlField.setText(url[0]);
             }
         }).left().padTop(6f).row();
 
@@ -255,27 +298,26 @@ final class GithubUpdateCheck{
             .wrap().width(520f).padTop(8f).row();
 
         dialog.buttons.defaults().size(200f, 54f).pad(6f);
-        dialog.buttons.button("@sp.update.open", Icon.link, () -> Core.app.openURI(rel.htmlUrl));
+        dialog.buttons.button("打开发布页", Icon.link, () -> Core.app.openURI(rel.htmlUrl));
         dialog.buttons.button("下载并重启", Icon.download, () -> {
-            if(selected[0] == null || url[0] == null || url[0].trim().isEmpty()){
-                if(Vars.ui != null) Vars.ui.showErrorMessage(Core.bundle.get("sp.update.no-asset"));
+            if(selected[0] == null){
+                Core.app.openURI(rel.htmlUrl);
                 return;
             }
             dialog.hide();
             startDownloadAndInstall(mod, selected[0], url[0]);
         });
-        dialog.buttons.button("@sp.update.ignore", Icon.cancel, () -> {
-            Core.settings.put(keyIgnoreVersion, latest.version);
+        dialog.buttons.button("忽略此版本", Icon.cancel, () -> {
+            Core.settings.put(keyUpdateCheckIgnoreVersion, latest.version);
             dialog.hide();
         });
-        dialog.buttons.button("@sp.update.later", Icon.ok, dialog::hide);
-
+        dialog.addCloseButton();
         dialog.show();
     }
 
     private static void buildReleaseList(Table content, Mods.LoadedMod mod, String current, ReleaseInfo latest, ArrayList<ReleaseInfo> releases, ReleaseInfo selectedRelease, boolean preRelease, BaseDialog parent){
         boolean any = false;
-        for(ReleaseInfo r : releases){
+        for(final ReleaseInfo r : releases){
             if(r == null) continue;
             if(r.preRelease != preRelease) continue;
             any = true;
@@ -283,6 +325,8 @@ final class GithubUpdateCheck{
             String label = r.version;
             if(r == latest) label += "（最新）";
 
+            // Java's enhanced-for variable is not reliably treated as effectively-final across
+            // all toolchains used for Mindustry mod builds. Capture a final alias for lambdas.
             final ReleaseInfo rel = r;
             final String labelText = label;
 
@@ -322,17 +366,10 @@ final class GithubUpdateCheck{
 
     private static void startDownloadAndInstall(Mods.LoadedMod mod, AssetInfo asset, String url){
         if(Vars.ui == null) return;
-        if(asset == null || asset.name == null || asset.name.isEmpty()){
-            Vars.ui.showErrorMessage(Core.bundle.get("sp.update.no-asset"));
-            return;
-        }
-        if(url == null || url.trim().isEmpty()){
-            Vars.ui.showErrorMessage(Core.bundle.get("sp.update.no-url"));
-            return;
-        }
 
         Fi dir = Vars.tmpDirectory.child("mod-update");
         dir.mkdirs();
+        //keep folder tidy; only keep current download target
         for(Fi f : dir.list()){
             if(!f.name().equals(asset.name)){
                 try{ f.delete(); }catch(Throwable ignored){}
@@ -345,25 +382,10 @@ final class GithubUpdateCheck{
         final float[] lengthMb = {0f};
         final boolean[] canceled = {false};
 
-        final float[] downloadedMb = {0f};
-        final float[] speedMb = {0f};
-
-        BaseDialog dialog = new BaseDialog("@sp.update.downloading.title");
+        BaseDialog dialog = new BaseDialog("@be.updating");
         dialog.cont.add(new Bar(() -> {
-            if(lengthMb[0] <= 0f){
-                return Core.bundle.format(
-                    "sp.update.downloading.unknown",
-                    Strings.autoFixed(downloadedMb[0], 2),
-                    Strings.autoFixed(speedMb[0], 2)
-                );
-            }
-            return Core.bundle.format(
-                "sp.update.downloading.progress",
-                Strings.autoFixed(progress[0] * 100f, 1),
-                Strings.autoFixed(downloadedMb[0], 2),
-                Strings.autoFixed(lengthMb[0], 2),
-                Strings.autoFixed(speedMb[0], 2)
-            );
+            if(lengthMb[0] <= 0f) return Core.bundle.get("be.updating");
+            return Strings.autoFixed(progress[0] * lengthMb[0], 2) + "/" + Strings.autoFixed(lengthMb[0], 2) + " MB";
         }, () -> Pal.accent, () -> progress[0])).width(400f).height(70f);
         dialog.buttons.button("@cancel", Icon.cancel, () -> {
             canceled[0] = true;
@@ -372,7 +394,7 @@ final class GithubUpdateCheck{
         dialog.setFillParent(false);
         dialog.show();
 
-        Http.get(url.trim())
+        Http.get(url)
             .timeout(30000)
             .header("User-Agent", "Mindustry")
             .error(e -> {
@@ -383,16 +405,15 @@ final class GithubUpdateCheck{
                 long total = res.getContentLength();
                 lengthMb[0] = total > 0 ? (total / 1024f / 1024f) : 0f;
 
+                //Skip download if same size already exists.
                 if(total > 0 && file.exists() && file.length() == total){
                     dialog.hide();
-                    Core.app.post(() -> installAndRestart(mod, asset, file));
+                    Core.app.post(() -> installAndRestart(mod, file));
                     return;
                 }
 
                 int buffer = 1024 * 1024;
                 long read = 0L;
-                long speedCheckTime = System.currentTimeMillis();
-                long speedCheckBytes = 0L;
                 try(InputStream in = res.getResultAsStream(); OutputStream out = file.write(false, buffer)){
                     byte[] buf = new byte[buffer];
                     int r;
@@ -400,16 +421,6 @@ final class GithubUpdateCheck{
                         if(canceled[0]) break;
                         out.write(buf, 0, r);
                         read += r;
-                        downloadedMb[0] = read / 1024f / 1024f;
-
-                        long now = System.currentTimeMillis();
-                        if(now - speedCheckTime >= 350L){
-                            float dt = Math.max(0.001f, (now - speedCheckTime) / 1000f);
-                            speedMb[0] = ((read - speedCheckBytes) / 1024f / 1024f) / dt;
-                            speedCheckTime = now;
-                            speedCheckBytes = read;
-                        }
-
                         if(total > 0){
                             progress[0] = Math.min(1f, read / (float)total);
                         }
@@ -430,62 +441,23 @@ final class GithubUpdateCheck{
 
                 progress[0] = 1f;
                 dialog.hide();
-                Core.app.post(() -> installAndRestart(mod, asset, file));
+                Core.app.post(() -> installAndRestart(mod, file));
             });
     }
 
-    private static void installAndRestart(Mods.LoadedMod mod, AssetInfo asset, Fi file){
+    private static void installAndRestart(Mods.LoadedMod mod, Fi file){
         try{
-            Fi target = resolveInstallTarget(mod, asset);
-            if(target == null) throw new RuntimeException("Invalid mod file target.");
-
-            target.parent().mkdirs();
-            Fi backup = target.sibling(target.name() + ".bak");
-
-            if(backup.exists()){
-                try{ backup.delete(); }catch(Throwable ignored){}
-            }
-
-            if(target.exists()){
-                try{ target.copyTo(backup); }catch(Throwable ignored){}
-                try{ target.delete(); }catch(Throwable ignored){}
-            }
-
-            file.copyTo(target);
-
-            if(backup.exists()){
-                try{ backup.delete(); }catch(Throwable ignored){}
-            }
-
+            Vars.mods.importMod(file);
             try{ file.delete(); }catch(Throwable ignored){}
-            Vars.ui.showInfoToast(mod.meta.displayName + ": " + Core.bundle.get("sp.update.installing"), 4f);
+            Vars.ui.showInfoToast(mod.meta.displayName + ": 已下载并安装，正在重启...", 4f);
             restartApp();
         }catch(Throwable t){
             if(Vars.ui != null) Vars.ui.showException(t);
         }
     }
 
-    private static Fi resolveInstallTarget(Mods.LoadedMod mod, AssetInfo asset){
-        String fileName = sanitizeAssetName(asset == null ? null : asset.name);
-        if(mod != null && mod.file != null && !mod.file.isDirectory()){
-            String ext = mod.file.extension();
-            if(ext != null && !ext.isEmpty()) return mod.file;
-        }
-        return Vars.modDirectory.child(fileName);
-    }
-
-    private static String sanitizeAssetName(String name){
-        String n = name == null ? "" : name.trim();
-        if(n.isEmpty()){
-            return (OS.isAndroid || Vars.mobile) ? androidAssetName : desktopAssetName;
-        }
-        if(!n.endsWith(".zip") && !n.endsWith(".jar")){
-            return (OS.isAndroid || Vars.mobile) ? androidAssetName : desktopAssetName;
-        }
-        return n;
-    }
-
     private static void restartApp(){
+        //Mobile platforms generally can't be restarted programmatically.
         if(OS.isAndroid || Vars.mobile){
             Core.app.exit();
             return;
@@ -521,12 +493,14 @@ final class GithubUpdateCheck{
             }
         }
 
+        // Sort by version desc for stable ordering in the selection UI.
         Collections.sort(out, (a, b) -> {
             if(a == null && b == null) return 0;
             if(a == null) return 1;
             if(b == null) return -1;
             int c = compareVersions(b.version, a.version);
             if(c != 0) return c;
+            // If same version, show stable before prerelease.
             if(a.preRelease != b.preRelease) return a.preRelease ? 1 : -1;
             return a.tag.compareToIgnoreCase(b.tag);
         });
@@ -591,7 +565,9 @@ final class GithubUpdateCheck{
         }catch(Throwable ignored){
         }
 
+        //stable ordering for UI
         Collections.sort(assets, (a, b) -> a.name.compareToIgnoreCase(b.name));
+
         return new ReleaseInfo(version, tag, name, body, htmlUrl, publishedAt, pre, assets);
     }
 
@@ -623,26 +599,6 @@ final class GithubUpdateCheck{
         }
 
         return assets.get(0);
-    }
-
-    private static AssetInfo pickAssetForRelease(ReleaseInfo rel){
-        if(rel != null){
-            AssetInfo picked = pickDefaultAsset(rel.assets);
-            if(picked != null) return picked;
-        }
-
-        boolean android = OS.isAndroid || Vars.mobile;
-        String name = android ? androidAssetName : desktopAssetName;
-        String tag = rel == null ? "" : Strings.stripColors(rel.tag);
-
-        String directUrl;
-        if(tag == null || tag.trim().isEmpty()){
-            directUrl = "https://github.com/" + owner + "/" + repo + "/releases/latest/download/" + name;
-        }else{
-            directUrl = "https://github.com/" + owner + "/" + repo + "/releases/download/" + tag.trim() + "/" + name;
-        }
-
-        return new AssetInfo(name, directUrl, -1L, 0);
     }
 
     private static String buildDownloadUrl(String original, boolean mirror){

@@ -1,18 +1,26 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-02-08T08:21:22Z",
+  "generatedAtUtc": "2026-02-09T12:40:09Z",
   "mods": {
     "pgmm": {
-      "head": "5a5211abbeaa29f3ad3fc8b8d8cba52af3719a7e",
+      "head": "6647d9a8bea5c43fd603174f1036635dab8acfad",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Power-Grid-Minimap-repo-clone"
     },
     "sp": {
-      "head": "5641f944f1cb11c650297a6df7a7aa54a2d64579",
+      "head": "6eba5eccf44f8612a22223e0588e83734507d854",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\StealthPath"
     },
     "rbm": {
-      "head": "e367eea5aec39898f87d2c85fdd9ac393f96ed46",
+      "head": "3dd253d11a2f5541630fde5489fdc56ac5a6cbf7",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Radial-Build-Menu-hud-"
+    },
+    "bmm": {
+      "head": "65b148505e872e07545f81f94f86b7a5a1761aa3",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\betterMiniMap"
+    },
+    "spdb": {
+      "head": "nogit-5fa0878cbc8b716471d406167b940c09cf013378",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\ServerPlayerDataBase"
     }
   }
 }

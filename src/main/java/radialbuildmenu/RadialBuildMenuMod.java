@@ -62,9 +62,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     public static boolean bekBundled = false;
 
 
-    private static final String overlayName = "rbm-overlay";
-    private static final String mobileToggleName = "rbm-mobile-toggle";
-    private static final String mobileWindowName = "rbm-mobile";
+    private static final String overlayName = "neon-rbm-overlay";
+    private static final String mobileToggleName = "neon-rbm-mobile-toggle";
+    private static final String mobileWindowName = "neon-rbm-mobile-window";
 
     private static final int slotsPerRing = 8;
     private static final int maxSlots = 16;
@@ -166,6 +166,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private void ensureDefaults(){
+        GithubUpdateCheck.applyDefaults();
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyHudScale, 100);
         Core.settings.defaults(keyHudAlpha, 100);
@@ -259,6 +260,10 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             table.pref(new HeaderSetting(Core.bundle.get("rbm.section.io"), mindustry.gen.Icon.info));
             table.pref(new IoSetting());
+
+            table.pref(new HeaderSetting(Core.bundle.get("rbm.section.update", "Update"), mindustry.gen.Icon.refresh));
+            table.pref(new IconCheckSetting(GithubUpdateCheck.enabledKey(), true, mindustry.gen.Icon.refresh));
+            table.pref(new IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, mindustry.gen.Icon.info));
         
     }
 

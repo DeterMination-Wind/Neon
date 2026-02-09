@@ -92,6 +92,14 @@ final class GithubUpdateCheck{
         Core.settings.defaults(keyUpdateCheckUseMirror, false);
     }
 
+    static String enabledKey(){
+        return keyUpdateCheckEnabled;
+    }
+
+    static String showDialogKey(){
+        return keyUpdateCheckShowDialog;
+    }
+
     static void checkOnce(){
         if(checked) return;
         checked = true;

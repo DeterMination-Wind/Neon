@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -28,6 +29,8 @@ class SubMod:
     java_package_dir: Path
     main_class_file: str
     bundles_dir: Path
+    inject_bek_hooks: bool = True
+    allow_no_git: bool = False
 
 
 def run(args: List[str], cwd: Optional[Path] = None) -> str:
@@ -61,6 +64,8 @@ def load_config() -> List[SubMod]:
                 java_package_dir=ROOT / m["javaPackageDir"],
                 main_class_file=m["mainClassFile"],
                 bundles_dir=ROOT / m["bundlesDir"],
+                inject_bek_hooks=bool(m.get("injectBekHooks", True)),
+                allow_no_git=bool(m.get("allowNoGit", False)),
             )
         )
     return mods
@@ -86,13 +91,44 @@ def resolve_local_repo(mod: SubMod) -> Path:
     repo_dir = mod.local_path
     if not repo_dir.exists():
         raise FileNotFoundError(f"[{mod.id}] localPath does not exist: {repo_dir}")
-    if not (repo_dir / ".git").exists():
+    if not (repo_dir / ".git").exists() and not mod.allow_no_git:
         raise FileNotFoundError(f"[{mod.id}] localPath is not a git repo (missing .git): {repo_dir}")
     return repo_dir
 
 
 def git_head(repo_dir: Path) -> str:
     return run(["git", "rev-parse", "HEAD"], cwd=repo_dir).strip()
+
+
+def nogit_head(repo_dir: Path) -> str:
+    """Computes a content hash for directories without git metadata."""
+    h = hashlib.sha1()
+    include_patterns = [
+        "src/main/java/**/*.java",
+        "src/main/resources/bundles/bundle*.properties",
+        "src/main/resources/mod.json",
+    ]
+    files: List[Path] = []
+    for pat in include_patterns:
+        files.extend(repo_dir.glob(pat))
+
+    files = sorted(set(p for p in files if p.is_file()))
+    if not files:
+        return "nogit-empty"
+
+    for p in files:
+        rel = p.relative_to(repo_dir).as_posix().encode("utf-8")
+        h.update(rel)
+        h.update(b"\0")
+        h.update(p.read_bytes())
+        h.update(b"\0")
+    return "nogit-" + h.hexdigest()
+
+
+def source_head(mod: SubMod, repo_dir: Path) -> str:
+    if (repo_dir / ".git").exists():
+        return git_head(repo_dir)
+    return nogit_head(repo_dir)
 
 
 def read_text(path: Path) -> str:
@@ -176,7 +212,7 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
             )
 
     # 2) Add static bekBundled flag after class declaration.
-    class_decl = re.search(rf"(public\s+class\s+\w+\s+extends\s+mindustry\.mod\.Mod\s*\{{)", java_src)
+    class_decl = re.search(r"(public\s+class\s+\w+\s+extends\s+(?:mindustry\.mod\.)?Mod\s*\{)", java_src)
     if not class_decl:
         raise ValueError(f"[{mod_id}] Could not find class declaration.")
     insert_at = class_decl.end(1)
@@ -277,10 +313,19 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
 
 def ensure_bundled_return(java_src: str) -> str:
     # Insert `if(bekBundled) return;` right after the ui/settings null check.
-    # Works for: `if(ui == null || ui.settings == null) return;`
-    pat = re.compile(r"(if\s*\(\s*ui\s*==\s*null\s*\|\|\s*ui\.settings\s*==\s*null\s*\)\s*return\s*;)")
-    m = pat.search(java_src)
-    if not m:
+    # Works for:
+    # - `if(ui == null || ui.settings == null) return;`
+    # - `if(Vars.ui == null || Vars.ui.settings == null) return;`
+    patterns = [
+        re.compile(r"(if\s*\(\s*ui\s*==\s*null\s*\|\|\s*ui\.settings\s*==\s*null\s*\)\s*return\s*;)") ,
+        re.compile(r"(if\s*\(\s*Vars\.ui\s*==\s*null\s*\|\|\s*Vars\.ui\.settings\s*==\s*null\s*\)\s*return\s*;)")
+    ]
+    m = None
+    for pat in patterns:
+        m = pat.search(java_src)
+        if m:
+            break
+    if m is None:
         return java_src
     anchor_end = m.end(1)
     # If already present nearby, skip.
@@ -349,9 +394,10 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
                 merged[k] = v
                 origins[k] = "bek"
 
+        source_ids = " + ".join(sm.id for sm, _ in mods)
         header = [
             "# Auto-merged for Neon",
-            "# Sources: pgmm + sp + rbm",
+            f"# Sources: {source_ids}",
             "",
         ]
         lines = header + [f"{k}={merged[k]}" for k in sorted(merged.keys())]
@@ -377,13 +423,13 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
         rel = src_path.relative_to(upstream_pkg_dir)
         dst_path = target_pkg_dir / rel
         text = read_text(src_path)
-        if src_path.name == mod.main_class_file:
+        if mod.inject_bek_hooks and src_path.name == mod.main_class_file:
             text = inject_bek_hooks(mod.id, text)
         write_text(dst_path, text)
 
 
 def main(argv: List[str]) -> int:
-    ap = argparse.ArgumentParser(description="Sync Neon with local sub-mod git checkouts (pgmm/sp/rbm).")
+    ap = argparse.ArgumentParser(description="Sync Neon with local sub-mod checkouts.")
     ap.add_argument("--check", action="store_true", help="Only check for updates; do not write files.")
     ap.add_argument("--force", action="store_true", help="Force rewrite even if lock matches.")
     args = ap.parse_args(argv)
@@ -397,7 +443,7 @@ def main(argv: List[str]) -> int:
 
     for sm in mods:
         repo_dir = resolve_local_repo(sm)
-        head = git_head(repo_dir)
+        head = source_head(sm, repo_dir)
         resolved.append((sm, repo_dir, head))
 
         prev = (lock_mods.get(sm.id) or {}).get("head")

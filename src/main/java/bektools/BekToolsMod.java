@@ -3,6 +3,7 @@ package bektools;
 import arc.Core;
 import arc.Events;
 import arc.util.CommandHandler;
+import betterminimap.BetterMiniMapMod;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -10,6 +11,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 import bektools.ui.RbmStyle;
 import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
+import serverplayerdatabase.ServerPlayerDataBaseMod;
 import stealthpath.StealthPathMod;
 
 import static mindustry.Vars.ui;
@@ -18,15 +20,22 @@ public class BekToolsMod extends Mod{
     private final PowerGridMinimapMod pgmm;
     private final StealthPathMod stealthPath;
     private final RadialBuildMenuMod radialBuildMenu;
+    private final BetterMiniMapMod betterMiniMap;
+    private final ServerPlayerDataBaseMod serverPlayerDataBase;
 
     public BekToolsMod(){
         PowerGridMinimapMod.bekBundled = true;
         StealthPathMod.bekBundled = true;
         RadialBuildMenuMod.bekBundled = true;
+        BetterMiniMapMod.bekBundled = true;
+        ServerPlayerDataBaseMod.bekBundled = true;
 
         pgmm = new PowerGridMinimapMod();
         stealthPath = new StealthPathMod();
         radialBuildMenu = new RadialBuildMenuMod();
+        betterMiniMap = new BetterMiniMapMod();
+        betterMiniMap.init();
+        serverPlayerDataBase = new ServerPlayerDataBaseMod();
 
         Events.on(ClientLoadEvent.class, e -> {
             GithubUpdateCheck.applyDefaults();
@@ -40,6 +49,7 @@ public class BekToolsMod extends Mod{
         pgmm.registerClientCommands(handler);
         stealthPath.registerClientCommands(handler);
         radialBuildMenu.registerClientCommands(handler);
+        serverPlayerDataBase.registerClientCommands(handler);
     }
 
     private void registerSettings(){
@@ -49,6 +59,8 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, pgmm::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, stealthPath::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, radialBuildMenu::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, serverPlayerDataBase::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.update", "Update"), Icon.refresh, st -> {
                 st.checkPref(GithubUpdateCheck.enabledKey(), true);
                 st.checkPref(GithubUpdateCheck.showDialogKey(), true);

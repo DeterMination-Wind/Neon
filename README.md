@@ -7,15 +7,17 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 3 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 5 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
 - Radial Build Menu（圆盘快捷建造）
+- betterMiniMap（增强小地图单位/建筑显示）
+- ServerPlayerDataBase（玩家数据库 / 聊天记录查询）
 
-如果你只想安装一次、一次性获得这三类常用“信息叠加 + 操作效率”功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这五类常用“信息叠加 + 操作效率 + 数据查询”功能，Neon 会更省事。
 
-提示：Neon 已包含上述 3 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 5 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -41,6 +43,18 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 3 �
 - 多套槽位配置与切换：支持按时长/星球/条件切换；也支持槽位组 A/B 通过热键即时切换。
 - 外观与交互可调：缩放、透明度、半径、图标大小、方向选择等；支持 JSON 导入/导出。
 
+#### 4) betterMiniMap
+
+- 在小地图叠加单位与建筑图标，支持朝向、透明度、缩放、聚合间距等参数。
+- 支持敌我单位/建筑独立开关与筛选，快速定制战场信息密度。
+- 提供单位/建筑筛选对话框，可按名称搜索、全选、清空、反选。
+
+#### 5) 玩家数据库（ServerPlayerDataBase）
+
+- 本地采集在线玩家信息（名称、UID、服务器、IP 追踪结果）并可持续更新。
+- 可选记录聊天日志，支持导入/导出、完整性校验与异常提示。
+- 在支持 MindustryX OverlayUI 时提供查询/调试窗口；无 OverlayUI 时回退到普通对话框。
+
 ### 快速上手
 
 1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
@@ -55,6 +69,8 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 3 �
 - 电网小地图（Power Grid Minimap）
 - 偷袭小道（Stealth Path）
 - 圆盘快捷建造（Radial Build Menu）
+- betterMiniMap
+- 玩家数据库（ServerPlayerDataBase）
 
 ### 多人游戏
 
@@ -94,13 +110,15 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles three popular QoL modules into a single install:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles five popular QoL modules into a single install:
 
 - Power Grid Minimap
 - Stealth Path
 - Radial Build Menu
+- betterMiniMap
+- Server Player DataBase
 
-If you prefer installing once and getting all three “overlay + workflow” features together, Neon is the convenient option.
+If you prefer installing once and getting all five “overlay + workflow + data tooling” features together, Neon is the convenient option.
 
 Note: since Neon already includes these modules, you should avoid enabling the standalone versions at the same time to prevent duplicated UI or conflicts.
 
@@ -128,6 +146,18 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - Multiple profiles and switching rules (time / planet / conditional), plus optional Slot Group A/B instant toggling via a hotkey.
 - Customizable appearance and interaction; JSON import/export for sharing.
 
+#### 4) betterMiniMap
+
+- Draws extra unit/building markers on the minimap with direction, scale, alpha, and cluster spacing controls.
+- Supports friendly/enemy filters independently for units and buildings.
+- Includes searchable unit/block selection dialogs with select-all, clear, and invert actions.
+
+#### 5) Server Player DataBase
+
+- Collects local player history (name, UID, server, trace-enriched IP records) while you play.
+- Optional chat logging with import/export and integrity verification.
+- Uses MindustryX OverlayUI query/debug windows when available, with fallback dialogs on vanilla clients.
+
 ### Quick Start
 
 1) Install: put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
@@ -142,6 +172,8 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - Power Grid Minimap
 - Stealth Path
 - Radial Build Menu
+- betterMiniMap
+- Server Player DataBase
 
 ### Multiplayer
 

@@ -3,17 +3,29 @@ plugins{
 }
 
 group = "bektools"
-version = "2.4.0"
+version = "3.0.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
+def mindustryVersion = (findProperty("mindustryVersion") ?: "v154.3").toString()
+def arcVersion = (findProperty("arcVersion") ?: mindustryVersion).toString()
+
 repositories{
     mavenCentral()
-    maven{ url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
     maven{ url "https://jitpack.io" }
+}
+
+configurations.configureEach{
+    resolutionStrategy.eachDependency{ details ->
+        // Mindustry v154.3 can request Arc modules by commit hash, but JitPack hosts tag versions.
+        if(details.requested.group == "com.github.Anuken.Arc" && details.requested.version == "ec5df18e54"){
+            details.useVersion(arcVersion)
+            details.because("Use JitPack Arc tag artifacts to avoid unavailable commit coordinates")
+        }
+    }
 }
 
 dependencies{
@@ -22,8 +34,7 @@ dependencies{
         compileOnly project(":core")
     }else{
         // Standalone build: fetch Mindustry core from JitPack.
-        def mindustryVersion = (findProperty("mindustryVersion") ?: "v154.3").toString()
-        compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+        compileOnly "com.github.Anuken.MindustryJitpack:core:$mindustryVersion"
     }
 }
 
@@ -47,8 +58,8 @@ tasks.register("jarAndroid", Jar){
     archiveFileName = "Neon.jar"
 }
 
-// Keep a copy in workspace root "构建/" (mod name + version).
-def buildOutDir = new File(rootDir.parentFile, "构建")
+// Keep a copy in workspace root "构建/<mod-name>/" (mod name + version).
+def buildOutDir = new File(rootDir.parentFile, "构建/${project.name}")
 
 tasks.register("copyZipToBuildDir", Copy){
     doNotTrackState("Copies into build output folder for convenience.")

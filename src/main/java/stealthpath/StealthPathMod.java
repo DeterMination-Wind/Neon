@@ -136,6 +136,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private static final String keyPathUseFloorStatusSlow = "sp-path-use-floor-status-slow";
     private static final String keyPathAllowSurvivableLiquidCross = "sp-path-allow-survivable-liquid-cross";
     private static final String keyDrownReserveDeciSeconds = "sp-drown-reserve-deciseconds";
+    private static final String keyGoalCandidateRadiusTiles = "sp-goal-candidate-radius-tiles";
 
     private enum PathMode{
         safeOnly, minDamage, nearest
@@ -365,6 +366,10 @@ public class StealthPathMod extends mindustry.mod.Mod{
         return drownReserveSeconds() * 60f;
     }
 
+    private static int goalCandidateRadiusTiles(){
+        return clamp(Core.settings.getInt(keyGoalCandidateRadiusTiles, 24), 6, 64);
+    }
+
     private static int autoClusterSplitTiles(){
         return clamp(Core.settings.getInt(keyAutoClusterSplitTiles, 5), 1, 40);
     }
@@ -569,6 +574,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyPathUseFloorStatusSlow, true);
         Core.settings.defaults(keyPathAllowSurvivableLiquidCross, true);
         Core.settings.defaults(keyDrownReserveDeciSeconds, 15);
+        Core.settings.defaults(keyGoalCandidateRadiusTiles, 24);
     }
 
     private void registerKeybinds(){
@@ -709,6 +715,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         table.pref(new IconSliderSetting(keySafeCorridorBiasPct, 35, 0, 200, 5, null, v -> v + "%", null));
         table.pref(new IconCheckSetting(keyComputeSafeDistance, true, null, null));
         table.pref(new IconSliderSetting(keyDrownReserveDeciSeconds, 15, 0, 30, 1, null, v -> Strings.autoFixed(v / 10f, 1) + "s", null));
+        table.pref(new IconSliderSetting(keyGoalCandidateRadiusTiles, 24, 6, 64, 1, null, v -> v + " tiles", null));
 
         table.pref(new HeaderSetting("@sp.section.advanced.automove", null));
         table.pref(new IconSliderSetting(keyRtsMaxWaypoints, 12, 2, 60, 1, null, v -> String.valueOf(v), null));
@@ -1030,6 +1037,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         boolean movedAny = false;
+        boolean issuedAny = false;
         float minHpGround = Float.POSITIVE_INFINITY;
         float minHpAir = Float.POSITIVE_INFINITY;
         float predictedMax = 0f;
@@ -1062,6 +1070,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
             movedAny = true;
             autoMoveFollowPathHash.put(cluster.key, issuedHash);
             autoMoveFollowLastIssue.put(cluster.key, Time.time);
+            if(issuedHash != 0){
+                issuedAny = true;
+            }
 
             if(cluster.hasGround && Float.isFinite(cluster.minHpGround)){
                 minHpGround = Math.min(minHpGround, cluster.minHpGround);
@@ -1074,7 +1085,22 @@ public class StealthPathMod extends mindustry.mod.Mod{
             }
         }
 
-        if(!movedAny) return;
+        if(!movedAny){
+            boolean fallbackIssued = issueDirectRtsFallback(clusters, goalX, goalY);
+            if(fallbackIssued){
+                autoMoveMonitorUntil = 0f;
+                autoMoveFollow = false;
+                logRts(logFormat("sp.log.rts.fallback", goalX, goalY));
+            }
+            return;
+        }
+
+        if(!issuedAny){
+            autoMoveMonitorUntil = 0f;
+            autoMoveFollow = false;
+            logRts(logFormat("sp.log.rts.arrived", goalX, goalY));
+            return;
+        }
 
         autoMoveFollow = true;
 
@@ -1083,6 +1109,41 @@ public class StealthPathMod extends mindustry.mod.Mod{
         autoMoveMonitorMinHpGround = minHpGround == Float.POSITIVE_INFINITY ? Float.NaN : minHpGround;
         autoMoveMonitorMinHpAir = minHpAir == Float.POSITIVE_INFINITY ? Float.NaN : minHpAir;
         autoMoveMonitorPredictedMaxDmg = predictedMax;
+    }
+
+    private boolean issueDirectRtsFallback(Seq<ControlledCluster> clusters, int goalX, int goalY){
+        if(clusters == null || clusters.isEmpty()) return false;
+        if(player == null) return false;
+
+        Seq<Unit> units = new Seq<>();
+        for(int i = 0; i < clusters.size; i++){
+            ControlledCluster cluster = clusters.get(i);
+            if(cluster == null || cluster.units == null || cluster.units.isEmpty()) continue;
+            for(int j = 0; j < cluster.units.size; j++){
+                Unit u = cluster.units.get(j);
+                if(u == null) continue;
+                if(u.team != player.team()) continue;
+                if(!u.isAdded() || u.dead()) continue;
+                units.add(u);
+            }
+        }
+
+        if(units.isEmpty()) return false;
+
+        int[] unitIds = new int[units.size];
+        int commandId = ++autoMoveCommandId;
+        for(int i = 0; i < units.size; i++){
+            Unit u = units.get(i);
+            unitIds[i] = u.id;
+            autoMoveCommandByUnit.put(u.id, commandId);
+        }
+
+        Vec2 waypoint = new Vec2(tileToWorld(goalX) + tilesize / 2f, tileToWorld(goalY) + tilesize / 2f);
+        if(UnitCommand.boostCommand != null){
+            Call.setUnitCommand(player, unitIds, UnitCommand.boostCommand);
+        }
+        Call.commandUnits(player, unitIds, null, null, waypoint, false, true);
+        return true;
     }
 
     private void autoMonitorUnexpectedDamage(){
@@ -2355,13 +2416,14 @@ public class StealthPathMod extends mindustry.mod.Mod{
         int goalX = clamp(worldToTile(Core.input.mouseWorldX()), 0, map.width - 1);
         int goalY = clamp(worldToTile(Core.input.mouseWorldY()), 0, map.height - 1);
 
-        IntSeq goalsAll = buildNearestGoalCandidates(map, goalX, goalY, 6, false);
+        int goalRadius = goalCandidateRadiusTiles();
+        IntSeq goalsAll = buildNearestGoalCandidates(map, goalX, goalY, goalRadius, false);
         if(goalsAll.isEmpty()){
             if(showToasts) showToast("@sp.toast.no-path", 2.5f);
             return;
         }
 
-        IntSeq goalsSafe = buildNearestGoalCandidates(map, goalX, goalY, 6, true);
+        IntSeq goalsSafe = buildNearestGoalCandidates(map, goalX, goalY, goalRadius, true);
         boolean[] goalMaskAll = buildGoalMask(map, goalsAll);
 
         float speed = unit.speed();
@@ -2423,10 +2485,12 @@ public class StealthPathMod extends mindustry.mod.Mod{
         goalX = clamp(goalX, 0, map.width - 1);
         goalY = clamp(goalY, 0, map.height - 1);
 
-        IntSeq goalsAll = buildNearestGoalCandidates(map, goalX, goalY, 6, false);
+        int goalRadius = goalCandidateRadiusTiles();
+        IntSeq goalsAll = buildNearestGoalCandidates(map, goalX, goalY, goalRadius, false);
         if(goalsAll.isEmpty()) return null;
-        IntSeq goalsSafe = buildNearestGoalCandidates(map, goalX, goalY, 6, true);
+        IntSeq goalsSafe = buildNearestGoalCandidates(map, goalX, goalY, goalRadius, true);
         boolean[] goalMaskAll = buildGoalMask(map, goalsAll);
+        boolean[] goalMaskSafe = goalsSafe.isEmpty() ? null : buildGoalMask(map, goalsSafe);
 
         int startX = clamp(worldToTile(cluster.x), 0, map.width - 1);
         int startY = clamp(worldToTile(cluster.y), 0, map.height - 1);
@@ -2443,15 +2507,18 @@ public class StealthPathMod extends mindustry.mod.Mod{
             : Math.max(0.0001f, cluster.speed);
 
         boolean nearestPlan = alwaysPlanNearestPath();
-        PathResult base;
-        if(nearestPlan){
-            base = findPath(map, startX, startY, goalsAll, goalMaskAll, PathMode.nearest, cluster.moveUnit, cluster.units, speed);
-        }else{
-            PathResult safe = !goalsSafe.isEmpty()
-                ? findPath(map, startX, startY, goalsSafe, buildGoalMask(map, goalsSafe), PathMode.safeOnly, cluster.moveUnit, cluster.units, speed)
-                : null;
-            base = safe != null ? safe : findPath(map, startX, startY, goalsAll, goalMaskAll, PathMode.minDamage, cluster.moveUnit, cluster.units, speed);
-        }
+        PathResult base = findClusterPathFromStart(
+            cluster,
+            map,
+            startX,
+            startY,
+            goalsAll,
+            goalMaskAll,
+            goalsSafe,
+            goalMaskSafe,
+            speed,
+            nearestPlan
+        );
         if(base == null || base.path == null || base.path.isEmpty()) return null;
 
         // Plan from center first, then try small offsets to keep the whole formation's collision volume safe.
@@ -2468,10 +2535,39 @@ public class StealthPathMod extends mindustry.mod.Mod{
             IntSeq shifted = shiftTilePath(map, base.path, dx, dy);
             if(shifted == null || shifted.isEmpty()) continue;
 
-            if(pathWouldDrownForUnits(map, shifted, cluster.moveUnit, cluster.units, speed)) continue;
+            IntSeq candidatePath = shifted;
+            if(pathWouldDrownForUnits(map, shifted, cluster.moveUnit, cluster.units, speed)){
+                int offsetStartX = clamp(worldToTile(cluster.x + dx), 0, map.width - 1);
+                int offsetStartY = clamp(worldToTile(cluster.y + dy), 0, map.height - 1);
 
-            float dmgGround = cluster.hasGround ? estimateDamageForUnitsByFlight(map, shifted, cluster.units, cluster.moveUnit, false) : Float.NaN;
-            float dmgAir = cluster.hasAir ? estimateDamageForUnitsByFlight(map, shifted, cluster.units, cluster.moveUnit, true) : Float.NaN;
+                if(!map.passable[offsetStartX + offsetStartY * map.width]){
+                    int offsetStartIdx = findNearestPassable(map, offsetStartX, offsetStartY, 10);
+                    if(offsetStartIdx == -1) continue;
+                    offsetStartX = offsetStartIdx % map.width;
+                    offsetStartY = offsetStartIdx / map.width;
+                }
+
+                PathResult rerouted = findClusterPathFromStart(
+                    cluster,
+                    map,
+                    offsetStartX,
+                    offsetStartY,
+                    goalsAll,
+                    goalMaskAll,
+                    goalsSafe,
+                    goalMaskSafe,
+                    speed,
+                    nearestPlan
+                );
+                if(rerouted == null || rerouted.path == null || rerouted.path.isEmpty()) continue;
+                if(pathWouldDrownForUnits(map, rerouted.path, cluster.moveUnit, cluster.units, speed)) continue;
+
+                logDrown(logFormat("sp.log.drown.replan", cluster.key, Strings.autoFixed(dx, 1), Strings.autoFixed(dy, 1), rerouted.path.size));
+                candidatePath = rerouted.path;
+            }
+
+            float dmgGround = cluster.hasGround ? estimateDamageForUnitsByFlight(map, candidatePath, cluster.units, cluster.moveUnit, false) : Float.NaN;
+            float dmgAir = cluster.hasAir ? estimateDamageForUnitsByFlight(map, candidatePath, cluster.units, cluster.moveUnit, true) : Float.NaN;
 
             float maxDmg = 0f;
             if(cluster.hasGround && Float.isFinite(dmgGround)) maxDmg = Math.max(maxDmg, dmgGround);
@@ -2480,8 +2576,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
             short minSafeDist = 0;
             if(map.safeDist != null){
                 short min = Short.MAX_VALUE;
-                for(int s = 0; s < shifted.size; s++){
-                    int tidx = shifted.items[s];
+                for(int s = 0; s < candidatePath.size; s++){
+                    int tidx = candidatePath.items[s];
                     short d = map.safeDist[tidx];
                     if(d < min) min = d;
                 }
@@ -2490,20 +2586,47 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
             if(nearestPlan){
                 if(best == null
-                    || shifted.size < best.path.size
-                    || (shifted.size == best.path.size && (minSafeDist > best.minSafeDist || (minSafeDist == best.minSafeDist && maxDmg + 0.0001f < best.maxDmg)))){
-                    best = new ShiftedPath(shifted, dx, dy, dmgGround, dmgAir, maxDmg, minSafeDist);
+                    || candidatePath.size < best.path.size
+                    || (candidatePath.size == best.path.size && (minSafeDist > best.minSafeDist || (minSafeDist == best.minSafeDist && maxDmg + 0.0001f < best.maxDmg)))){
+                    best = new ShiftedPath(candidatePath, dx, dy, dmgGround, dmgAir, maxDmg, minSafeDist);
                 }
             }else{
                 if(best == null
                     || maxDmg + 0.0001f < best.maxDmg
-                    || (Math.abs(maxDmg - best.maxDmg) <= 0.0001f && (minSafeDist > best.minSafeDist || (minSafeDist == best.minSafeDist && shifted.size < best.path.size)))){
-                    best = new ShiftedPath(shifted, dx, dy, dmgGround, dmgAir, maxDmg, minSafeDist);
+                    || (Math.abs(maxDmg - best.maxDmg) <= 0.0001f && (minSafeDist > best.minSafeDist || (minSafeDist == best.minSafeDist && candidatePath.size < best.path.size)))){
+                    best = new ShiftedPath(candidatePath, dx, dy, dmgGround, dmgAir, maxDmg, minSafeDist);
                 }
             }
         }
 
         return best;
+    }
+
+    private PathResult findClusterPathFromStart(
+        ControlledCluster cluster,
+        ThreatMap map,
+        int startX,
+        int startY,
+        IntSeq goalsAll,
+        boolean[] goalMaskAll,
+        IntSeq goalsSafe,
+        boolean[] goalMaskSafe,
+        float speed,
+        boolean nearestPlan
+    ){
+        if(cluster == null || map == null) return null;
+        if(!inBounds(map, startX, startY)) return null;
+
+        if(nearestPlan){
+            return findPath(map, startX, startY, goalsAll, goalMaskAll, PathMode.nearest, cluster.moveUnit, cluster.units, speed);
+        }
+
+        PathResult safe = goalsSafe != null && !goalsSafe.isEmpty() && goalMaskSafe != null
+            ? findPath(map, startX, startY, goalsSafe, goalMaskSafe, PathMode.safeOnly, cluster.moveUnit, cluster.units, speed)
+            : null;
+        if(safe != null && safe.path != null && !safe.path.isEmpty()) return safe;
+
+        return findPath(map, startX, startY, goalsAll, goalMaskAll, PathMode.minDamage, cluster.moveUnit, cluster.units, speed);
     }
 
     private static IntSeq shiftTilePath(ThreatMap map, IntSeq base, float dx, float dy){
@@ -2831,10 +2954,15 @@ public class StealthPathMod extends mindustry.mod.Mod{
         IntSeq out = new IntSeq();
         if(map == null) return out;
 
-        float bestDst2 = Float.POSITIVE_INFINITY;
+        radius = Math.max(1, radius);
+        int radiusSq = radius * radius;
+        IntSeq[] buckets = new IntSeq[radiusSq + 1];
 
         for(int dy = -radius; dy <= radius; dy++){
             for(int dx = -radius; dx <= radius; dx++){
+                int d2 = dx * dx + dy * dy;
+                if(d2 > radiusSq) continue;
+
                 int nx = x + dx;
                 int ny = y + dy;
                 if(!inBounds(map, nx, ny)) continue;
@@ -2843,14 +2971,21 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(!map.passable[nidx]) continue;
                 if(safeOnly && !isZeroDamageTile(map, nidx)) continue;
 
-                float d2 = dx * dx + dy * dy;
-                if(d2 + 0.0001f < bestDst2){
-                    bestDst2 = d2;
-                    out.clear();
-                    out.add(nidx);
-                }else if(Math.abs(d2 - bestDst2) <= 0.0001f){
-                    out.add(nidx);
+                IntSeq bucket = buckets[d2];
+                if(bucket == null){
+                    bucket = new IntSeq();
+                    buckets[d2] = bucket;
                 }
+                bucket.add(nidx);
+            }
+        }
+
+        int limit = 256;
+        for(int d2 = 0; d2 < buckets.length && out.size < limit; d2++){
+            IntSeq bucket = buckets[d2];
+            if(bucket == null || bucket.isEmpty()) continue;
+            for(int i = 0; i < bucket.size && out.size < limit; i++){
+                out.add(bucket.items[i]);
             }
         }
 
@@ -3361,7 +3496,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
                 if(applyFloorDamage){
                     float perTick = Math.max(0f, floor.damageTaken);
-                    if(floor.status != null && (unit == null || !unit.isImmune(floor.status))){
+                    if(floor.status != null && floor.statusDuration > 0.0001f && (unit == null || !unit.isImmune(floor.status))){
                         perTick += Math.max(0f, floor.status.damage);
                     }
                     map.floorRisk[idx] = perTick * 60f;
@@ -3657,16 +3792,20 @@ public class StealthPathMod extends mindustry.mod.Mod{
         return floorSpeedMultiplierForUnit(unit, floor) * floorStatusSpeedMultiplierForUnit(unit, floor);
     }
 
-    private static float segmentSpeedForUnit(ThreatMap map, int a, int b, Unit unit, float fallbackSpeed){
+    private static float nominalSpeedForUnit(Unit unit, float fallbackSpeed){
         float base = Math.max(0.0001f, fallbackSpeed);
         if(unit == null || unit.type == null) return base;
 
-        float current = Math.max(0.0001f, unit.speed());
-        if(unit.type.flying || unit.type.hovering) return current;
+        float typeSpeed = Math.max(0.0001f, unit.type.speed);
+        // Keep transient effects from the current state, but avoid binding path speed to current floor tile.
+        float runtime = Math.max(0.0001f, unit.speed());
+        return Math.max(typeSpeed, runtime);
+    }
 
-        Floor curFloor = unit.floorOn();
-        float curMul = floorTravelSpeedMultiplierForUnit(unit, curFloor);
-        if(curMul <= 0.0001f) return current;
+    private static float segmentSpeedForUnit(ThreatMap map, int a, int b, Unit unit, float fallbackSpeed){
+        float base = nominalSpeedForUnit(unit, fallbackSpeed);
+        if(unit == null || unit.type == null) return base;
+        if(unit.type.flying || unit.type.hovering) return base;
 
         Floor floorA = floorAt(map, a);
         Floor floorB = floorAt(map, b);
@@ -3674,7 +3813,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         float segMulB = floorTravelSpeedMultiplierForUnit(unit, floorB);
         float segMul = (segMulA + segMulB) * 0.5f;
 
-        return Math.max(0.0001f, current * (segMul / curMul));
+        return Math.max(0.0001f, base * segMul);
     }
 
     private static float segmentTicksForUnit(ThreatMap map, int a, int b, Unit unit, float fallbackSpeed){
@@ -3733,7 +3872,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 Unit u = units.get(i);
                 if(!isDrownCandidate(u)) continue;
                 checkedAny = true;
-                float speed = Math.max(0.0001f, u.speed());
+                float speed = nominalSpeedForUnit(u, fallbackSpeed);
                 if(pathWouldDrown(map, tilePath, u, speed)) return true;
             }
         }
@@ -3748,6 +3887,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         if(!isDrownCandidate(unit)) return blocked;
 
         boolean[] marked = new boolean[map.size];
+        boolean[] inRun = new boolean[map.size];
         IntSeq run = new IntSeq();
         boolean runFatal = false;
         float progress = 0f;
@@ -3759,8 +3899,14 @@ public class StealthPathMod extends mindustry.mod.Mod{
             float rate = avgDrownRateForUnit(map, a, b, unit);
 
             if(rate > 0.000001f){
-                pushUnique(run, a);
-                pushUnique(run, b);
+                if(a >= 0 && a < map.size && !inRun[a]){
+                    inRun[a] = true;
+                    run.add(a);
+                }
+                if(b >= 0 && b < map.size && !inRun[b]){
+                    inRun[b] = true;
+                    run.add(b);
+                }
 
                 progress += rate * ticks;
                 if(progress >= 0.999f){
@@ -3777,6 +3923,10 @@ public class StealthPathMod extends mindustry.mod.Mod{
                     }
                 }
 
+                for(int r = 0; r < run.size; r++){
+                    int idx = run.items[r];
+                    if(idx >= 0 && idx < map.size) inRun[idx] = false;
+                }
                 run.clear();
                 runFatal = false;
                 progress = Math.max(0f, progress - ticks / 50f);
@@ -3805,7 +3955,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 Unit u = units.get(i);
                 if(!isDrownCandidate(u)) continue;
                 checkedAny = true;
-                float speed = Math.max(0.0001f, u.speed());
+                float speed = nominalSpeedForUnit(u, fallbackSpeed);
                 if(!pathWouldDrown(map, tilePath, u, speed)) continue;
 
                 IntSeq blocked = collectDrownBlockingTiles(map, tilePath, u, speed);
@@ -4064,7 +4214,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         if(unit != null && unit.type != null && unit.type.hovering) return 0f;
 
         float perTick = Math.max(0f, floor.damageTaken);
-        if(floor.status != null && (unit == null || !unit.isImmune(floor.status))){
+        if(floor.status != null && floor.statusDuration > 0.0001f && (unit == null || !unit.isImmune(floor.status))){
             perTick += Math.max(0f, floor.status.damage);
         }
         return perTick;
@@ -4210,7 +4360,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(xModeWindow == null){
                     try{ overlayModeContent.remove(); }catch(Throwable ignored){}
                     xModeWindow = xOverlayUi.registerWindow(
-                        "neon-sp-mode-window",
+                        "stealthpath-mode",
                         overlayModeContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowMode, true)
                     );
@@ -4220,7 +4370,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(xDamageWindow == null){
                     try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
                     xDamageWindow = xOverlayUi.registerWindow(
-                        "neon-sp-damage-window",
+                        "stealthpath-damage",
                         overlayDamageContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowDamage, true)
                     );
@@ -4230,7 +4380,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(xControlsWindow == null){
                     try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
                     xControlsWindow = xOverlayUi.registerWindow(
-                        "neon-sp-controls-window",
+                        "stealthpath-controls",
                         overlayControlsContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowControls, true)
                     );
@@ -4246,9 +4396,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         // Fallback: attach directly to HUD group (vanilla client, or OverlayUI unavailable).
-        syncFallbackHud(overlayModeContent, "neon-sp-mode-hud", 8f, -8f, enabled && showMode);
-        syncFallbackHud(overlayDamageContent, "neon-sp-damage-hud", 8f, -84f, enabled && showDamage);
-        syncFallbackHud(overlayControlsContent, "neon-sp-controls-hud", 8f, -152f, enabled && showControls);
+        syncFallbackHud(overlayModeContent, "sp-ov-mode", 8f, -8f, enabled && showMode);
+        syncFallbackHud(overlayDamageContent, "sp-ov-dmg", 8f, -84f, enabled && showDamage);
+        syncFallbackHud(overlayControlsContent, "sp-ov-ctl", 8f, -152f, enabled && showControls);
     }
 
     private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){
@@ -4277,24 +4427,24 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void buildOverlayWindows(){
-        // VSCode-like palette (Dark+).
-        Color bg = Color.valueOf("1e1e1e");
-        Color border = Color.valueOf("2d2d30");
-        Color fg = Color.valueOf("d4d4d4");
-        Color key = Color.valueOf("c586c0");   // keyword
-        Color type = Color.valueOf("4ec9b0");  // type
-        Color value = Color.valueOf("9cdcfe"); // variable
-        Color number = Color.valueOf("b5cea8"); // number
-        Color accent = Color.valueOf("569cd6"); // function-ish
-        Color warn = Color.valueOf("d7ba7d");
+        // Neon overlay theme shared across bundled windows.
+        Color bg = Color.valueOf("111821");
+        Color border = Color.valueOf("233246");
+        Color fg = Color.valueOf("d8e2ee");
+        Color key = Color.valueOf("79c7ff");
+        Color type = Color.valueOf("7dd9c4");
+        Color value = Color.valueOf("b8e5ff");
+        Color number = Color.valueOf("ffd58a");
+        Color accent = Color.valueOf("4ea8ff");
+        Color warn = Color.valueOf("ffb774");
 
         Drawable bgDraw = tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, bg);
         Drawable borderDraw = tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, border);
 
         arc.scene.ui.TextButton.TextButtonStyle btnStyle = new arc.scene.ui.TextButton.TextButtonStyle(Styles.flatt);
         btnStyle.up = borderDraw;
-        btnStyle.over = tintDrawable(Tex.whiteui == null ? borderDraw : Tex.whiteui, Color.valueOf("2a2d2e"));
-        btnStyle.down = tintDrawable(Tex.whiteui == null ? borderDraw : Tex.whiteui, Color.valueOf("094771"));
+        btnStyle.over = tintDrawable(Tex.whiteui == null ? borderDraw : Tex.whiteui, Color.valueOf("2c3e56"));
+        btnStyle.down = tintDrawable(Tex.whiteui == null ? borderDraw : Tex.whiteui, Color.valueOf("3f5f86"));
         btnStyle.fontColor = fg;
 
         // Window 1: mode + threat.

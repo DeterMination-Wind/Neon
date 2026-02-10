@@ -42,7 +42,7 @@ import static mindustry.Vars.ui;
 import static mindustry.Vars.world;
 
 public class BetterMiniMapFeature {
-    private static final String overlayName = "neon-bmm-overlay";
+    private static final String overlayName = "betterminimap-overlay";
 
     private static final String keyEnabled = "mmplus-enabled";
 

@@ -34,14 +34,11 @@ final class SubHeaderSetting extends SettingsMenuDialog.SettingsTable.Setting{
 
     @Override
     public void add(SettingsMenuDialog.SettingsTable table){
+        String text = titleKeyOrText.startsWith("@")
+            ? Core.bundle.get(titleKeyOrText.substring(1))
+            : titleKeyOrText;
         table.row();
-        table.table(Styles.black3, t -> {
-            t.left().margin(8f);
-            String text = titleKeyOrText.startsWith("@")
-                ? Core.bundle.get(titleKeyOrText.substring(1))
-                : titleKeyOrText;
-            t.add(text).color(Pal.accent).left().growX().minWidth(0f).wrap();
-        }).padTop(10f).left().growX();
+        table.add(text).color(Pal.accent).left().growX().minWidth(0f).wrap().padTop(10f).padBottom(2f);
         table.row();
     }
 }
@@ -56,25 +53,10 @@ final class AdvancedButtonSetting extends SettingsMenuDialog.SettingsTable.Setti
 
     @Override
     public void add(SettingsMenuDialog.SettingsTable table){
-        float prefWidth = RadialBuildMenuMod.prefWidth();
-        Table root = table.table(Tex.button, t -> {
-            t.left().margin(10f);
-            t.image(mindustry.gen.Icon.settings).size(20f).padRight(8f);
-            t.add(title, Styles.outlineLabel).left().growX().minWidth(0f).wrap();
+        TextButton button = table.button(title, mod::showAdvancedDialog).growX().margin(14f).pad(6f).get();
+        button.update(() -> button.setDisabled(!Core.settings.getBool(RadialBuildMenuMod.keyProMode, false)));
 
-            TextButton btn = t.button("@rbm.advanced.open", Styles.flatt, mod::showAdvancedDialog)
-                .width(190f)
-                .height(40f)
-                .padLeft(10f)
-                .get();
-
-            btn.update(() -> btn.setDisabled(
-                !Core.settings.getBool(RadialBuildMenuMod.keyProMode, false)
-                    && !Core.settings.getBool(RadialBuildMenuMod.keyToggleSlotGroupsEnabled, false)
-            ));
-        }).width(prefWidth).padTop(6f).get();
-
-        addDesc(root);
+        addDesc(button);
         table.row();
     }
 }

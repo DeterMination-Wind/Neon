@@ -1,45 +1,27 @@
-# 🧰 Neon 更新日志 / Release Notes
+# Neon v4.0.0 Release Notes
 
-## 🆕 v2.3.0
-- ⚡ Power Grid Minimap：合并 PGMM v1.13.1（包含 v1.13.0 的多人断电提醒设置，并修复构建依赖源）。
-- 🥷 StealthPath：合并本地最新更新（含自动模式寻路相关性能优化）。
-- 🧭 Radial Build Menu：合并本地最新更新（更新检测能力继续对齐最新实现）。
-- 🔒 submods lock 更新：同步 pgmm / sp / rbm 三个子模组当前本地 HEAD。
+## English
 
-## 🆕 v2.1.0
-- ⚡ Power Grid Minimap：合并 PGMM v1.10.0（新增高级设置「忽略面积小于 X 的电网」，用于过滤小电网显示）。
-- 🧩 StealthPath：合并 v4.2.0（更新检测弹窗增强）。
-- 🧩 Radial Build Menu：合并 v5.2.0（更新检测弹窗增强）。
-- 🔔 整合包更新检测弹窗增强：展示 assets、镜像下载开关、下载并自动安装重启（桌面端）。
+- Added `betterMapEditor` and `BetterProjectorOverlay` into Neon.
+- Synced latest local heads from:
+  - `Power-Grid-Minimap-repo-clone`
+  - `Radial-Build-Menu-hud-`
+  - `ServerPlayerDataBase`
+  - `StealthPath`
+  - `betterMiniMap`
+- Unified settings naming style to current `betterMiniMap` conventions.
+- Updated OverlayUI window display names to localized Chinese labels and aligned overlay color language.
+- Refreshed docs (`README.md`, `CHANGELOG.md`) for the 7-module bundle.
 
-## 🆕 本次版本（持续维护）
-- ✅ 这个文件会作为每次 GitHub Release 的说明文本。
-- 📝 需要写“本次新增/修复”时，直接在这里追加即可（保留下面的“功能总览”）。
+## 中文
 
-## ✨ 功能总览（历史累计）
-Neon 是一个整合包（Java Mod），将以下 3 个模块合并为一个安装包：
-
-### ⚡ Power Grid Minimap（电网小地图）
-- 🗺️ 在小地图/大地图上为每个独立电网着色，并显示电力盈亏信息。
-- 🚨 电网断开提示与重连引导（减少“找不到断点”的时间）。
-- ⚙️ 相关显示与刷新参数可在设置中调整。
-
-### 🥷 StealthPath（偷袭小道）
-- 🗺️ 路径叠加显示：按键计算并绘制路线（线宽/透明度/时长可调）。
-- ⚔️ 威胁计算：炮塔/单位射程 + 估算 DPS → 威胁地图 → 预计受伤。
-- 🧠 寻路策略：0 受伤优先、最小受伤、最近路径；可选 A* / DFS。
-- 🎯 多目标核心预览：核心模式支持最近 K 个核心同时规划。
-- 🤖 自动模式（单位集群）+ RTS 自动移动：支持分拆计算到 Tick，路点上限/更新间隔/指令间隔等参数。
-- 🪟 OverlayUI 窗口：与 MindustryX OverlayUI 兼容（或回退 HUD）。
-- 🛡️ 绕开无敌盾范围：将 `shield-projector` / `large-shield-projector` 盾域视作不可通行。
-
-### 🧭 Radial Build Menu（圆盘快捷建造）
-- 🎛️ 长按热键在鼠标周围弹出圆盘 HUD，松开即切换建造方块。
-- 🧩 支持多个槽位、导入导出、HUD 尺寸/透明度/颜色等可调。
-- 🧠 MindustryX 风格设置菜单体验。
-
-## 🔔 启动检测更新（整合包）
-- 🌐 开启游戏后检查 GitHub Releases 最新版本，发现更新会弹窗提示并支持一键跳转/忽略该版本。
-
-## 🔗 链接
-- GitHub Releases：https://github.com/DeterMination-Wind/Neon/releases
+- 新增整合 `betterMapEditor` 与 `BetterProjectorOverlay`。
+- 同步以下模块到本地最新版本：
+  - `Power-Grid-Minimap-repo-clone`
+  - `Radial-Build-Menu-hud-`
+  - `ServerPlayerDataBase`
+  - `StealthPath`
+  - `betterMiniMap`
+- 设置项命名风格统一为当前 `betterMiniMap` 风格。
+- OverlayUI 窗口显示名改为中文，并统一窗口配色设计语言。
+- 更新文档（`README.md`、`CHANGELOG.md`），覆盖七合一整合说明。

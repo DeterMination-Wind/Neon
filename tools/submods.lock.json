@@ -1,17 +1,17 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-02-09T12:40:09Z",
+  "generatedAtUtc": "2026-02-10T07:14:34Z",
   "mods": {
     "pgmm": {
-      "head": "6647d9a8bea5c43fd603174f1036635dab8acfad",
+      "head": "935350e56dbc67dd599e2ffac7b26df23aa95e75",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Power-Grid-Minimap-repo-clone"
     },
     "sp": {
-      "head": "6eba5eccf44f8612a22223e0588e83734507d854",
+      "head": "1af12bb632e8d2640681e407265d982672c1f4bd",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\StealthPath"
     },
     "rbm": {
-      "head": "3dd253d11a2f5541630fde5489fdc56ac5a6cbf7",
+      "head": "c7b10a6dd4c4f8d69287d585510791f5ebad7021",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Radial-Build-Menu-hud-"
     },
     "bmm": {
@@ -21,6 +21,14 @@
     "spdb": {
       "head": "nogit-5fa0878cbc8b716471d406167b940c09cf013378",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\ServerPlayerDataBase"
+    },
+    "bme": {
+      "head": "e72eb1040ba8f68c730cb26585ea8c0ca81e7e7a",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterMapEditor"
+    },
+    "bpo": {
+      "head": "dbabc4bbec47642ab5e7e98230205e21b0185bc8",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterProjectorOverlay"
     }
   }
 }

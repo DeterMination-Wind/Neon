@@ -4,7 +4,9 @@ import arc.Core;
 import arc.Events;
 import arc.files.Fi;
 import arc.func.Prov;
+import arc.graphics.Color;
 import arc.scene.Element;
+import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntMap;
@@ -30,6 +32,7 @@ import mindustry.gen.Call;
 import mindustry.gen.Groups;
 import mindustry.gen.Icon;
 import mindustry.gen.Player;
+import mindustry.gen.Tex;
 import mindustry.mod.Mod;
 import mindustry.net.Administration.TraceInfo;
 import mindustry.net.Packets.AdminAction;
@@ -736,7 +739,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             overlayQueryContent = new OverlayQueryContent();
         }
         if(overlayQueryWindow == null){
-            overlayQueryWindow = overlayUI.registerWindow("neon-spdb-query-window", overlayQueryContent.root, () -> Vars.state.isGame());
+            overlayQueryWindow = overlayUI.registerWindow("玩家数据库 / DB Query", overlayQueryContent.root, () -> Vars.state.isGame());
             overlayUI.tryConfigureWindow(overlayQueryWindow, false, true);
             overlayUI.setEnabledAndPinned(overlayQueryWindow, true, false);
         }
@@ -745,7 +748,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             debugContent = new DebugContent();
         }
         if(overlayDebugWindow == null){
-            overlayDebugWindow = overlayUI.registerWindow("neon-spdb-debug-window", debugContent.root, () -> Vars.state.isGame());
+            overlayDebugWindow = overlayUI.registerWindow("解析调试 / Parser Debug", debugContent.root, () -> Vars.state.isGame());
             overlayUI.tryConfigureWindow(overlayDebugWindow, false, true);
             overlayUI.setEnabledAndPinned(overlayDebugWindow, false, false);
         }
@@ -2024,12 +2027,14 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         private void build(){
             root.clear();
+            root.background(overlayWindowBackground());
+            root.margin(8f);
             root.top().left().defaults().left().pad(4f);
             boolean compact = compactUi();
 
-            root.table(Styles.black3, t -> {
+            root.table(overlayCardBackground(), t -> {
                 t.left().defaults().left().pad(4f);
-                t.add("[accent]SPDB 轻量查询[]").left().growX().row();
+                t.add("SPDB 轻量查询").color(overlayAccentColor()).left().growX().row();
 
                 t.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
@@ -2097,7 +2102,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     "IP: " + (rec.ips.isEmpty() ? "(none)" : rec.ips.peek()) + (geo == null || geo.isEmpty() ? "" : " (" + geo + ")") + "\n" +
                     "Last: " + formatTime(rec.lastSeen);
 
-                result.table(Styles.black3, row -> {
+                result.table(overlayCardAltBackground(), row -> {
                     row.left().defaults().left().pad(4f);
                     row.add(escapeMarkup(text)).growX().left().wrap();
                 }).growX().padTop(3f).row();
@@ -2131,7 +2136,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     "PID: " + rec.pid + "\n" +
                     "Last: " + formatTime(rec.lastSeen);
 
-                result.table(Styles.black3, row -> {
+                result.table(overlayCardAltBackground(), row -> {
                     row.left().defaults().left().pad(4f);
                     row.add(escapeMarkup(text)).growX().left().wrap();
                 }).growX().padTop(3f).row();
@@ -2161,14 +2166,16 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         private void build(){
             root.clear();
+            root.background(overlayWindowBackground());
+            root.margin(8f);
             root.top().left();
             root.defaults().left().pad(4f);
             boolean compact = compactUi();
 
-            root.table(Styles.black3, top -> {
+            root.table(overlayCardBackground(), top -> {
                 top.left().defaults().pad(6f).height(40f).growX();
                 if(compact){
-                    top.add("[accent]SPDB 调试面板[]  最近 UID 解析记录").left().growX().wrap().row();
+                    top.add("SPDB 调试面板  最近 UID 解析记录").color(overlayAccentColor()).left().growX().wrap().row();
                     top.button("刷新", this::refresh).height(36f).growX().row();
                     top.table(btns -> {
                         btns.left().defaults().padRight(6f).growX();
@@ -2179,7 +2186,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                         btns.button("复制", this::copyAll).height(36f).growX();
                     }).growX();
                 }else{
-                    top.add("[accent]SPDB 调试面板[]  最近 UID 解析记录").left().growX();
+                    top.add("SPDB 调试面板  最近 UID 解析记录").color(overlayAccentColor()).left().growX();
                     top.button("刷新", this::refresh).height(36f);
                     top.button("清空", () -> {
                         debugLines.clear();
@@ -2189,7 +2196,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 }
             }).growX().row();
 
-            root.table(Styles.black3, parser -> {
+            root.table(overlayCardBackground(), parser -> {
                 parser.left().top().defaults().left().pad(4f).growX();
                 parser.add("聊天行解析回放（粘贴原始聊天行，实时看 name/uid/message）").left().row();
                 if(compact){
@@ -2240,7 +2247,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             }
 
             for(String line : debugLines){
-                lines.table(Styles.black3, row -> {
+                lines.table(overlayCardAltBackground(), row -> {
                     row.left().defaults().left().pad(4f);
                     row.add(escapeMarkup(line)).growX().left().wrap();
                 }).growX().padTop(2f).row();
@@ -2312,6 +2319,30 @@ public class ServerPlayerDataBaseMod extends Mod{
         public float getPrefHeight(){
             return getHeight();
         }
+    }
+
+    private static Color overlayAccentColor(){
+        return Color.valueOf("4ea8ff");
+    }
+
+    private static Drawable overlayWindowBackground(){
+        return tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, Color.valueOf("111821"));
+    }
+
+    private static Drawable overlayCardBackground(){
+        return tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, Color.valueOf("233246"));
+    }
+
+    private static Drawable overlayCardAltBackground(){
+        return tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, Color.valueOf("2c3e56"));
+    }
+
+    private static Drawable tintDrawable(Drawable base, Color tint){
+        if(base == null || tint == null) return base;
+        if(base instanceof arc.scene.style.TextureRegionDrawable){
+            return ((arc.scene.style.TextureRegionDrawable)base).tint(tint);
+        }
+        return base;
     }
 
     private void copy(String value){

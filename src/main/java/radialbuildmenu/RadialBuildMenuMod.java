@@ -62,9 +62,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     public static boolean bekBundled = false;
 
 
-    private static final String overlayName = "neon-rbm-overlay";
-    private static final String mobileToggleName = "neon-rbm-mobile-toggle";
-    private static final String mobileWindowName = "neon-rbm-mobile-window";
+    private static final String overlayName = "rbm-overlay";
+    private static final String mobileToggleName = "rbm-mobile-toggle";
+    private static final String mobileWindowName = "rbm-mobile";
 
     private static final int slotsPerRing = 8;
     private static final int maxSlots = 16;
@@ -230,40 +230,34 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
             boolean toggleEnabled = Core.settings.getBool(keyToggleSlotGroupsEnabled, false);
 
-            table.pref(new IconCheckSetting(keyEnabled, true, mindustry.gen.Icon.hammer));
+            table.checkPref(keyEnabled, true);
             table.pref(new HotkeySetting());
 
-            table.pref(new HeaderSetting(Core.bundle.get("rbm.section.slotgroups"), mindustry.gen.Icon.refresh));
-            table.pref(new IconCheckSetting(keyToggleSlotGroupsEnabled, false, mindustry.gen.Icon.refresh));
+            table.checkPref(keyToggleSlotGroupsEnabled, false);
             table.pref(new ToggleSlotGroupHotkeySetting());
             table.pref(new SlotGroupsButtonSetting(RadialBuildMenuMod.this));
 
-            table.pref(new HeaderSetting(Core.bundle.get("rbm.section.appearance"), mindustry.gen.Icon.pencil));
-            table.pref(new IconSliderSetting(keyHudScale, 100, 50, 200, 5, mindustry.gen.Icon.resizeSmall, v -> v + "%"));
-            table.pref(new IconSliderSetting(keyHudAlpha, 100, 0, 100, 5, mindustry.gen.Icon.eye, v -> v + "%"));
-            table.pref(new IconSliderSetting(keyInnerRadius, 80, 40, 200, 5, mindustry.gen.Icon.move, v -> v + "px"));
-            table.pref(new IconSliderSetting(keyOuterRadius, 140, 60, 360, 5, mindustry.gen.Icon.move, v -> v + "px"));
+            table.sliderPref(keyHudScale, 100, 50, 200, 5, v -> v + "%");
+            table.sliderPref(keyHudAlpha, 100, 0, 100, 5, v -> v + "%");
+            table.sliderPref(keyInnerRadius, 80, 40, 200, 5, v -> v + "px");
+            table.sliderPref(keyOuterRadius, 140, 60, 360, 5, v -> v + "px");
             table.pref(new HudColorSetting());
-            table.pref(new IconCheckSetting(keyCenterScreen, false, mindustry.gen.Icon.move));
-            table.pref(new IconCheckSetting(keyShowEmptySlots, false, mindustry.gen.Icon.list));
-            table.pref(new IconCheckSetting(keyProMode, false, mindustry.gen.Icon.settings));
+            table.checkPref(keyCenterScreen, false);
+            table.checkPref(keyShowEmptySlots, false);
+            table.checkPref(keyProMode, false);
             table.pref(new AdvancedButtonSetting(RadialBuildMenuMod.this));
 
             if(!toggleEnabled){
-                table.pref(new HeaderSetting(Core.bundle.get("rbm.section.base"), mindustry.gen.Icon.list));
                 for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keySlotPrefix, "rbm.setting.slot"));
 
-                table.pref(new HeaderSetting(Core.bundle.get("rbm.section.time"), mindustry.gen.Icon.refresh));
                 table.pref(new TimeMinutesSetting());
                 for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keyTimeSlotPrefix, "rbm.setting.timeslot"));
             }
 
-            table.pref(new HeaderSetting(Core.bundle.get("rbm.section.io"), mindustry.gen.Icon.info));
             table.pref(new IoSetting());
 
-            table.pref(new HeaderSetting(Core.bundle.get("rbm.section.update", "Update"), mindustry.gen.Icon.refresh));
-            table.pref(new IconCheckSetting(GithubUpdateCheck.enabledKey(), true, mindustry.gen.Icon.refresh));
-            table.pref(new IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, mindustry.gen.Icon.info));
+            table.checkPref(GithubUpdateCheck.enabledKey(), true);
+            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
         
     }
 
@@ -295,18 +289,12 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         SettingsMenuDialog.SettingsTable adv = new SettingsMenuDialog.SettingsTable();
 
-        adv.pref(new HeaderSetting(Core.bundle.get("rbm.advanced.section.slotgroups"), mindustry.gen.Icon.refresh));
-        adv.pref(new SubHeaderSetting("@rbm.slotgroup.a"));
-        for(int i = 0; i < maxSlots; i++) adv.pref(new SlotSetting(i, keyToggleSlotGroupASlotPrefix, "rbm.setting.slot"));
-        adv.pref(new SubHeaderSetting("@rbm.slotgroup.b"));
-        for(int i = 0; i < maxSlots; i++) adv.pref(new SlotSetting(i, keyToggleSlotGroupBSlotPrefix, "rbm.setting.slot"));
-
         adv.pref(new CollapsiblePlanetSetting(
             Core.bundle.get("rbm.advanced.planet.erekir"),
             mindustry.gen.Icon.modeAttack,
             "rbm-adv-erekir-open",
             t -> {
-                t.pref(new IconCheckSetting(keyPlanetErekirEnabled, true, mindustry.gen.Icon.modeAttack));
+                t.checkPref(keyPlanetErekirEnabled, true);
                 t.pref(new SubHeaderSetting("@rbm.advanced.initial"));
                 for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyPlanetErekirSlotPrefix, "rbm.setting.slot"));
                 t.pref(new SubHeaderSetting("@rbm.advanced.time"));
@@ -320,7 +308,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             mindustry.gen.Icon.modeAttack,
             "rbm-adv-serpulo-open",
             t -> {
-                t.pref(new IconCheckSetting(keyPlanetSerpuloEnabled, true, mindustry.gen.Icon.modeAttack));
+                t.checkPref(keyPlanetSerpuloEnabled, true);
                 t.pref(new SubHeaderSetting("@rbm.advanced.initial"));
                 for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyPlanetSerpuloSlotPrefix, "rbm.setting.slot"));
                 t.pref(new SubHeaderSetting("@rbm.advanced.time"));
@@ -334,7 +322,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             mindustry.gen.Icon.modeAttack,
             "rbm-adv-sun-open",
             t -> {
-                t.pref(new IconCheckSetting(keyPlanetSunEnabled, true, mindustry.gen.Icon.modeAttack));
+                t.checkPref(keyPlanetSunEnabled, true);
                 t.pref(new SubHeaderSetting("@rbm.advanced.initial"));
                 for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyPlanetSunSlotPrefix, "rbm.setting.slot"));
                 t.pref(new SubHeaderSetting("@rbm.advanced.time"));
@@ -343,21 +331,16 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             this::readHudColor
         ));
 
-        adv.pref(new HeaderSetting(Core.bundle.get("rbm.advanced.section.appearance"), mindustry.gen.Icon.pencil));
-        adv.pref(new WideSliderSetting(keyIconScale, 100, 50, 200, 5, v -> v + "%"));
-        adv.pref(new WideSliderSetting(keyBackStrength, 22, 0, 60, 2, v -> v + "%"));
-        adv.pref(new WideSliderSetting(keyRingAlpha, 65, 0, 100, 5, v -> v + "%"));
-        adv.pref(new WideSliderSetting(keyRingStroke, 2, 1, 6, 1, v -> v + "px"));
+        adv.sliderPref(keyIconScale, 100, 50, 200, 5, v -> v + "%");
+        adv.sliderPref(keyBackStrength, 22, 0, 60, 2, v -> v + "%");
+        adv.sliderPref(keyRingAlpha, 65, 0, 100, 5, v -> v + "%");
+        adv.sliderPref(keyRingStroke, 2, 1, 6, 1, v -> v + "px");
 
-        adv.pref(new HeaderSetting(Core.bundle.get("rbm.advanced.section.interaction"), mindustry.gen.Icon.modeAttack));
-        adv.pref(new IconCheckSetting(keyDirectionSelect, true, mindustry.gen.Icon.modeAttack));
-        adv.pref(new WideSliderSetting(keyDeadzoneScale, 35, 0, 100, 5, v -> v + "%"));
-        adv.pref(new WideSliderSetting(keyHoverPadding, 12, 0, 30, 1, v -> v + "px"));
+        adv.checkPref(keyDirectionSelect, true);
+        adv.sliderPref(keyDeadzoneScale, 35, 0, 100, 5, v -> v + "%");
+        adv.sliderPref(keyHoverPadding, 12, 0, 30, 1, v -> v + "px");
+        adv.sliderPref(keyHoverUpdateFrames, 0, 0, 10, 1, v -> v == 0 ? Core.bundle.get("rbm.advanced.everyframe") : v + "f");
 
-        adv.pref(new HeaderSetting(Core.bundle.get("rbm.advanced.section.performance"), mindustry.gen.Icon.info));
-        adv.pref(new WideSliderSetting(keyHoverUpdateFrames, 0, 0, 10, 1, v -> v == 0 ? Core.bundle.get("rbm.advanced.everyframe") : v + "f"));
-
-        adv.pref(new HeaderSetting(Core.bundle.get("rbm.advanced.section.cond"), mindustry.gen.Icon.logic));
         adv.pref(new ConditionalSwitchSetting(this));
 
         ScrollPane pane = new ScrollPane(adv);

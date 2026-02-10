@@ -85,9 +85,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     public static boolean bekBundled = false;
 
 
-    private static final String overlayName = "neon-pgmm-minimap-overlay";
-    private static final String mi2OverlayName = "neon-pgmm-mi2-overlay";
-    private static final String powerTableName = "neon-pgmm-power-table";
+    private static final String overlayName = "pgmm-overlay";
+    private static final String mi2OverlayName = "pgmm-overlay-mi2-minimap";
+    private static final String powerTableName = "pgmm-power-table";
 
     private static final String keyEnabled = "pgmm-enabled";
     private static final String keyGridAlpha = "pgmm-gridalpha";
@@ -3365,11 +3365,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         void update(){
-            if(!Core.settings.getBool(keyRescueEnabled, false)){
-                rescueAlert.clear();
-                reset();
-                return;
-            }
             if(Time.time < nextScan) return;
             if(!state.isGame() || world == null || world.isGenerating() || player == null){
                 rescueAlert.clear();
@@ -3386,10 +3381,19 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 negativeSince.clear();
                 balanceWindows.clear();
                 minBalanceById.clear();
+                currentIds.clear();
                 return;
             }
 
             updateMinHistory(scanInterval);
+
+            boolean rescueEnabled = Core.settings.getBool(keyRescueEnabled, false);
+            if(!rescueEnabled){
+                rescueAlert.clear();
+                negativeSince.clear();
+                lastGraphId = -1;
+                return;
+            }
 
             int activeId = rescueAlert.getGraphId();
             if(activeId != -1){
@@ -3400,13 +3404,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     lastGraphId = -1;
                     negativeSince.remove(activeId);
                 }
-            }
-
-            if(!Core.settings.getBool(keyRescueEnabled, false)){
-                rescueAlert.clear();
-                negativeSince.clear();
-                lastGraphId = -1;
-                return;
             }
 
             //track negative duration per graph, pick the worst sustained graph

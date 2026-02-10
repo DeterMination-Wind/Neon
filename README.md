@@ -7,17 +7,19 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 5 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 7 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
 - Radial Build Menu（圆盘快捷建造）
 - betterMiniMap（增强小地图单位/建筑显示）
 - ServerPlayerDataBase（玩家数据库 / 聊天记录查询）
+- betterMapEditor（地图编辑增强）
+- Better Projector Overlay（超速投影叠加）
 
-如果你只想安装一次、一次性获得这五类常用“信息叠加 + 操作效率 + 数据查询”功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这七类常用“信息叠加 + 操作效率 + 数据查询”功能，Neon 会更省事。
 
-提示：Neon 已包含上述 5 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 7 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -55,6 +57,16 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 5 �
 - 可选记录聊天日志，支持导入/导出、完整性校验与异常提示。
 - 在支持 MindustryX OverlayUI 时提供查询/调试窗口；无 OverlayUI 时回退到普通对话框。
 
+#### 6) 地图编辑增强（betterMapEditor）
+
+- 在地图生成器预览里直接拖动镜像轴，快速微调对称地图。
+- 同步替换镜像滤镜为可拖动实现，不改变你已有的生成器流程。
+
+#### 7) 投影叠加（Better Projector Overlay）
+
+- 手持超速投影时显示“放下后电网正/负”预判圈与实时数值提示。
+- 自动扫描并标记被高布/穹顶覆盖的普通超速，支持可选聊天提醒。
+
 ### 快速上手
 
 1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
@@ -71,6 +83,8 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 5 �
 - 圆盘快捷建造（Radial Build Menu）
 - betterMiniMap
 - 玩家数据库（ServerPlayerDataBase）
+- 地图编辑增强（betterMapEditor）
+- 投影叠加（Better Projector Overlay）
 
 ### 多人游戏
 
@@ -110,15 +124,17 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles five popular QoL modules into a single install:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles seven popular QoL modules into a single install:
 
 - Power Grid Minimap
 - Stealth Path
 - Radial Build Menu
 - betterMiniMap
 - Server Player DataBase
+- betterMapEditor
+- Better Projector Overlay
 
-If you prefer installing once and getting all five “overlay + workflow + data tooling” features together, Neon is the convenient option.
+If you prefer installing once and getting all seven “overlay + workflow + data tooling” features together, Neon is the convenient option.
 
 Note: since Neon already includes these modules, you should avoid enabling the standalone versions at the same time to prevent duplicated UI or conflicts.
 
@@ -158,6 +174,16 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - Optional chat logging with import/export and integrity verification.
 - Uses MindustryX OverlayUI query/debug windows when available, with fallback dialogs on vanilla clients.
 
+#### 6) betterMapEditor
+
+- Lets you drag the mirror symmetry axis directly inside the map generator preview.
+- Replaces the mirror filter with a draggable variant while keeping existing generator workflows intact.
+
+#### 7) Better Projector Overlay
+
+- Shows placement-time positive/negative power prediction when holding an overdrive projector.
+- Scans and marks risky overdrive projectors that should be removed, with optional chat alerts.
+
 ### Quick Start
 
 1) Install: put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
@@ -174,6 +200,8 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - Radial Build Menu
 - betterMiniMap
 - Server Player DataBase
+- betterMapEditor
+- Better Projector Overlay
 
 ### Multiplayer
 

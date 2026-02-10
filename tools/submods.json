@@ -41,6 +41,27 @@
       "mainClassFile": "ServerPlayerDataBaseMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "allowNoGit": true
+    },
+    {
+      "id": "bme",
+      "name": "betterMapEditor",
+      "localPath": "../betterMapEditor",
+      "javaPackageDir": "src/main/java/bettermapeditor",
+      "extraJavaDirs": [
+        "src/main/java/mindustry/maps/filters"
+      ],
+      "mainClassFile": "BetterMapEditorMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "bpo",
+      "name": "BetterProjectorOverlay",
+      "localPath": "../BetterProjectorOverlay",
+      "javaPackageDir": "src/main/java/betterprojectoroverlay",
+      "mainClassFile": "BetterProjectorOverlayMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
     }
   ]
 }

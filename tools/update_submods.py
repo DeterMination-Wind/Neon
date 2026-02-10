@@ -27,6 +27,7 @@ class SubMod:
     name: str
     local_path: Path
     java_package_dir: Path
+    extra_java_dirs: List[Path]
     main_class_file: str
     bundles_dir: Path
     inject_bek_hooks: bool = True
@@ -62,6 +63,7 @@ def load_config() -> List[SubMod]:
                 name=m["name"],
                 local_path=(ROOT / local_path).resolve(),
                 java_package_dir=ROOT / m["javaPackageDir"],
+                extra_java_dirs=[ROOT / p for p in m.get("extraJavaDirs", [])],
                 main_class_file=m["mainClassFile"],
                 bundles_dir=ROOT / m["bundlesDir"],
                 inject_bek_hooks=bool(m.get("injectBekHooks", True)),
@@ -389,8 +391,9 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
         if bek_extra.exists():
             extra = parse_properties(read_text(bek_extra))
             for k, v in extra.items():
-                if k in merged and merged[k] != v:
-                    raise RuntimeError(f"Bundle merge collision for {name}: BEK key '{k}' conflicts with upstream.")
+                # BEK-local bundle entries are treated as explicit overrides.
+                # This keeps Neon naming/style decisions deterministic even when
+                # upstream modules change their own translations.
                 merged[k] = v
                 origins[k] = "bek"
 
@@ -405,27 +408,33 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
 
 
 def copy_java(mod: SubMod, repo_dir: Path) -> None:
-    upstream_pkg_dir = repo_dir / mod.java_package_dir.relative_to(ROOT)
-    if not upstream_pkg_dir.exists():
-        raise FileNotFoundError(f"Upstream java dir not found: {upstream_pkg_dir}")
+    target_dirs = [mod.java_package_dir] + list(mod.extra_java_dirs)
 
-    target_pkg_dir = mod.java_package_dir
-    target_pkg_dir.mkdir(parents=True, exist_ok=True)
+    for target_pkg_dir in target_dirs:
+        upstream_pkg_dir = repo_dir / target_pkg_dir.relative_to(ROOT)
+        if not upstream_pkg_dir.exists():
+            raise FileNotFoundError(f"Upstream java dir not found: {upstream_pkg_dir}")
 
-    # Clear existing .java files in target package to avoid stale leftovers.
-    for p in target_pkg_dir.rglob("*.java"):
-        try:
-            p.unlink()
-        except OSError:
-            pass
+        target_pkg_dir.mkdir(parents=True, exist_ok=True)
 
-    for src_path in upstream_pkg_dir.rglob("*.java"):
-        rel = src_path.relative_to(upstream_pkg_dir)
-        dst_path = target_pkg_dir / rel
-        text = read_text(src_path)
-        if mod.inject_bek_hooks and src_path.name == mod.main_class_file:
-            text = inject_bek_hooks(mod.id, text)
-        write_text(dst_path, text)
+        # Clear existing .java files in target package to avoid stale leftovers.
+        for p in target_pkg_dir.rglob("*.java"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+        for src_path in upstream_pkg_dir.rglob("*.java"):
+            rel = src_path.relative_to(upstream_pkg_dir)
+            dst_path = target_pkg_dir / rel
+            text = read_text(src_path)
+            if (
+                mod.inject_bek_hooks
+                and target_pkg_dir == mod.java_package_dir
+                and src_path.name == mod.main_class_file
+            ):
+                text = inject_bek_hooks(mod.id, text)
+            write_text(dst_path, text)
 
 
 def main(argv: List[str]) -> int:
@@ -475,6 +484,8 @@ def main(argv: List[str]) -> int:
     print("Wrote:")
     for sm in mods:
         print(f"  - {sm.java_package_dir.as_posix()}/ (java package)")
+        for extra in sm.extra_java_dirs:
+            print(f"  - {extra.as_posix()}/ (java package)")
     print(f"  - {Path('src/main/resources/bundles').as_posix()} (merged)")
     print(f"  - {LOCK_PATH.relative_to(ROOT).as_posix()} (lock)")
 

@@ -1,27 +1,17 @@
-# Neon v4.0.0 Release Notes
+# Neon v4.0.1 Release Notes
 
 ## English
 
-- Added `betterMapEditor` and `BetterProjectorOverlay` into Neon.
-- Synced latest local heads from:
-  - `Power-Grid-Minimap-repo-clone`
-  - `Radial-Build-Menu-hud-`
-  - `ServerPlayerDataBase`
-  - `StealthPath`
-  - `betterMiniMap`
-- Unified settings naming style to current `betterMiniMap` conventions.
-- Updated OverlayUI window display names to localized Chinese labels and aligned overlay color language.
-- Refreshed docs (`README.md`, `CHANGELOG.md`) for the 7-module bundle.
+- Rewrote Neon settings UI to a unified VSCode-inspired style across bundled setting widgets.
+- Removed emoji/icon-style prefixes from bundled setting text and chat hints.
+- Disabled bundled sub-mod update popups; only Neon update prompt remains.
+- Renamed all OverlayUI window titles to Chinese.
+- Revalidated desktop/Android build outputs after the UI rewrite.
 
 ## 中文
 
-- 新增整合 `betterMapEditor` 与 `BetterProjectorOverlay`。
-- 同步以下模块到本地最新版本：
-  - `Power-Grid-Minimap-repo-clone`
-  - `Radial-Build-Menu-hud-`
-  - `ServerPlayerDataBase`
-  - `StealthPath`
-  - `betterMiniMap`
-- 设置项命名风格统一为当前 `betterMiniMap` 风格。
-- OverlayUI 窗口显示名改为中文，并统一窗口配色设计语言。
-- 更新文档（`README.md`、`CHANGELOG.md`），覆盖七合一整合说明。
+- 重写 Neon 设置界面为统一 VSCode 风格（覆盖整合模块设置控件）。
+- 去除整合模块设置文本与聊天提示中的 emoji/图标前缀。
+- 关闭被整合子模组更新弹窗，仅保留 Neon 本体更新提示。
+- OverlayUI 全部窗口标题统一改为中文。
+- 完成样式重写后的桌面/安卓打包验证。

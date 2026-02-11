@@ -85,21 +85,22 @@ public final class RbmStyle{
         public void add(SettingsMenuDialog.SettingsTable table){
             float width = prefWidth();
             table.row();
-            // Match MindustryX SettingsV2 category style: centered accent title + accent divider line.
             table.table(t -> {
                 t.center();
                 t.table(inner -> {
+                    inner.background(VscodeSettingsStyle.headerBackground());
+                    inner.margin(8f);
                     inner.center();
                     if(icon != null){
                         Image ic = inner.image(icon).size(20f).padRight(8f).get();
                         ic.setScaling(Scaling.fit);
-                        ic.update(() -> ic.setColor(Pal.accent));
+                        ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
                     }
-                    inner.add(title).color(Pal.accent).center().growX().minWidth(0f).wrap();
+                    inner.add(title).color(VscodeSettingsStyle.accentColor()).center().growX().minWidth(0f).wrap();
                 }).growX();
             }).width(width).padTop(12f).padBottom(6f).left();
             table.row();
-            table.image(Tex.whiteui).color(Pal.accent).height(3f).width(width).padBottom(10f).left();
+            table.image(Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).width(width).padBottom(10f).left();
             table.row();
         }
     }
@@ -116,7 +117,7 @@ public final class RbmStyle{
         public void add(SettingsMenuDialog.SettingsTable table){
             table.row();
             table.add(titleKeyOrText.startsWith("@") ? Core.bundle.get(titleKeyOrText.substring(1)) : titleKeyOrText)
-                .color(Color.lightGray)
+                .color(VscodeSettingsStyle.mutedColor())
                 .padTop(6f)
                 .padBottom(4f)
                 .left()

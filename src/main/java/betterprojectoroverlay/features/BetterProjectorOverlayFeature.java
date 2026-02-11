@@ -411,7 +411,7 @@ public class BetterProjectorOverlayFeature {
         if (!chatEnabled) return;
         if (player == null || state == null || !state.isGame()) return;
 
-        String prefix = Core.bundle.get("bpo.chat.remove", "<BPO><Need remove overdrive>");
+        String prefix = Core.bundle.get("bpo.chat.remove", "<BPO><Need remove overdrive>");
         String message = prefix + "(" + tileX + "," + tileY + ")";
 
         if (net != null && net.active()) {

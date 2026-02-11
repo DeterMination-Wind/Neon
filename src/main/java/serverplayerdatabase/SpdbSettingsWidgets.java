@@ -5,8 +5,8 @@ import arc.func.Cons;
 import arc.scene.style.Drawable;
 import arc.scene.ui.CheckBox;
 import arc.scene.ui.TextButton;
+import bektools.ui.VscodeSettingsStyle;
 import mindustry.gen.Tex;
-import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
@@ -31,12 +31,12 @@ final class SpdbSettingsWidgets{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             table.row();
-            table.table(Styles.black3, t -> {
+            table.table(VscodeSettingsStyle.headerBackground(), t -> {
                 t.left().margin(8f);
                 if(icon != null){
                     t.image(icon).size(18f).padRight(6f);
                 }
-                t.add(header).color(Pal.accent).left().growX().wrap();
+                t.add(header).color(VscodeSettingsStyle.accentColor()).left().growX().wrap();
             }).padTop(10f).left().growX();
             table.row();
         }
@@ -66,7 +66,7 @@ final class SpdbSettingsWidgets{
                 if(changed != null) changed.get(box.isChecked());
             });
 
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
                 if(icon != null) t.image(icon).size(20f).padRight(8f);
                 t.add(box).left().growX().minWidth(0f);
@@ -91,7 +91,7 @@ final class SpdbSettingsWidgets{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 TextButton button = new TextButton(buttonText, icon == null ? Styles.defaultt : Styles.defaultt);

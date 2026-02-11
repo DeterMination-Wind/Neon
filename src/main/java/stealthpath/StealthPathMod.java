@@ -31,6 +31,7 @@ import arc.util.Align;
 import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
+import bektools.ui.VscodeSettingsStyle;
 import mindustry.game.EventType.*;
 import mindustry.game.Team;
 import mindustry.ai.UnitCommand;
@@ -301,7 +302,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             refreshMousePathColor();
             refreshAutoColors();
             registerTriggers();
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
             // Try to attach OverlayUI windows (safe in vanilla; will fall back to HUD).
             Time.runTask(1f, this::ensureOverlayWindowsAttached);
         });
@@ -651,9 +652,11 @@ public class StealthPathMod extends mindustry.mod.Mod{
             addTargetRow(table);
             table.pref(new IconSliderSetting(keyCoreTargetCount, 1, 1, 12, 1, null, v -> String.valueOf(v), null));
 
-            table.pref(new HeaderSetting("@sp.section.update", null));
-            table.pref(new IconCheckSetting(GithubUpdateCheck.enabledKey(), true, null, null));
-            table.pref(new IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, null, null));
+            if(!bekBundled){
+                table.pref(new HeaderSetting("@sp.section.update", null));
+                table.pref(new IconCheckSetting(GithubUpdateCheck.enabledKey(), true, null, null));
+                table.pref(new IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, null, null));
+            }
 
             // Inline advanced settings (MindustryX-like: one screen; Pro Mode expands a collapsible section).
             table.pref(new HeaderSetting("@sp.setting.advanced.menu", null));
@@ -735,7 +738,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void addThreatModeRow(Table table){
-        table.table(Tex.button, t -> {
+        table.table(VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.threat.mode").left().width(170f);
 
@@ -764,7 +767,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void addTargetRow(Table table){
-        table.table(Tex.button, t -> {
+        table.table(VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.target.mode").left().width(170f);
 
@@ -778,7 +781,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }).growX().padTop(6f);
 
         table.row();
-        table.table(Tex.button, t -> {
+        table.table(VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.target.block").left().width(170f);
 
@@ -798,7 +801,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void addPathfinderRow(Table table){
-        table.table(Tex.button, t -> {
+        table.table(VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.pathfinder").left().width(170f);
 
@@ -4360,7 +4363,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(xModeWindow == null){
                     try{ overlayModeContent.remove(); }catch(Throwable ignored){}
                     xModeWindow = xOverlayUi.registerWindow(
-                        "stealthpath-mode",
+                        "偷袭小道-模式",
                         overlayModeContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowMode, true)
                     );
@@ -4370,7 +4373,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(xDamageWindow == null){
                     try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
                     xDamageWindow = xOverlayUi.registerWindow(
-                        "stealthpath-damage",
+                        "偷袭小道-伤害",
                         overlayDamageContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowDamage, true)
                     );
@@ -4380,7 +4383,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 if(xControlsWindow == null){
                     try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
                     xControlsWindow = xOverlayUi.registerWindow(
-                        "stealthpath-controls",
+                        "偷袭小道-控制",
                         overlayControlsContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowControls, true)
                     );

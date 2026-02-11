@@ -87,7 +87,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
     private static final String overlayName = "pgmm-overlay";
     private static final String mi2OverlayName = "pgmm-overlay-mi2-minimap";
-    private static final String powerTableName = "pgmm-power-table";
+    private static final String powerTableName = "电网小地图-电力表";
 
     private static final String keyEnabled = "pgmm-enabled";
     private static final String keyGridAlpha = "pgmm-gridalpha";
@@ -194,7 +194,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Time.runTask(10f, this::installConsoleApi);
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensurePowerTableAttached);
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
         });
 
         Events.on(WorldLoadEvent.class, e -> {
@@ -473,9 +473,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.performance", "Performance"), Icon.wrenchSmall));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyUpdateWaitTenths, 10, 0, 50, 1, Icon.refreshSmall, v -> Strings.autoFixed(v / 10f, 1) + "s", null));
 
-            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.update", "Update"), Icon.refreshSmall));
-            table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
-            table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+            if(!bekBundled){
+                table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.update", "Update"), Icon.refreshSmall));
+                table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
+                table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+            }
         
     }
 
@@ -513,7 +515,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         int intervalSeconds = Mathf.clamp(Core.settings.getInt(keySplitAlertMultiplayerIntervalSeconds, 8), 1, 60);
         nextSplitAlertMultiplayerChatAt = Time.time + intervalSeconds * 60f;
 
-        Call.sendChatMessage("<PGMM><[red]断电建议连接点[]>(" + tileX + "," + tileY + ")");
+        Call.sendChatMessage("<PGMM><[red]断电建议连接点[]>(" + tileX + "," + tileY + ")");
     }
 
     private void ensureOverlayAttached(){

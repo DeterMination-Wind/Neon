@@ -739,7 +739,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             overlayQueryContent = new OverlayQueryContent();
         }
         if(overlayQueryWindow == null){
-            overlayQueryWindow = overlayUI.registerWindow("玩家数据库 / DB Query", overlayQueryContent.root, () -> Vars.state.isGame());
+            overlayQueryWindow = overlayUI.registerWindow("玩家数据库-查询", overlayQueryContent.root, () -> Vars.state.isGame());
             overlayUI.tryConfigureWindow(overlayQueryWindow, false, true);
             overlayUI.setEnabledAndPinned(overlayQueryWindow, true, false);
         }
@@ -748,7 +748,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             debugContent = new DebugContent();
         }
         if(overlayDebugWindow == null){
-            overlayDebugWindow = overlayUI.registerWindow("解析调试 / Parser Debug", debugContent.root, () -> Vars.state.isGame());
+            overlayDebugWindow = overlayUI.registerWindow("玩家数据库-调试", debugContent.root, () -> Vars.state.isGame());
             overlayUI.tryConfigureWindow(overlayDebugWindow, false, true);
             overlayUI.setEnabledAndPinned(overlayDebugWindow, false, false);
         }

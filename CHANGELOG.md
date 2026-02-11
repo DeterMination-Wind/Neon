@@ -2,6 +2,17 @@
 
 All notable changes to Neon are documented in this file.
 
+## v4.0.1 - 2026-02-11
+
+### Updated
+- Rewrote Neon settings UI style to a unified VSCode-inspired visual language across bundled setting widgets.
+- Removed emoji/icon-like prefixes from setting and chat hint text in bundled modules.
+- Disabled bundled sub-mod update popups; only Neon update check now prompts users.
+- Renamed all OverlayUI window titles to Chinese labels.
+
+### Fixed
+- Aligned mobile/desktop settings row rendering and rebuilt desktop+Android bundles for the style rewrite.
+
 ## v4.0.0 - 2026-02-10
 
 ### Added
@@ -34,6 +45,17 @@ All notable changes to Neon are documented in this file.
 ---
 
 ## 变更日志
+
+## v4.0.1 - 2026-02-11
+
+### 更新
+- 重写 Neon 设置界面样式，统一为 VSCode 风格设计语言。
+- 去除整合模块设置与聊天提示中的 emoji/图标前缀。
+- 关闭被整合子模组的更新弹窗，仅保留 Neon 自身更新提示。
+- OverlayUI 窗口标题统一改为中文。
+
+### 修复
+- 对齐手机端/桌面端设置行布局表现，并完成桌面与安卓打包校验。
 
 ## v4.0.0 - 2026-02-10
 

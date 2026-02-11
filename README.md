@@ -142,92 +142,7 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles nine popular QoL modules into a single install:
-
-- Power Grid Minimap
-- Stealth Path
-- customMarker
-- BetterScreenShot (BSS core code from Miner)
-- Radial Build Menu
-- betterMiniMap
-- Server Player DataBase
-- betterMapEditor
-- Better Projector Overlay
-
-If you prefer installing once and getting all nine “overlay + workflow + data tooling” features together, Neon is the convenient option.
-
-Note: since Neon already includes these modules, you should avoid enabling the standalone versions at the same time to prevent duplicated UI or conflicts.
-
-### What You Get
-
-#### 1) Power Grid Minimap
-
-- Colors each separate power network on the minimap/full map for quick grid visibility.
-- Shows net power balance markers at grid centers (configurable size/color/opacity).
-- Split alerts with reconnect hints when a large grid breaks and goes negative.
-- Power rescue hints (Beta) for sustained deficits (e.g. outlining positive islands or suggesting disabling Impact Reactors when relevant).
-- A compact power table listing large grids (current balance / recent minimum, etc.) to help locate the worst grid quickly.
-
-#### 2) Stealth Path
-
-- Disabled by default: this feature currently has known defects and is under active fixes; enable it manually when needed.
-- Route overlay previews for safer / lower-damage paths, with configurable visuals.
-- Multiple modes and threat filters (ground/air/both).
-- Auto modes for unit clusters (to mouse or to chat coordinates), plus an optional auto-move keybind to command units along the preview path.
-- Optional overlay windows: when MindustryX is installed, mode/damage/controls windows can be shown via OverlayUI; window toggles are now managed by OverlayUI itself.
-
-#### 3) customMarker
-
-- Mimics MindustryX marker workflow with the "button -> fullscreen pick -> radial confirm" flow.
-- Supports editing five marker templates with fixed message format `<content><content>(x,y)`.
-- Includes a chat coordinate list window for quick camera focus jumps.
-
-#### 4) BetterScreenShot
-
-- One-click high-resolution world screenshot capture with both OverlayUI button and hotkey trigger.
-- Chunked rendering for large maps to avoid texture-size limits, with size estimate and progress status.
-- BSS core code comes from Miner, then integrated and maintained inside Neon.
-
-#### 5) Radial Build Menu
-
-- Hold a hotkey to open a radial HUD; release to switch the selected build block.
-- Up to 16 configurable slots (8 inner + 8 outer; outer appears when configured).
-- Multiple profiles and switching rules (time / planet / conditional), plus optional Slot Group A/B instant toggling via a hotkey.
-- Customizable appearance and interaction; JSON import/export for sharing.
-
-#### 6) betterMiniMap
-
-- Draws extra unit/building markers on the minimap with direction, scale, alpha, and cluster spacing controls.
-- Supports friendly/enemy filters independently for units and buildings.
-- Includes searchable unit/block selection dialogs with select-all, clear, and invert actions.
-
-#### 7) Server Player DataBase
-
-- Collects local player history (name, UID, server, trace-enriched IP records) while you play.
-- Optional chat logging with import/export and integrity verification.
-- Uses MindustryX OverlayUI query/debug windows when available, with fallback dialogs on vanilla clients.
-
-#### 8) betterMapEditor
-
-- Lets you drag the mirror symmetry axis directly inside the map generator preview.
-- Replaces the mirror filter with a draggable variant while keeping existing generator workflows intact.
-
-#### 9) Better Projector Overlay
-
-- Shows placement-time positive/negative power prediction when holding an overdrive projector.
-- Scans and marks risky overdrive projectors that should be removed, with optional chat alerts.
-
-### Quick Start
-
-1) Install: put `Neon.zip` into Mindustry's `mods` folder and enable it in-game.
-
-2) Rebind keys in `Settings → Controls`:
-
-- Stealth Path hotkeys (X/Y/N/M/K/L, etc.)
-- BetterScreenShot capture hotkey (default `F8`)
-- Radial Build Menu hotkey (and optional “Toggle Slot Group” hotkey)
-
-3) Configure settings under `Settings → Mods`:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles nine modules into one package:
 
 - Power Grid Minimap
 - Stealth Path
@@ -239,13 +154,89 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - betterMapEditor
 - Better Projector Overlay
 
+If you want one install that covers overlays, workflow tools, and utility features, Neon is the all-in-one option.
+
+Note: Neon already contains these modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
+
+### Module Highlights
+
+#### 1) Power Grid Minimap
+
+- Colors independent power grids on minimap and full map.
+- Shows per-grid net power balance with configurable visual style.
+- Marks reconnect hints when large grids split and go negative.
+- Includes rescue hints for sustained deficit scenarios.
+
+#### 2) Stealth Path
+
+- Disabled by default (feature has known defects and is being fixed).
+- Draws lower-risk path previews with mode and threat filters.
+- Supports auto routing for unit clusters to mouse or chat coordinates.
+- Overlay windows are managed in native OverlayUI when MindustryX is installed.
+
+#### 3) customMarker
+
+- Marker workflow: button -> fullscreen pick -> radial confirm.
+- Editable template messages in `<text><text>(x,y)` format.
+- Chat coordinate capture list for quick camera focus jumps.
+
+#### 4) BetterScreenShot
+
+- One-click high-resolution world screenshot capture.
+- Trigger by hotkey (`F8`) or OverlayUI button.
+- Uses chunked rendering for large maps to avoid texture-size limits.
+- Includes size estimation and optional progress status.
+- BSS core code is from Miner, integrated into Neon.
+
+#### 5) Radial Build Menu
+
+- Hold a hotkey to open radial build HUD; release to select.
+- Up to 16 configurable slots (inner + outer ring).
+- Rule-based profile switching (time/planet/condition).
+- JSON import/export for quick config sharing.
+
+#### 6) betterMiniMap
+
+- Enhanced minimap icons for units/buildings with scale/alpha/spacing controls.
+- Independent friendly/enemy filters.
+- Searchable selection dialogs with select-all/clear/invert.
+
+#### 7) Server Player DataBase
+
+- Local player and chat history collection.
+- Import/export and integrity checks.
+- OverlayUI query/debug windows with fallback dialogs on vanilla clients.
+
+#### 8) betterMapEditor
+
+- Draggable mirror axis directly in generator preview.
+- Keeps existing map generation workflow while improving control.
+
+#### 9) Better Projector Overlay
+
+- Placement-time power impact preview for overdrive projectors.
+- Scans and marks risky projector placements with optional alerts.
+
+### Quick Start
+
+1) Install `Neon.zip` to Mindustry `mods` folder and enable it in game.
+
+2) Rebind keys in `Settings -> Controls`:
+
+- Stealth Path hotkeys
+- BetterScreenShot capture hotkey (`F8` by default)
+- Radial Build Menu hotkey (plus optional slot-group toggle)
+
+3) Configure each module in `Settings -> Mods`.
+
 ### Multiplayer
 
-Neon is client-side overlay and assistance; no server install required.
+Neon is fully client-side; server installation is not required.
 
 ### Android
 
-Android requires a mod package that contains `classes.dex`. Download `Neon.jar` from Releases and put it into Mindustry's `mods` folder.
+Android requires a mod package that includes `classes.dex`.
+Use `Neon.jar` from Releases and place it in the Mindustry `mods` folder.
 
 ### Feedback
 
@@ -253,18 +244,19 @@ Discord: https://discord.com/channels/391020510269669376/1467903894716940522
 
 ### Build (Optional)
 
-Build desktop zip:
+Desktop zip:
 
 ```bash
 ./gradlew jar
 ```
 
-Output: `build/libs/Neon.zip`
-
-Build Android jar (with classes.dex):
+Android jar (with `classes.dex`):
 
 ```bash
 ./gradlew jarAndroid
 ```
 
-Output: `build/libs/Neon.jar`
+Outputs:
+
+- `build/libs/Neon.zip`
+- `build/libs/Neon.jar`

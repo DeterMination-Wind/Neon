@@ -6,6 +6,7 @@ import arc.util.CommandHandler;
 import bettermapeditor.BetterMapEditorMod;
 import betterminimap.BetterMiniMapMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
+import betterscreenshot.features.BetterScreenShotFeature;
 import custommarker.features.CustomMarkerFeature;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
@@ -47,6 +48,7 @@ public class BekToolsMod extends Mod{
         betterProjectorOverlay = new BetterProjectorOverlayMod();
         betterProjectorOverlay.init();
         CustomMarkerFeature.init();
+        BetterScreenShotFeature.init();
 
         Events.on(ClientLoadEvent.class, e -> {
             GithubUpdateCheck.applyDefaults();
@@ -70,6 +72,7 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, pgmm::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, stealthPath::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings);
             addGroup(table, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, radialBuildMenu::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, serverPlayerDataBase::bekBuildSettings);

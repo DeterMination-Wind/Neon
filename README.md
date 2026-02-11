@@ -7,20 +7,21 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 8 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 9 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
 - customMarker（自定义标记）
+- BetterScreenShot（更好的截图，BSS 核心代码来自 Miner）
 - Radial Build Menu（圆盘快捷建造）
 - betterMiniMap（增强小地图单位/建筑显示）
 - ServerPlayerDataBase（玩家数据库 / 聊天记录查询）
 - betterMapEditor（地图编辑增强）
 - Better Projector Overlay（超速投影叠加）
 
-如果你只想安装一次、一次性获得这八类常用“信息叠加 + 操作效率 + 数据查询”功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这九类常用“信息叠加 + 操作效率 + 数据查询”功能，Neon 会更省事。
 
-提示：Neon 已包含上述 8 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 9 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -46,31 +47,37 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 8 �
 - 支持 5 组标记模板编辑，消息格式固定为 `<内容><内容>(x,y)`。
 - 集成聊天坐标捕获窗口，可快速定位并聚焦聊天中的坐标点。
 
-#### 4) 圆盘快捷建造（Radial Build Menu）
+#### 4) BetterScreenShot（更好的截图）
+
+- 一键生成高分辨率世界截图，支持 OverlayUI 按钮和快捷键触发。
+- 大地图自动分块渲染，规避纹理尺寸限制并提供尺寸预估与进度状态。
+- BSS 核心代码来自 Miner，并在 Neon 内完成整合与设置统一。
+
+#### 5) 圆盘快捷建造（Radial Build Menu）
 
 - 长按热键弹出圆盘 HUD：松开即可切换建造方块。
 - 16 槽位（内圈 8 + 外圈 8）：可按需要配置/清空；外圈在配置后自动显示。
 - 多套槽位配置与切换：支持按时长/星球/条件切换；也支持槽位组 A/B 通过热键即时切换。
 - 外观与交互可调：缩放、透明度、半径、图标大小、方向选择等；支持 JSON 导入/导出。
 
-#### 5) betterMiniMap
+#### 6) betterMiniMap
 
 - 在小地图叠加单位与建筑图标，支持朝向、透明度、缩放、聚合间距等参数。
 - 支持敌我单位/建筑独立开关与筛选，快速定制战场信息密度。
 - 提供单位/建筑筛选对话框，可按名称搜索、全选、清空、反选。
 
-#### 6) 玩家数据库（ServerPlayerDataBase）
+#### 7) 玩家数据库（ServerPlayerDataBase）
 
 - 本地采集在线玩家信息（名称、UID、服务器、IP 追踪结果）并可持续更新。
 - 可选记录聊天日志，支持导入/导出、完整性校验与异常提示。
 - 在支持 MindustryX OverlayUI 时提供查询/调试窗口；无 OverlayUI 时回退到普通对话框。
 
-#### 7) 地图编辑增强（betterMapEditor）
+#### 8) 地图编辑增强（betterMapEditor）
 
 - 在地图生成器预览里直接拖动镜像轴，快速微调对称地图。
 - 同步替换镜像滤镜为可拖动实现，不改变你已有的生成器流程。
 
-#### 8) 投影叠加（Better Projector Overlay）
+#### 9) 投影叠加（Better Projector Overlay）
 
 - 手持超速投影时显示“放下后电网正/负”预判圈与实时数值提示。
 - 自动扫描并标记被高布/穹顶覆盖的普通超速，支持可选聊天提醒。
@@ -82,6 +89,7 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 8 �
 2) 改键：在 `设置 → 控制` 中找到对应条目并改成你习惯的按键：
 
 - 偷袭小道：`X/Y/N/M/K/L` 等（条目名以游戏语言显示为准）
+- BetterScreenShot：世界截图快捷键（默认 `F8`）
 - 圆盘快捷建造：打开圆盘 HUD 的热键（以及可选的“切换槽位组”热键）
 
 3) 设置：在 `设置 → 模组` 下分别进入各模块分类进行调整：
@@ -89,6 +97,7 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 8 �
 - 电网小地图（Power Grid Minimap）
 - 偷袭小道（Stealth Path）
 - 自定义标记（customMarker）
+- BetterScreenShot
 - 圆盘快捷建造（Radial Build Menu）
 - betterMiniMap
 - 玩家数据库（ServerPlayerDataBase）
@@ -133,18 +142,19 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles eight popular QoL modules into a single install:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles nine popular QoL modules into a single install:
 
 - Power Grid Minimap
 - Stealth Path
 - customMarker
+- BetterScreenShot (BSS core code from Miner)
 - Radial Build Menu
 - betterMiniMap
 - Server Player DataBase
 - betterMapEditor
 - Better Projector Overlay
 
-If you prefer installing once and getting all eight “overlay + workflow + data tooling” features together, Neon is the convenient option.
+If you prefer installing once and getting all nine “overlay + workflow + data tooling” features together, Neon is the convenient option.
 
 Note: since Neon already includes these modules, you should avoid enabling the standalone versions at the same time to prevent duplicated UI or conflicts.
 
@@ -172,31 +182,37 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - Supports editing five marker templates with fixed message format `<content><content>(x,y)`.
 - Includes a chat coordinate list window for quick camera focus jumps.
 
-#### 4) Radial Build Menu
+#### 4) BetterScreenShot
+
+- One-click high-resolution world screenshot capture with both OverlayUI button and hotkey trigger.
+- Chunked rendering for large maps to avoid texture-size limits, with size estimate and progress status.
+- BSS core code comes from Miner, then integrated and maintained inside Neon.
+
+#### 5) Radial Build Menu
 
 - Hold a hotkey to open a radial HUD; release to switch the selected build block.
 - Up to 16 configurable slots (8 inner + 8 outer; outer appears when configured).
 - Multiple profiles and switching rules (time / planet / conditional), plus optional Slot Group A/B instant toggling via a hotkey.
 - Customizable appearance and interaction; JSON import/export for sharing.
 
-#### 5) betterMiniMap
+#### 6) betterMiniMap
 
 - Draws extra unit/building markers on the minimap with direction, scale, alpha, and cluster spacing controls.
 - Supports friendly/enemy filters independently for units and buildings.
 - Includes searchable unit/block selection dialogs with select-all, clear, and invert actions.
 
-#### 6) Server Player DataBase
+#### 7) Server Player DataBase
 
 - Collects local player history (name, UID, server, trace-enriched IP records) while you play.
 - Optional chat logging with import/export and integrity verification.
 - Uses MindustryX OverlayUI query/debug windows when available, with fallback dialogs on vanilla clients.
 
-#### 7) betterMapEditor
+#### 8) betterMapEditor
 
 - Lets you drag the mirror symmetry axis directly inside the map generator preview.
 - Replaces the mirror filter with a draggable variant while keeping existing generator workflows intact.
 
-#### 8) Better Projector Overlay
+#### 9) Better Projector Overlay
 
 - Shows placement-time positive/negative power prediction when holding an overdrive projector.
 - Scans and marks risky overdrive projectors that should be removed, with optional chat alerts.
@@ -208,6 +224,7 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 2) Rebind keys in `Settings → Controls`:
 
 - Stealth Path hotkeys (X/Y/N/M/K/L, etc.)
+- BetterScreenShot capture hotkey (default `F8`)
 - Radial Build Menu hotkey (and optional “Toggle Slot Group” hotkey)
 
 3) Configure settings under `Settings → Mods`:
@@ -215,6 +232,7 @@ Note: since Neon already includes these modules, you should avoid enabling the s
 - Power Grid Minimap
 - Stealth Path
 - customMarker
+- BetterScreenShot
 - Radial Build Menu
 - betterMiniMap
 - Server Player DataBase

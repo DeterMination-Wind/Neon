@@ -2,6 +2,18 @@
 
 All notable changes to Neon are documented in this file.
 
+## v5.1.0 - 2026-02-11
+
+### Added
+- Integrated `BetterScreenShot` into Neon as the 9th bundled module.
+- Added high-resolution world screenshot capture panel/hotkey support from BSS.
+
+### Updated
+- Explicitly marked in Neon settings that BSS core code comes from Miner.
+
+### Docs
+- Updated `README.md` and module metadata for the 9-module bundle.
+
 ## v5.0.0 - 2026-02-11
 
 ### Added
@@ -62,6 +74,18 @@ All notable changes to Neon are documented in this file.
 ---
 
 ## 变更日志
+
+## v5.1.0 - 2026-02-11
+
+### 新增
+- 集成 `BetterScreenShot`，Neon 升级为九合一。
+- 新增 BSS 高分辨率世界截图能力（OverlayUI 按钮 + 热键）。
+
+### 更新
+- 在 Neon 设置项中明确标注：BSS 核心代码来自 Miner。
+
+### 文档
+- 更新 `README.md` 与模块元数据，覆盖九合一说明。
 
 ## v5.0.0 - 2026-02-11
 

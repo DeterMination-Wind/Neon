@@ -2,6 +2,23 @@
 
 All notable changes to Neon are documented in this file.
 
+## v5.0.0 - 2026-02-11
+
+### Added
+- Integrated `customMarker` into Neon as the 8th bundled module.
+
+### Updated
+- Checked all bundled module upstream repos and merged current latest snapshots where applicable.
+- Restyled `customMarker` settings and marker-related windows to match Neon visual language.
+- Center-aligned Neon settings groups for cleaner multi-module layout.
+
+### Changed
+- Stealth Path is now disabled by default and marked with a known-issues notice.
+- Removed Stealth Path OverlayUI window toggle options from Neon settings; window visibility control is now delegated to native OverlayUI.
+
+### Docs
+- Updated `README.md` (Chinese/English) for the 8-module bundle and current behavior changes.
+
 ## v4.0.1 - 2026-02-11
 
 ### Updated
@@ -45,6 +62,23 @@ All notable changes to Neon are documented in this file.
 ---
 
 ## 变更日志
+
+## v5.0.0 - 2026-02-11
+
+### 新增
+- 集成 `customMarker`，Neon 升级为八合一。
+
+### 更新
+- 检查 Neon 已包含模块的上游仓库状态，并在可用情况下合并当前最新代码快照。
+- 重绘 `customMarker` 设置界面与标记相关窗口风格，使其与 Neon 视觉语言一致。
+- 调整 Neon 设置分组布局为居中显示。
+
+### 调整
+- 偷袭小道默认关闭，并新增“功能有部分缺陷，正在修复”提示。
+- 从 Neon 设置中移除偷袭小道 OverlayUI 窗口开关项，窗口显示权限回归 OverlayUI 原生操作界面。
+
+### 文档
+- 更新 `README.md`（中英双语），覆盖八合一模块说明与行为变更。
 
 ## v4.0.1 - 2026-02-11
 

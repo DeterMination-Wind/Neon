@@ -82,9 +82,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
     private static final String keyEnabled = "sp-enabled";
     private static final String keyProMode = "sp-pro-mode";
-    private static final String keyOverlayWindowMode = "sp-ov-window-mode";
-    private static final String keyOverlayWindowDamage = "sp-ov-window-damage";
-    private static final String keyOverlayWindowControls = "sp-ov-window-controls";
     private static final String keyTargetMode = "sp-target-mode";
     private static final String keyTargetBlock = "sp-target-block";
     private static final String keyPathDuration = "sp-path-duration";
@@ -518,11 +515,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
     private void ensureDefaults(){
         GithubUpdateCheck.applyDefaults();
-        Core.settings.defaults(keyEnabled, true);
+        Core.settings.defaults(keyEnabled, false);
         Core.settings.defaults(keyProMode, false);
-        Core.settings.defaults(keyOverlayWindowMode, true);
-        Core.settings.defaults(keyOverlayWindowDamage, true);
-        Core.settings.defaults(keyOverlayWindowControls, true);
         Core.settings.defaults(keyAlwaysPlanNearestPath, false);
         Core.settings.defaults(keyPathfinder, pathfinderAStar);
         Core.settings.defaults(keyCoreTargetCount, 1);
@@ -602,7 +596,8 @@ public class StealthPathMod extends mindustry.mod.Mod{
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
             table.pref(new HeaderSetting("@sp.section.general", null));
-            table.pref(new IconCheckSetting(keyEnabled, true, null, null));
+            table.pref(new IconCheckSetting(keyEnabled, false, null, null));
+            table.pref(new HeaderSetting("@sp.notice.partial-bug", null));
             table.pref(new IconCheckSetting(keyShowToasts, true, null, null));
             table.pref(new IconCheckSetting(keyDebugLogs, true, null, null));
             table.pref(new IconCheckSetting(keyProMode, false, null, null));
@@ -610,10 +605,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
             table.pref(new IconCheckSetting(keyPathUseSlowestUnit, true, null, null));
             table.pref(new IconCheckSetting(keyPathUseFloorStatusSlow, true, null, null));
             table.pref(new IconCheckSetting(keyPathAllowSurvivableLiquidCross, true, null, null));
-            table.pref(new HeaderSetting("@sp.setting.overlayui", null));
-            table.pref(new IconCheckSetting(keyOverlayWindowMode, true, null, null));
-            table.pref(new IconCheckSetting(keyOverlayWindowDamage, true, null, null));
-            table.pref(new IconCheckSetting(keyOverlayWindowControls, true, null, null));
             table.pref(new IconSliderSetting(keyPathDuration, 10, 0, 60, 5, null, v -> v == 0 ? "inf" : v + "s", null));
             table.pref(new IconSliderSetting(keyPathWidth, 2, 1, 6, 1, null, v -> String.valueOf(v), null));
             table.pref(new IconSliderSetting(keyPathAlpha, 85, 0, 100, 5, null, v -> v + "%", null));
@@ -4353,9 +4344,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         boolean enabled = Core.settings.getBool(keyEnabled, true);
-        boolean showMode = Core.settings.getBool(keyOverlayWindowMode, true);
-        boolean showDamage = Core.settings.getBool(keyOverlayWindowDamage, true);
-        boolean showControls = Core.settings.getBool(keyOverlayWindowControls, true);
 
         if(xOverlayUi.isInstalled()){
             try{
@@ -4365,30 +4353,30 @@ public class StealthPathMod extends mindustry.mod.Mod{
                     xModeWindow = xOverlayUi.registerWindow(
                         "偷袭小道-模式",
                         overlayModeContent,
-                        () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowMode, true)
+                        () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true)
                     );
                     xOverlayUi.tryConfigureWindow(xModeWindow, false, true);
-                    if(enabled && showMode) xOverlayUi.setEnabledAndPinned(xModeWindow, true, false);
+                    if(enabled) xOverlayUi.setEnabledAndPinned(xModeWindow, true, false);
                 }
                 if(xDamageWindow == null){
                     try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
                     xDamageWindow = xOverlayUi.registerWindow(
                         "偷袭小道-伤害",
                         overlayDamageContent,
-                        () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowDamage, true)
+                        () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true)
                     );
                     xOverlayUi.tryConfigureWindow(xDamageWindow, false, true);
-                    if(enabled && showDamage) xOverlayUi.setEnabledAndPinned(xDamageWindow, true, false);
+                    if(enabled) xOverlayUi.setEnabledAndPinned(xDamageWindow, true, false);
                 }
                 if(xControlsWindow == null){
                     try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
                     xControlsWindow = xOverlayUi.registerWindow(
                         "偷袭小道-控制",
                         overlayControlsContent,
-                        () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowControls, true)
+                        () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true)
                     );
                     xOverlayUi.tryConfigureWindow(xControlsWindow, false, true);
-                    if(enabled && showControls) xOverlayUi.setEnabledAndPinned(xControlsWindow, true, false);
+                    if(enabled) xOverlayUi.setEnabledAndPinned(xControlsWindow, true, false);
                 }
                 return;
             }catch(Throwable ignored){
@@ -4399,9 +4387,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         // Fallback: attach directly to HUD group (vanilla client, or OverlayUI unavailable).
-        syncFallbackHud(overlayModeContent, "sp-ov-mode", 8f, -8f, enabled && showMode);
-        syncFallbackHud(overlayDamageContent, "sp-ov-dmg", 8f, -84f, enabled && showDamage);
-        syncFallbackHud(overlayControlsContent, "sp-ov-ctl", 8f, -152f, enabled && showControls);
+        syncFallbackHud(overlayModeContent, "sp-ov-mode", 8f, -8f, enabled);
+        syncFallbackHud(overlayDamageContent, "sp-ov-dmg", 8f, -84f, enabled);
+        syncFallbackHud(overlayControlsContent, "sp-ov-ctl", 8f, -152f, enabled);
     }
 
     private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){

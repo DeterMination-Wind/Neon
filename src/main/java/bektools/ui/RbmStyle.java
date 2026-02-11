@@ -98,9 +98,9 @@ public final class RbmStyle{
                     }
                     inner.add(title).color(VscodeSettingsStyle.accentColor()).center().growX().minWidth(0f).wrap();
                 }).growX();
-            }).width(width).padTop(12f).padBottom(6f).left();
+            }).width(width).padTop(12f).padBottom(6f).center();
             table.row();
-            table.image(Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).width(width).padBottom(10f).left();
+            table.image(Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).width(width).padBottom(10f).center();
             table.row();
         }
     }

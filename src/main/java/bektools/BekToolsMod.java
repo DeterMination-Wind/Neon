@@ -6,6 +6,7 @@ import arc.util.CommandHandler;
 import bettermapeditor.BetterMapEditorMod;
 import betterminimap.BetterMiniMapMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
+import custommarker.features.CustomMarkerFeature;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -45,6 +46,7 @@ public class BekToolsMod extends Mod{
         betterMapEditor.init();
         betterProjectorOverlay = new BetterProjectorOverlayMod();
         betterProjectorOverlay.init();
+        CustomMarkerFeature.init();
 
         Events.on(ClientLoadEvent.class, e -> {
             GithubUpdateCheck.applyDefaults();
@@ -67,6 +69,7 @@ public class BekToolsMod extends Mod{
         ui.settings.addCategory("@bektools.category", Icon.settings, table -> {
             addGroup(table, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, pgmm::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, stealthPath::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings);
             addGroup(table, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, radialBuildMenu::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, serverPlayerDataBase::bekBuildSettings);
@@ -104,7 +107,10 @@ public class BekToolsMod extends Mod{
             nested.finishBuild();
 
             table.row();
-            table.add(nested).left().width(RbmStyle.prefWidth());
+            table.table(wrap -> {
+                wrap.center();
+                wrap.add(nested).width(RbmStyle.prefWidth());
+            }).growX().center();
             table.row();
         }
     }

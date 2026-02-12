@@ -6,6 +6,7 @@ import arc.files.Fi;
 import arc.func.Prov;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.scene.ui.TextArea;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntMap;
@@ -938,6 +939,16 @@ public class ServerPlayerDataBaseMod extends Mod{
         Table result = new Table();
         result.left().top();
 
+        TextField targetUidField = new TextField("");
+        targetUidField.setMessageText("目标UID（保留）");
+
+        TextArea sourceUidsArea = new TextArea("");
+        sourceUidsArea.setMessageText("输入多个UID，支持空格/换行/逗号分隔");
+
+        Table mergeOutput = new Table();
+        mergeOutput.left().top();
+        setSameIpMergeOutput(mergeOutput, "示例：目标 dNF，来源 abc def ghi\n可输入：abc def ghi");
+
         dialog.cont.table(Styles.black3, top -> {
             top.left().defaults().left().pad(6f);
             top.add("一键查找数据库中同IP账号，按账号数降序列出。")
@@ -949,10 +960,49 @@ public class ServerPlayerDataBaseMod extends Mod{
                 .padLeft(8f);
         }).growX().row();
 
-        dialog.cont.pane(result)
-            .scrollX(false)
+        float bodyWidth = fitDialogWidth(1240f);
+        float sideWidth = Math.max(260f, Math.min(380f, bodyWidth * 0.32f));
+
+        dialog.cont.table(body -> {
+            body.top().left().defaults().pad(4f);
+
+            body.pane(result)
+                .scrollX(false)
+                .grow()
+                .minWidth(0f)
+                .minHeight(0f);
+
+            body.table(Styles.black3, side -> {
+                side.left().top().defaults().left().pad(4f).growX();
+                side.add("批量 UID 合并").left().wrap().row();
+                side.add("目标UID").left().row();
+                side.add(targetUidField).height(38f).growX().row();
+                side.add("来源UID（多个）").left().row();
+                side.pane(sourceUidsArea)
+                    .scrollX(false)
+                    .height(220f)
+                    .growX()
+                    .row();
+                side.table(btns -> {
+                    btns.left().defaults().left().padRight(6f).growX();
+                    btns.button("一键合并", Icon.save, Styles.defaultt, () ->
+                        mergeUidBatchFromSameIpDialog(targetUidField.getText(), sourceUidsArea.getText(), result, mergeOutput)
+                    ).height(38f).growX();
+                    btns.button("清空", Styles.defaultt, () -> {
+                        targetUidField.setText("");
+                        sourceUidsArea.setText("");
+                        setSameIpMergeOutput(mergeOutput, "");
+                    }).height(38f).growX();
+                }).growX().row();
+                side.pane(mergeOutput)
+                    .scrollX(false)
+                    .height(128f)
+                    .growX()
+                    .row();
+            }).width(sideWidth).growY().top().minWidth(0f).minHeight(0f);
+        })
             .grow()
-            .width(fitDialogWidth(1120f))
+            .width(bodyWidth)
             .height(fitDialogHeight(710f, 320f))
             .minWidth(0f)
             .minHeight(0f)
@@ -960,6 +1010,89 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         refreshSameIpAltResult(result);
         dialog.show();
+    }
+
+    private void mergeUidBatchFromSameIpDialog(String targetUidText, String sourceUidsText, Table result, Table output){
+        String targetUid = normalizeShortUid(targetUidText);
+        if(targetUid == null){
+            setSameIpMergeOutput(output, "请输入三位目标 UID（例如 dNF）。");
+            Vars.ui.showInfoFade("SPDB: 请输入三位目标 UID。");
+            return;
+        }
+
+        String[] tokens = splitUidBatchTokens(sourceUidsText);
+        if(tokens.length == 0){
+            setSameIpMergeOutput(output, "请输入至少一个来源 UID。\n支持空格、换行、逗号分隔。");
+            Vars.ui.showInfoFade("SPDB: 请输入来源 UID。");
+            return;
+        }
+
+        Seq<String> fromUids = new Seq<>();
+        int invalid = 0;
+        for(String token : tokens){
+            String uid = normalizeShortUid(token);
+            if(uid == null){
+                invalid++;
+                continue;
+            }
+            if(!fromUids.contains(uid, false)) fromUids.add(uid);
+        }
+
+        fromUids.remove(targetUid, false);
+        if(fromUids.isEmpty()){
+            setSameIpMergeOutput(output, "没有可合并来源 UID。\n注意：来源 UID 不能与目标 UID 相同。");
+            Vars.ui.showInfoFade("SPDB: 没有可合并来源 UID。");
+            return;
+        }
+
+        int rebound = 0;
+        int mergedPid = 0;
+        int movedChatUid = 0;
+
+        for(String fromUid : fromUids){
+            rebound += playerDb.rebindUid(fromUid, targetUid);
+            mergedPid += playerDb.mergeByUid(targetUid);
+            if(chatDb.moveUid(fromUid, targetUid)) movedChatUid++;
+        }
+
+        if(rebound > 0 || mergedPid > 0) playersDirty = true;
+        if(movedChatUid > 0) chatsDirty = true;
+
+        refreshSameIpAltResult(result);
+
+        boolean changed = rebound > 0 || mergedPid > 0 || movedChatUid > 0;
+        if(!changed){
+            setSameIpMergeOutput(output, "未发现可合并数据。\n请确认 UID 存在于本地数据库。" + (invalid > 0 ? "\n已忽略无效 UID: " + invalid : ""));
+            Vars.ui.showInfoFade("SPDB: 未发现可合并数据。");
+            return;
+        }
+
+        String summary = "目标 UID: " + targetUid
+            + "\n来源 UID 数: " + fromUids.size + (invalid > 0 ? "（忽略无效 " + invalid + "）" : "")
+            + "\n重绑记录: " + rebound
+            + "\n合并 PID: " + mergedPid
+            + "\n迁移聊天 UID: " + movedChatUid;
+        setSameIpMergeOutput(output, summary);
+        Vars.ui.showInfoFade("SPDB: 批量 UID 合并完成。");
+    }
+
+    private static void setSameIpMergeOutput(Table output, String message){
+        if(output == null) return;
+        output.clear();
+        output.left().top().defaults().left().pad(2f).growX();
+        if(message == null || message.trim().isEmpty()) return;
+
+        String[] lines = message.split("\\n");
+        for(String line : lines){
+            output.add(escapeMarkup(line)).left().wrap().row();
+        }
+    }
+
+    private static String[] splitUidBatchTokens(String text){
+        if(text == null) return new String[0];
+        String trimmed = text.trim();
+        if(trimmed.isEmpty()) return new String[0];
+        return trimmed.split("[,，;；\\s]+");
     }
 
     private void refreshSameIpAltResult(Table result){

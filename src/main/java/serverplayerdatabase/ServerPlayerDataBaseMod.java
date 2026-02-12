@@ -4,12 +4,12 @@ import arc.Core;
 import arc.Events;
 import arc.files.Fi;
 import arc.func.Prov;
-import arc.graphics.Color;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
-import arc.scene.style.Drawable;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.IntMap;
+import arc.struct.IntSeq;
 import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
 import arc.struct.OrderedSet;
@@ -32,13 +32,12 @@ import mindustry.gen.Call;
 import mindustry.gen.Groups;
 import mindustry.gen.Icon;
 import mindustry.gen.Player;
-import mindustry.gen.Tex;
 import mindustry.mod.Mod;
 import mindustry.net.Administration.TraceInfo;
 import mindustry.net.Packets.AdminAction;
 import mindustry.ui.Styles;
-import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.ui.dialogs.BaseDialog;
+import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.ui.dialogs.TraceDialog;
 
 import java.io.ByteArrayOutputStream;
@@ -62,7 +61,6 @@ import java.util.zip.CRC32;
 public class ServerPlayerDataBaseMod extends Mod{
     /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
-
 
     private static final String keyCollect = "spdb-collect";
     private static final String keyRecordChat = "spdb-record-chat";
@@ -93,10 +91,13 @@ public class ServerPlayerDataBaseMod extends Mod{
     private final ObjectMap<String, String> ipGeoCache = new ObjectMap<>();
     private final ObjectSet<String> ipGeoPending = new ObjectSet<>();
     private final Seq<String> debugLines = new Seq<>();
+    private final Vec2 overlayStagePos = new Vec2();
 
     private final IntMap<String> pidByPlayerId = new IntMap<>();
     private final IntMap<Long> nextTraceAt = new IntMap<>();
     private final IntMap<Long> autoTraceUntil = new IntMap<>();
+    private final IntSeq staleTraceCooldownIds = new IntSeq();
+    private final IntSeq staleTracePendingIds = new IntSeq();
 
     private Fi dataDir;
     private Fi playersFile;
@@ -120,6 +121,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private BaseDialog fallbackQueryDialog;
     private BaseDialog fallbackDebugDialog;
+    private QueryContent fallbackQueryContent;
 
     private java.lang.reflect.Field chatMessagesField;
 
@@ -208,6 +210,8 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void update(){
         if(Vars.headless) return;
 
+        releaseOverlayFocusIfPointerOutside();
+
         if(Time.time >= nextAttachAttempt){
             nextAttachAttempt = Time.time + 120f;
             ensureOverlayAttached();
@@ -227,6 +231,96 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(timer.get(2, 60f)){
             pruneTracePending();
         }
+    }
+
+    private void releaseOverlayFocusIfPointerOutside(){
+        if(Core.scene == null || Core.input == null) return;
+        if(isPointerOverOverlayContent()) return;
+
+        boolean cleared = clearOverlayFocusIfOwned();
+        if(!cleared){
+            cleared = clearOverlayFocusFallback();
+        }
+        if(!cleared) return;
+
+        // Match customMarker's approach: run delayed clear to handle late focus re-assignments.
+        Core.app.post(() -> Core.app.post(() -> {
+            if(isPointerOverOverlayContent()) return;
+            if(!clearOverlayFocusIfOwned()) clearOverlayFocusFallback();
+        }));
+    }
+
+    private boolean clearOverlayFocusIfOwned(){
+        if(Core.scene == null) return false;
+
+        Element scrollFocus = Core.scene.getScrollFocus();
+        Element keyboardFocus = Core.scene.getKeyboardFocus();
+        if(!ownsOverlayFocus(scrollFocus) && !ownsOverlayFocus(keyboardFocus)) return false;
+
+        if(overlayQueryContent != null) Core.scene.unfocus(overlayQueryContent.root);
+        if(debugContent != null) Core.scene.unfocus(debugContent.root);
+        if(overlayQueryWindow instanceof Element) Core.scene.unfocus((Element)overlayQueryWindow);
+        if(overlayDebugWindow instanceof Element) Core.scene.unfocus((Element)overlayDebugWindow);
+
+        Core.scene.setScrollFocus(null);
+        Core.scene.setKeyboardFocus(null);
+        Core.scene.cancelTouchFocus();
+        return true;
+    }
+
+    private boolean clearOverlayFocusFallback(){
+        if(Core.scene == null) return false;
+        if(!Vars.state.isGame()) return false;
+        if(Core.scene.hasDialog() || Core.scene.hasField()) return false;
+
+        Element scrollFocus = Core.scene.getScrollFocus();
+        Element keyboardFocus = Core.scene.getKeyboardFocus();
+        if(scrollFocus == null && keyboardFocus == null) return false;
+
+        Core.scene.setScrollFocus(null);
+        Core.scene.setKeyboardFocus(null);
+        Core.scene.cancelTouchFocus();
+        return true;
+    }
+
+    private boolean isPointerOverOverlayContent(){
+        if(Core.scene == null || Core.input == null) return false;
+        Core.scene.screenToStageCoordinates(overlayStagePos.set(Core.input.mouseX(), Core.input.mouseY()));
+        Element hovered = Core.scene.hit(overlayStagePos.x, overlayStagePos.y, true);
+        if(hovered == null) hovered = Core.scene.hit(overlayStagePos.x, overlayStagePos.y, false);
+        return ownsOverlayElement(hovered);
+    }
+
+    private boolean ownsOverlayFocus(Element focus){
+        if(focus == null) return false;
+        if(ownsOverlayElement(focus)) return true;
+        return hasMindustryXAncestor(focus);
+    }
+
+    private boolean ownsOverlayElement(Element element){
+        if(element == null) return false;
+        if(overlayQueryContent != null && (element == overlayQueryContent.root || element.isDescendantOf(overlayQueryContent.root))) return true;
+        if(debugContent != null && (element == debugContent.root || element.isDescendantOf(debugContent.root))) return true;
+        if(overlayQueryWindow instanceof Element){
+            Element queryWindow = (Element)overlayQueryWindow;
+            if(element == queryWindow || element.isDescendantOf(queryWindow)) return true;
+        }
+        if(overlayDebugWindow instanceof Element){
+            Element debugWindow = (Element)overlayDebugWindow;
+            if(element == debugWindow || element.isDescendantOf(debugWindow)) return true;
+        }
+        return hasMindustryXAncestor(element);
+    }
+
+    private boolean hasMindustryXAncestor(Element element){
+        Element cur = element;
+        int guard = 0;
+        while(cur != null && guard++ < 32){
+            String cls = cur.getClass().getName();
+            if(cls != null && cls.startsWith("mindustryX.features.ui")) return true;
+            cur = cur.parent;
+        }
+        return false;
     }
 
     private void collectPlayers(){
@@ -278,24 +372,24 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void pruneTracePending(){
         long now = Time.millis();
 
-        Seq<Integer> removeA = new Seq<>();
+        staleTraceCooldownIds.clear();
         for(IntMap.Entry<Long> entry : nextTraceAt.entries()){
             if(entry.value != null && entry.value < now - 30000L){
-                removeA.add(entry.key);
+                staleTraceCooldownIds.add(entry.key);
             }
         }
-        for(Integer id : removeA){
-            nextTraceAt.remove(id);
+        for(int i = 0; i < staleTraceCooldownIds.size; i++){
+            nextTraceAt.remove(staleTraceCooldownIds.get(i));
         }
 
-        Seq<Integer> removeB = new Seq<>();
+        staleTracePendingIds.clear();
         for(IntMap.Entry<Long> entry : autoTraceUntil.entries()){
             if(entry.value == null || entry.value < now){
-                removeB.add(entry.key);
+                staleTracePendingIds.add(entry.key);
             }
         }
-        for(Integer id : removeB){
-            autoTraceUntil.remove(id);
+        for(int i = 0; i < staleTracePendingIds.size; i++){
+            autoTraceUntil.remove(staleTracePendingIds.get(i));
         }
     }
 
@@ -705,7 +799,6 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(Vars.ui == null || Vars.ui.settings == null) return;
         if(bekBundled) return;
 
-
         Core.settings.defaults(keyCollect, true);
         Core.settings.defaults(keyRecordChat, false);
         Core.settings.defaults(keyAutoTrace, true);
@@ -713,23 +806,23 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
     }
+
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("数据采集", Icon.zoom));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyCollect, true, Icon.add, null));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyRecordChat, false, Icon.chat, null));
+        table.pref(new SpdbSettingsWidgets.HeaderSetting("数据采集", Icon.zoom));
+        table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyCollect, true, Icon.add, null));
+        table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyRecordChat, false, Icon.chat, null));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("管理员增强", Icon.admin));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyAutoTrace, true, Icon.zoom, null));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyShowAutoTraceDialog, false, Icon.eyeSmall, null));
+        table.pref(new SpdbSettingsWidgets.HeaderSetting("管理员增强", Icon.admin));
+        table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyAutoTrace, true, Icon.zoom, null));
+        table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyShowAutoTraceDialog, false, Icon.eyeSmall, null));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("工具", Icon.wrench));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开查询窗口", Icon.list, this::showStandaloneQueryDialog));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开调试窗口", Icon.zoom, this::showStandaloneDebugDialog));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
-        
+        table.pref(new SpdbSettingsWidgets.HeaderSetting("工具", Icon.wrench));
+        table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开查询窗口", Icon.list, this::showStandaloneQueryDialog));
+        table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开调试窗口", Icon.zoom, this::showStandaloneDebugDialog));
+        table.pref(new SpdbSettingsWidgets.ActionButtonSetting("查找疑似小号（同IP）", Icon.players, this::showSameIpAltDialog));
+        table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
     }
-
 
     private void ensureOverlayAttached(){
         if(Vars.headless || Vars.ui == null || Vars.ui.hudGroup == null) return;
@@ -778,20 +871,41 @@ public class ServerPlayerDataBaseMod extends Mod{
         return Math.max(min, Math.min(desktopPref, uiHeight() * 0.36f));
     }
 
+    private float queryDialogWidth(){
+        float width = uiWidth();
+        float margin = width < 900f ? 20f : 44f;
+        float target = width * (width < 1200f ? 0.96f : 0.9f);
+        return Math.max(360f, Math.min(target, width - margin));
+    }
+
+    private float queryDialogHeight(){
+        float height = uiHeight();
+        float margin = height < 700f ? 42f : 76f;
+        float target = height * (height < 820f ? 0.92f : 0.88f);
+        return Math.max(320f, Math.min(target, height - margin));
+    }
+
     private void showStandaloneQueryDialog(){
         if(Vars.ui == null) return;
 
         if(fallbackQueryDialog == null){
             fallbackQueryDialog = new BaseDialog("玩家数据库 / 聊天记录");
             fallbackQueryDialog.addCloseButton();
-            QueryContent content = new QueryContent();
-            fallbackQueryDialog.cont.add(content.root)
+            fallbackQueryContent = new QueryContent();
+        }
+
+        if(fallbackQueryContent == null){
+            fallbackQueryContent = new QueryContent();
+        }
+        fallbackQueryContent.ensureResponsiveLayout();
+
+        fallbackQueryDialog.cont.clear();
+        fallbackQueryDialog.cont.add(fallbackQueryContent.root)
                 .grow()
-                .width(fitDialogWidth(1000f))
-                .height(fitDialogHeight(760f, 340f))
+                .width(queryDialogWidth())
+                .height(queryDialogHeight())
                 .minWidth(0f)
                 .minHeight(0f);
-        }
 
         fallbackQueryDialog.show();
     }
@@ -812,6 +926,87 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
 
         fallbackDebugDialog.show();
+    }
+
+    private void showSameIpAltDialog(){
+        if(Vars.ui == null) return;
+
+        BaseDialog dialog = new BaseDialog("疑似小号（同IP账号）");
+        dialog.addCloseButton();
+        dialog.cont.defaults().left().pad(4f);
+
+        Table result = new Table();
+        result.left().top();
+
+        dialog.cont.table(Styles.black3, top -> {
+            top.left().defaults().left().pad(6f);
+            top.add("一键查找数据库中同IP账号，按账号数降序列出。")
+                .left()
+                .growX()
+                .wrap();
+            top.button("刷新", Icon.refresh, Styles.defaultt, () -> refreshSameIpAltResult(result))
+                .height(40f)
+                .padLeft(8f);
+        }).growX().row();
+
+        dialog.cont.pane(result)
+            .scrollX(false)
+            .grow()
+            .width(fitDialogWidth(1120f))
+            .height(fitDialogHeight(710f, 320f))
+            .minWidth(0f)
+            .minHeight(0f)
+            .row();
+
+        refreshSameIpAltResult(result);
+        dialog.show();
+    }
+
+    private void refreshSameIpAltResult(Table result){
+        if(result == null) return;
+
+        result.clear();
+        result.left().top().defaults().left().pad(4f).growX();
+
+        Seq<SameIpGroup> groups = playerDb.findSameIpGroups(2);
+        if(groups.isEmpty()){
+            result.add("当前没有发现同IP账号记录。").left().wrap().row();
+            return;
+        }
+
+        int accountCount = 0;
+        for(SameIpGroup group : groups){
+            accountCount += group.players.size;
+        }
+        result.add("发现 " + groups.size + " 组疑似小号（同IP），涉及 " + accountCount + " 个账号。")
+            .left()
+            .wrap()
+            .row();
+
+        for(SameIpGroup group : groups){
+            String geo = lookupIpGeoCached(group.ip);
+            String ipTitle = "IP: " + group.ip + (geo == null || geo.isEmpty() ? "" : " (" + geo + ")");
+
+            result.table(Styles.black3, card -> {
+                card.left().top().defaults().left().pad(3f).growX();
+                card.add(escapeMarkup(ipTitle)).left().wrap().row();
+                card.add("账号数: " + group.players.size + " | 最近出现: " + formatTime(group.latestSeen)).left().wrap().row();
+
+                for(int i = 0; i < group.players.size; i++){
+                    PlayerRecord rec = group.players.get(i);
+                    String line = (i + 1) + ". " + bestPlayerName(rec)
+                        + " | UID: " + (rec.uid == null ? "(none)" : rec.uid)
+                        + " | PID: " + rec.pid
+                        + " | 最后出现: " + formatTime(rec.lastSeen);
+                    card.add(escapeMarkup(line)).left().wrap().row();
+                }
+            }).growX().padTop(6f).row();
+        }
+    }
+
+    private static String bestPlayerName(PlayerRecord rec){
+        if(rec == null || rec.names == null || rec.names.isEmpty()) return "(unknown)";
+        return safeName(rec.names.peek());
     }
 
     private void importPlayersFromFile(){
@@ -1106,10 +1301,11 @@ public class ServerPlayerDataBaseMod extends Mod{
             appendDigestToken(sb, uid);
             sb.append('\n');
 
-            Seq<String> dates = file.uidDates.get(uid);
+            Object rawDates = file.uidDates.get(uid);
             ArrayList<String> sortedDates = new ArrayList<>();
-            if(dates != null){
-                for(String date : dates){
+            if(rawDates instanceof Seq<?>){
+                for(Object item : (Seq<?>)rawDates){
+                    String date = normalizeDigestDateToken(item);
                     if(ChatDatabase.isValidDateKey(date)) sortedDates.add(date);
                 }
             }
@@ -1149,16 +1345,44 @@ public class ServerPlayerDataBaseMod extends Mod{
         sb.append(entry == null ? 0L : entry.time).append('\n');
     }
 
-    private static void appendDigestSeq(StringBuilder sb, Seq<String> seq){
+    private static void appendDigestSeq(StringBuilder sb, Seq<?> seq){
         if(seq == null){
             sb.append("-1\n");
             return;
         }
         sb.append(seq.size).append('\n');
-        for(String value : seq){
-            appendDigestToken(sb, value);
+        for(Object value : seq){
+            appendDigestToken(sb, normalizeDigestScalar(value));
             sb.append('\n');
         }
+    }
+
+    private static String normalizeDigestDateToken(Object value){
+        String text = normalizeDigestScalar(value);
+        if(text == null) return null;
+        text = text.trim();
+        if(text.isEmpty()) return null;
+        return text;
+    }
+
+    private static String normalizeDigestScalar(Object value){
+        Object cur = value;
+        int guard = 0;
+
+        while(cur instanceof ObjectMap<?, ?> && guard < 8){
+            @SuppressWarnings("rawtypes")
+            ObjectMap map = (ObjectMap)cur;
+            if(!map.containsKey("value")) break;
+
+            if(!(map.size <= 2 || (map.containsKey("class") && map.containsKey("value")))){
+                break;
+            }
+
+            cur = map.get("value");
+            guard++;
+        }
+
+        return cur == null ? null : String.valueOf(cur);
     }
 
     private static void appendDigestToken(StringBuilder sb, String value){
@@ -1215,6 +1439,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         final Table chatTab = new Table();
         final Table uidResult = new Table();
         final Table pidResult = new Table();
+        final Table nameResult = new Table();
         final Table ipResult = new Table();
         final Table chatResult = new Table();
         final Table allPlayersResult = new Table();
@@ -1222,6 +1447,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         TextField uidField;
         TextField pidField;
+        TextField nameField;
         TextField ipField;
         TextField chatUidField;
         TextField fillPidField;
@@ -1231,6 +1457,8 @@ public class ServerPlayerDataBaseMod extends Mod{
         int activeTab;
         int allPlayersPage;
         int allChatsPage;
+        boolean compactLayout;
+        boolean mediumLayout;
 
         private static final int playersPageSize = 18;
         private static final int chatsPageSize = 22;
@@ -1239,12 +1467,23 @@ public class ServerPlayerDataBaseMod extends Mod{
             build();
         }
 
+        void ensureResponsiveLayout(){
+            boolean compact = compactUi();
+            boolean medium = !compact && uiWidth() < 1360f;
+            if(compact != compactLayout || medium != mediumLayout){
+                build();
+            }
+        }
+
         private void build(){
             root.clear();
             root.top().left();
             root.defaults().left().pad(4f);
             activeTab = 0;
-            boolean compact = compactUi();
+            compactLayout = compactUi();
+            mediumLayout = !compactLayout && uiWidth() < 1360f;
+            boolean compact = compactLayout;
+            boolean medium = mediumLayout;
 
             root.table(Styles.black3, top -> {
                 top.left().defaults().pad(6f).height(compact ? 40f : 44f).growX();
@@ -1254,6 +1493,18 @@ public class ServerPlayerDataBaseMod extends Mod{
                     top.button("导入聊天库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile).growX().row();
                     top.button("导出聊天库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile).growX().row();
                     top.button("完整性状态", Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog).growX();
+                }else if(medium){
+                    top.table(row -> {
+                        row.left().defaults().height(42f).padRight(6f).growX();
+                        row.button("导入玩家库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile).growX();
+                        row.button("导出玩家库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile).growX();
+                        row.button("完整性状态", Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog).growX();
+                    }).growX().row();
+                    top.table(row -> {
+                        row.left().defaults().height(42f).padRight(6f).growX();
+                        row.button("导入聊天库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile).growX();
+                        row.button("导出聊天库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile).growX();
+                    }).growX();
                 }else{
                     top.button("导入玩家库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile);
                     top.button("导出玩家库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile);
@@ -1379,6 +1630,30 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             playerTab.table(Styles.black3, box -> {
                 box.left().top().defaults().left().pad(4f).growX();
+                box.add("名字查询").padTop(4f).row();
+                if(compact){
+                    box.table(line -> {
+                        line.left().defaults().left().padRight(6f);
+                        nameField = line.field("", text -> {}).growX().get();
+                        nameField.setMessageText("输入玩家名或片段（支持模糊）");
+                    }).growX().row();
+                    box.table(line -> {
+                        line.left().defaults().left().padRight(6f).growX();
+                        line.button("查询名字", this::refreshNameResult).height(38f).growX();
+                    }).growX().row();
+                }else{
+                    box.table(line -> {
+                        line.left().defaults().left().padRight(6f);
+                        nameField = line.field("", text -> {}).growX().get();
+                        nameField.setMessageText("输入玩家名或片段（支持模糊）");
+                        line.button("查询名字", this::refreshNameResult).height(38f);
+                    }).growX().row();
+                }
+                box.pane(nameResult).scrollX(false).maxHeight(fitPaneHeight(240f, 140f)).growX().row();
+            }).growX().row();
+
+            playerTab.table(Styles.black3, box -> {
+                box.left().top().defaults().left().pad(4f).growX();
                 box.add("IP 查询").padTop(4f).row();
                 if(compact){
                     box.table(line -> {
@@ -1479,6 +1754,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             refreshUidResult();
             refreshPidResult();
+            refreshNameResult();
             refreshIpResult();
             refreshChatResult();
             refreshAllPlayersResult();
@@ -1561,6 +1837,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             refreshUidResult();
             refreshAllPlayersResult();
+            refreshNameResult();
             refreshIpResult();
         }
 
@@ -1575,6 +1852,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             refreshUidResult();
             refreshAllPlayersResult();
+            refreshNameResult();
             refreshIpResult();
         }
 
@@ -1604,6 +1882,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             refreshPidResult();
             refreshUidResult();
             refreshAllPlayersResult();
+            refreshNameResult();
         }
 
         private void mergeTwoUids(){
@@ -1632,6 +1911,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             refreshUidResult();
             refreshPidResult();
             refreshAllPlayersResult();
+            refreshNameResult();
             refreshIpResult();
         }
 
@@ -1652,6 +1932,82 @@ public class ServerPlayerDataBaseMod extends Mod{
             }
 
             pidResult.table(Styles.black3, box -> renderPlayerDetailCard(box, record)).growX().padTop(4f).row();
+        }
+
+        private void refreshNameResult(){
+            nameResult.clear();
+            nameResult.left().top();
+
+            String keyword = normalizeNameKeyword(nameField == null ? null : nameField.getText());
+            if(keyword == null){
+                nameResult.add("请输入玩家名字后查询。").left();
+                return;
+            }
+
+            Seq<PlayerRecord> players = playerDb.findByNameContains(keyword);
+            if(players.isEmpty()){
+                nameResult.add("未找到匹配名字的玩家。", Styles.outlineLabel).left();
+                return;
+            }
+
+            nameResult.add("关键字 '" + escapeMarkup(keyword) + "' 匹配 " + players.size + " 条记录").left().wrap().row();
+            if(compactUi()){
+                for(PlayerRecord rec : players){
+                    String bestName = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
+                    String uidText = rec.uid == null ? "(none)" : rec.uid;
+                    nameResult.table(Styles.black3, card -> {
+                        card.left().top().defaults().left().pad(3f).growX();
+                        card.add(escapeMarkup("玩家: " + bestName)).left().wrap().row();
+                        card.add(escapeMarkup("PID: " + safeLine(rec.pid, 68))).left().wrap().row();
+                        card.add(escapeMarkup("最后出现: " + formatTime(rec.lastSeen))).left().wrap().row();
+                        card.table(line -> {
+                            line.left().defaults().left().padRight(6f).growX();
+                            line.button(uidText, Styles.defaultt, () -> {
+                                if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
+                                if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
+                                if(rec.uid != null) refreshUidResult();
+                            }).height(32f).growX();
+                            line.button("定位", () -> {
+                                if(pidField != null) pidField.setText(rec.pid);
+                                refreshPidResult();
+                            }).height(32f).growX();
+                        }).growX().row();
+                    }).growX().padTop(3f).row();
+                }
+                return;
+            }
+
+            nameResult.table(Styles.black3, head -> {
+                head.left().defaults().pad(4f).left();
+                head.add("Name").width(200f);
+                head.add("UID").width(70f);
+                head.add("PID").width(250f);
+                head.add("最后出现").width(170f);
+                head.add("操作").width(90f);
+            }).growX().row();
+
+            for(PlayerRecord rec : players){
+                String bestName = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
+                String uidText = rec.uid == null ? "(none)" : rec.uid;
+                nameResult.table(row -> {
+                    row.left().defaults().pad(3f).left();
+                    row.add(escapeMarkup(safeLine(bestName, 26))).width(200f).left();
+                    row.button(uidText, Styles.defaultt, () -> {
+                        if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
+                        if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
+                        if(rec.uid != null) refreshUidResult();
+                    }).width(70f).height(30f);
+                    row.button(rec.pid, Styles.defaultt, () -> {
+                        if(pidField != null) pidField.setText(rec.pid);
+                        refreshPidResult();
+                    }).width(250f).height(30f);
+                    row.add(formatTime(rec.lastSeen)).width(170f).left();
+                    row.button("定位", () -> {
+                        if(pidField != null) pidField.setText(rec.pid);
+                        refreshPidResult();
+                    }).width(90f).height(30f);
+                }).growX().left().row();
+            }
         }
 
         private void renderPlayerDetailCard(Table box, PlayerRecord record){
@@ -2018,6 +2374,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         final Table root = new Table();
         final Table result = new Table();
         TextField uidField;
+        TextField nameField;
         TextField ipField;
         int lastMode;
 
@@ -2027,14 +2384,12 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         private void build(){
             root.clear();
-            root.background(overlayWindowBackground());
-            root.margin(8f);
             root.top().left().defaults().left().pad(4f);
             boolean compact = compactUi();
 
-            root.table(overlayCardBackground(), t -> {
+            root.table(Styles.black3, t -> {
                 t.left().defaults().left().pad(4f);
-                t.add("SPDB 轻量查询").color(overlayAccentColor()).left().growX().row();
+                t.add("[accent]SPDB 轻量查询[]").left().growX().row();
 
                 t.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
@@ -2046,27 +2401,36 @@ public class ServerPlayerDataBaseMod extends Mod{
                 if(compact){
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f);
+                        nameField = line.field("", text -> {}).growX().get();
+                        nameField.setMessageText("按名字模糊查询");
+                    }).growX().row();
+                    t.table(line -> {
+                        line.left().defaults().left().padRight(6f).growX();
+                        line.button("查名字", this::queryByName).height(34f).growX();
+                    }).growX().row();
+                    t.table(line -> {
+                        line.left().defaults().left().padRight(6f);
                         ipField = line.field("", text -> {}).growX().get();
                         ipField.setMessageText("按 IP 查询");
                     }).growX().row();
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
                         line.button("查IP", this::queryByIp).height(34f).growX();
-                        line.button("清空", () -> {
-                            lastMode = 0;
-                            result.clear();
-                        }).height(34f).growX();
+                        line.button("清空", this::clearResult).height(34f).growX();
                     }).growX().row();
                 }else{
+                    t.table(line -> {
+                        line.left().defaults().left().padRight(6f);
+                        nameField = line.field("", text -> {}).growX().get();
+                        nameField.setMessageText("按名字模糊查询");
+                        line.button("查名字", this::queryByName).height(34f);
+                    }).growX().row();
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         ipField = line.field("", text -> {}).growX().get();
                         ipField.setMessageText("按 IP 查询");
                         line.button("查IP", this::queryByIp).height(34f);
-                        line.button("清空", () -> {
-                            lastMode = 0;
-                            result.clear();
-                        }).height(34f);
+                        line.button("清空", this::clearResult).height(34f);
                     }).growX().row();
                 }
             }).growX().row();
@@ -2102,11 +2466,51 @@ public class ServerPlayerDataBaseMod extends Mod{
                     "IP: " + (rec.ips.isEmpty() ? "(none)" : rec.ips.peek()) + (geo == null || geo.isEmpty() ? "" : " (" + geo + ")") + "\n" +
                     "Last: " + formatTime(rec.lastSeen);
 
-                result.table(overlayCardAltBackground(), row -> {
+                result.table(Styles.black3, row -> {
                     row.left().defaults().left().pad(4f);
                     row.add(escapeMarkup(text)).growX().left().wrap();
                 }).growX().padTop(3f).row();
             }
+        }
+
+        private void queryByName(){
+            lastMode = 3;
+            result.clear();
+            result.left().top();
+
+            String keyword = normalizeNameKeyword(nameField == null ? null : nameField.getText());
+            if(keyword == null){
+                result.add("请输入玩家名字后查询。", Styles.outlineLabel).left().row();
+                return;
+            }
+
+            Seq<PlayerRecord> list = playerDb.findByNameContains(keyword);
+            if(list.isEmpty()){
+                result.add("未找到匹配名字的玩家。", Styles.outlineLabel).left().row();
+                return;
+            }
+
+            result.add("关键字 '" + escapeMarkup(keyword) + "' 匹配 " + list.size + " 条记录").left().wrap().row();
+            for(PlayerRecord rec : list){
+                String name = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
+                String text = "Name: " + name + "\n" +
+                    "UID: " + (rec.uid == null ? "(none)" : rec.uid) + "\n" +
+                    "PID: " + rec.pid + "\n" +
+                    "Last: " + formatTime(rec.lastSeen);
+
+                result.table(Styles.black3, row -> {
+                    row.left().defaults().left().pad(4f);
+                    row.add(escapeMarkup(text)).growX().left().wrap();
+                }).growX().padTop(3f).row();
+            }
+        }
+
+        private void clearResult(){
+            lastMode = 0;
+            result.clear();
+            if(uidField != null) uidField.setText("");
+            if(nameField != null) nameField.setText("");
+            if(ipField != null) ipField.setText("");
         }
 
         private void queryByIp(){
@@ -2136,7 +2540,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     "PID: " + rec.pid + "\n" +
                     "Last: " + formatTime(rec.lastSeen);
 
-                result.table(overlayCardAltBackground(), row -> {
+                result.table(Styles.black3, row -> {
                     row.left().defaults().left().pad(4f);
                     row.add(escapeMarkup(text)).growX().left().wrap();
                 }).growX().padTop(3f).row();
@@ -2146,6 +2550,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         private void refreshLast(){
             if(lastMode == 1) queryByUid();
             else if(lastMode == 2) queryByIp();
+            else if(lastMode == 3) queryByName();
         }
     }
 
@@ -2166,16 +2571,14 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         private void build(){
             root.clear();
-            root.background(overlayWindowBackground());
-            root.margin(8f);
             root.top().left();
             root.defaults().left().pad(4f);
             boolean compact = compactUi();
 
-            root.table(overlayCardBackground(), top -> {
+            root.table(Styles.black3, top -> {
                 top.left().defaults().pad(6f).height(40f).growX();
                 if(compact){
-                    top.add("SPDB 调试面板  最近 UID 解析记录").color(overlayAccentColor()).left().growX().wrap().row();
+                    top.add("[accent]SPDB 调试面板[]  最近 UID 解析记录").left().growX().wrap().row();
                     top.button("刷新", this::refresh).height(36f).growX().row();
                     top.table(btns -> {
                         btns.left().defaults().padRight(6f).growX();
@@ -2186,7 +2589,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                         btns.button("复制", this::copyAll).height(36f).growX();
                     }).growX();
                 }else{
-                    top.add("SPDB 调试面板  最近 UID 解析记录").color(overlayAccentColor()).left().growX();
+                    top.add("[accent]SPDB 调试面板[]  最近 UID 解析记录").left().growX();
                     top.button("刷新", this::refresh).height(36f);
                     top.button("清空", () -> {
                         debugLines.clear();
@@ -2196,7 +2599,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 }
             }).growX().row();
 
-            root.table(overlayCardBackground(), parser -> {
+            root.table(Styles.black3, parser -> {
                 parser.left().top().defaults().left().pad(4f).growX();
                 parser.add("聊天行解析回放（粘贴原始聊天行，实时看 name/uid/message）").left().row();
                 if(compact){
@@ -2247,7 +2650,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             }
 
             for(String line : debugLines){
-                lines.table(overlayCardAltBackground(), row -> {
+                lines.table(Styles.black3, row -> {
                     row.left().defaults().left().pad(4f);
                     row.add(escapeMarkup(line)).growX().left().wrap();
                 }).growX().padTop(2f).row();
@@ -2319,30 +2722,6 @@ public class ServerPlayerDataBaseMod extends Mod{
         public float getPrefHeight(){
             return getHeight();
         }
-    }
-
-    private static Color overlayAccentColor(){
-        return Color.valueOf("4ea8ff");
-    }
-
-    private static Drawable overlayWindowBackground(){
-        return tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, Color.valueOf("111821"));
-    }
-
-    private static Drawable overlayCardBackground(){
-        return tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, Color.valueOf("233246"));
-    }
-
-    private static Drawable overlayCardAltBackground(){
-        return tintDrawable(Tex.whiteui == null ? Tex.pane : Tex.whiteui, Color.valueOf("2c3e56"));
-    }
-
-    private static Drawable tintDrawable(Drawable base, Color tint){
-        if(base == null || tint == null) return base;
-        if(base instanceof arc.scene.style.TextureRegionDrawable){
-            return ((arc.scene.style.TextureRegionDrawable)base).tint(tint);
-        }
-        return base;
     }
 
     private void copy(String value){
@@ -2568,6 +2947,12 @@ public class ServerPlayerDataBaseMod extends Mod{
         return out.isEmpty() ? null : out;
     }
 
+    private static String normalizeNameKeyword(String text){
+        if(text == null) return null;
+        String out = Strings.stripColors(text).trim();
+        return out.isEmpty() ? null : out;
+    }
+
     private static String normalizeServer(String server){
         if(server == null) return "unknown";
         String out = server.trim();
@@ -2609,6 +2994,12 @@ public class ServerPlayerDataBaseMod extends Mod{
             out.lastSeen = lastSeen;
             return out;
         }
+    }
+
+    private static class SameIpGroup{
+        String ip;
+        Seq<PlayerRecord> players = new Seq<>();
+        long latestSeen;
     }
 
     public static class PlayerDbFile{
@@ -2860,6 +3251,32 @@ public class ServerPlayerDataBaseMod extends Mod{
             return out;
         }
 
+        Seq<PlayerRecord> findByNameContains(String keyword){
+            keyword = normalizeNameKeyword(keyword);
+            Seq<PlayerRecord> out = new Seq<>();
+            if(keyword == null) return out;
+
+            String needle = keyword.toLowerCase(Locale.ROOT);
+            for(ObjectMap.Entry<String, PlayerRecord> entry : players){
+                PlayerRecord rec = entry.value;
+                if(rec == null || rec.names == null || rec.names.isEmpty()) continue;
+
+                boolean matched = false;
+                for(String name : rec.names){
+                    String plain = safeName(name);
+                    if(containsIgnoreCase(plain, needle) || containsIgnoreCase(name, needle)){
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if(matched) out.add(rec);
+            }
+
+            out.sort((a, b) -> Long.compare(b.lastSeen, a.lastSeen));
+            return out;
+        }
+
         int mergeByUid(String uid){
             uid = normalizeShortUid(uid);
             if(uid == null) return 0;
@@ -2957,6 +3374,39 @@ public class ServerPlayerDataBaseMod extends Mod{
             return out;
         }
 
+        Seq<SameIpGroup> findSameIpGroups(int minAccounts){
+            int min = Math.max(2, minAccounts);
+            Seq<SameIpGroup> out = new Seq<>();
+
+            for(ObjectMap.Entry<String, OrderedSet<String>> entry : ipToPids){
+                String ip = normalizeIp(entry.key);
+                OrderedSet<String> pids = entry.value;
+                if(ip == null || pids == null || pids.size < min) continue;
+
+                SameIpGroup group = new SameIpGroup();
+                group.ip = ip;
+
+                for(String pid : pids){
+                    PlayerRecord rec = players.get(pid);
+                    if(rec != null) group.players.add(rec);
+                }
+                if(group.players.size < min) continue;
+
+                group.players.sort((a, b) -> Long.compare(b.lastSeen, a.lastSeen));
+                group.latestSeen = group.players.first().lastSeen;
+                out.add(group);
+            }
+
+            out.sort((a, b) -> {
+                int byCount = Integer.compare(b.players.size, a.players.size);
+                if(byCount != 0) return byCount;
+                int bySeen = Long.compare(b.latestSeen, a.latestSeen);
+                if(bySeen != 0) return bySeen;
+                return safeString(a.ip).compareTo(safeString(b.ip));
+            });
+            return out;
+        }
+
         Seq<PlayerRecord> allByLastSeen(){
             Seq<PlayerRecord> out = new Seq<>();
             for(ObjectMap.Entry<String, PlayerRecord> entry : players){
@@ -3009,6 +3459,11 @@ public class ServerPlayerDataBaseMod extends Mod{
             if(seq.contains(value, false)) return false;
             seq.add(value);
             return true;
+        }
+
+        private static boolean containsIgnoreCase(String source, String needleLower){
+            if(source == null || needleLower == null || needleLower.isEmpty()) return false;
+            return source.toLowerCase(Locale.ROOT).contains(needleLower);
         }
     }
 

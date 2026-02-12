@@ -236,18 +236,15 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private void releaseOverlayFocusIfPointerOutside(){
         if(Core.scene == null || Core.input == null) return;
+        if(overlayQueryContent == null && debugContent == null && !(overlayQueryWindow instanceof Element) && !(overlayDebugWindow instanceof Element)) return;
         if(isPointerOverOverlayContent()) return;
 
-        boolean cleared = clearOverlayFocusIfOwned();
-        if(!cleared){
-            cleared = clearOverlayFocusFallback();
-        }
-        if(!cleared) return;
+        if(!clearOverlayFocusIfOwned()) return;
 
         // Match customMarker's approach: run delayed clear to handle late focus re-assignments.
         Core.app.post(() -> Core.app.post(() -> {
             if(isPointerOverOverlayContent()) return;
-            if(!clearOverlayFocusIfOwned()) clearOverlayFocusFallback();
+            clearOverlayFocusIfOwned();
         }));
     }
 
@@ -262,21 +259,6 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(debugContent != null) Core.scene.unfocus(debugContent.root);
         if(overlayQueryWindow instanceof Element) Core.scene.unfocus((Element)overlayQueryWindow);
         if(overlayDebugWindow instanceof Element) Core.scene.unfocus((Element)overlayDebugWindow);
-
-        Core.scene.setScrollFocus(null);
-        Core.scene.setKeyboardFocus(null);
-        Core.scene.cancelTouchFocus();
-        return true;
-    }
-
-    private boolean clearOverlayFocusFallback(){
-        if(Core.scene == null) return false;
-        if(!Vars.state.isGame()) return false;
-        if(Core.scene.hasDialog() || Core.scene.hasField()) return false;
-
-        Element scrollFocus = Core.scene.getScrollFocus();
-        Element keyboardFocus = Core.scene.getKeyboardFocus();
-        if(scrollFocus == null && keyboardFocus == null) return false;
 
         Core.scene.setScrollFocus(null);
         Core.scene.setKeyboardFocus(null);

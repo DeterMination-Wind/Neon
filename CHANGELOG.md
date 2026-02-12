@@ -2,6 +2,15 @@
 
 All notable changes to Neon are documented in this file.
 
+## v5.2.2 - 2026-02-13
+
+### Fixed
+- Fixed a global UI focus-clearing regression introduced by the bundled ServerPlayerDataBase overlay integration.
+- Neon now clears focus only when SPDB-owned overlay elements actually hold focus, preventing non-responsive clicks in unrelated game UI areas.
+
+### Updated
+- Synced bundled `ServerPlayerDataBase` to the latest local source snapshot while preserving Neon bundled behavior.
+
 ## v5.2.0 - 2026-02-12
 
 ### Updated
@@ -83,6 +92,15 @@ All notable changes to Neon are documented in this file.
 ---
 
 ## 变更日志
+
+## v5.2.2 - 2026-02-13
+
+### 修复
+- 修复由整合版 ServerPlayerDataBase 覆盖层引入的全局焦点清理回归问题。
+- 现在仅在 SPDB 自身覆盖层元素持有焦点时才清理焦点，避免游戏中其他界面区域点击无响应。
+
+### 更新
+- 同步整合版 `ServerPlayerDataBase` 到本地最新代码快照，并保留 Neon 的整合行为约束。
 
 ## v5.2.0 - 2026-02-12
 

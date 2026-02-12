@@ -2,6 +2,15 @@
 
 All notable changes to Neon are documented in this file.
 
+## v5.2.0 - 2026-02-12
+
+### Updated
+- Rechecked all bundled module upstream states and confirmed no newer upstream commits to merge for current tracked repos.
+- Completed missing English bundle keys used by Neon settings/category labels (`bektools.section.update`, `pgmm.category`).
+
+### Docs
+- Refreshed release metadata version to `5.2.0`.
+
 ## v5.1.0 - 2026-02-11
 
 ### Added
@@ -74,6 +83,15 @@ All notable changes to Neon are documented in this file.
 ---
 
 ## 变更日志
+
+## v5.2.0 - 2026-02-12
+
+### 更新
+- 再次检查 Neon 已整合模组的上游状态，当前已跟踪仓库均无可合并的新提交。
+- 补齐英文 bundle 中 Neon 设置/分类相关缺失键（`bektools.section.update`、`pgmm.category`）。
+
+### 文档
+- 更新发布元数据版本为 `5.2.0`。
 
 ## v5.1.0 - 2026-02-11
 

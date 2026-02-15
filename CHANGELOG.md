@@ -2,6 +2,14 @@
 
 All notable changes to Neon are documented in this file.
 
+## v5.2.3 - 2026-02-15
+
+### Fixed
+- Fixed SPDB lightweight query buttons occasionally becoming non-responsive due to over-eager overlay focus clearing during active pointer interactions.
+
+### Updated
+- Synced bundled `ServerPlayerDataBase` focus-handling fix from local upstream snapshot.
+
 ## v5.2.2 - 2026-02-13
 
 ### Fixed
@@ -92,6 +100,14 @@ All notable changes to Neon are documented in this file.
 ---
 
 ## 变更日志
+
+## v5.2.3 - 2026-02-15
+
+### 修复
+- 修复 SPDB 轻量查询按钮在指针交互过程中可能被覆盖层焦点清理打断，导致点击无响应的问题。
+
+### 更新
+- 同步整合版 `ServerPlayerDataBase` 的焦点处理修复。
 
 ## v5.2.2 - 2026-02-13
 

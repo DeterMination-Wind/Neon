@@ -4,6 +4,7 @@ import arc.Core;
 import arc.Events;
 import arc.files.Fi;
 import arc.func.Prov;
+import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.TextArea;
@@ -119,6 +120,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     private OverlayQueryContent overlayQueryContent;
     private DebugContent debugContent;
     private float nextAttachAttempt;
+    private boolean overlayFocusClearQueued;
 
     private BaseDialog fallbackQueryDialog;
     private BaseDialog fallbackDebugDialog;
@@ -237,15 +239,33 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void releaseOverlayFocusIfPointerOutside(){
         if(Core.scene == null || Core.input == null) return;
         if(overlayQueryContent == null && debugContent == null && !(overlayQueryWindow instanceof Element) && !(overlayDebugWindow instanceof Element)) return;
+        if(!hasOverlayOwnedFocus()) return;
+        if(isUiPointerActive()) return;
         if(isPointerOverOverlayContent()) return;
 
-        if(!clearOverlayFocusIfOwned()) return;
+        if(overlayFocusClearQueued) return;
+        overlayFocusClearQueued = true;
 
         // Match customMarker's approach: run delayed clear to handle late focus re-assignments.
         Core.app.post(() -> Core.app.post(() -> {
+            overlayFocusClearQueued = false;
+            if(isUiPointerActive()) return;
             if(isPointerOverOverlayContent()) return;
             clearOverlayFocusIfOwned();
         }));
+    }
+
+    private boolean hasOverlayOwnedFocus(){
+        if(Core.scene == null) return false;
+        return ownsOverlayFocus(Core.scene.getScrollFocus()) || ownsOverlayFocus(Core.scene.getKeyboardFocus());
+    }
+
+    private boolean isUiPointerActive(){
+        if(Core.input == null) return false;
+        if(Core.input.isTouched()) return true;
+        return Core.input.keyDown(KeyCode.mouseLeft)
+            || Core.input.keyDown(KeyCode.mouseRight)
+            || Core.input.keyDown(KeyCode.mouseMiddle);
     }
 
     private boolean clearOverlayFocusIfOwned(){

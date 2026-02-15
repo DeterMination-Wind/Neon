@@ -6,9 +6,11 @@ All notable changes to Neon are documented in this file.
 
 ### Fixed
 - Fixed SPDB lightweight query buttons occasionally becoming non-responsive due to over-eager overlay focus clearing during active pointer interactions.
+- Fixed SPDB auto-trace issuing admin actions against admin targets, which caused repeated server log warnings (`attempted to perform admin action on nonexistant or admin player.`).
 
 ### Updated
 - Synced bundled `ServerPlayerDataBase` focus-handling fix from local upstream snapshot.
+- Synced bundled `ServerPlayerDataBase` auto-trace guard update to skip admin targets.
 
 ## v5.2.2 - 2026-02-13
 
@@ -105,9 +107,11 @@ All notable changes to Neon are documented in this file.
 
 ### 修复
 - 修复 SPDB 轻量查询按钮在指针交互过程中可能被覆盖层焦点清理打断，导致点击无响应的问题。
+- 修复 SPDB 自动 Trace 对管理员目标发送管理操作，导致服务端后台反复出现 `attempted to perform admin action on nonexistant or admin player.` 日志的问题。
 
 ### 更新
 - 同步整合版 `ServerPlayerDataBase` 的焦点处理修复。
+- 同步整合版 `ServerPlayerDataBase` 自动 Trace 跳过管理员目标的保护逻辑。
 
 ## v5.2.2 - 2026-02-13
 

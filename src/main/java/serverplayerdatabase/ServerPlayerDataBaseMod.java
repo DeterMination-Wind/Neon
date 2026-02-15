@@ -359,6 +359,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private void requestTraceIfNeeded(Player target, long now){
         if(target == null) return;
+        if(target.admin) return;
 
         Long next = nextTraceAt.get(target.id);
         if(next != null && now < next) return;

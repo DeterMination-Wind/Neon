@@ -4,6 +4,9 @@ import arc.Core;
 import arc.Events;
 import arc.util.CommandHandler;
 import arc.util.Log;
+import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.MarkerBridge;
+import mdtxcompat.OverlayUiBridge;
 import bettermapeditor.BetterMapEditorMod;
 import betterhotkey.BetterHotKeyMod;
 import betterminimap.BetterMiniMapMod;
@@ -43,6 +46,30 @@ public class BekToolsMod extends Mod{
     private final UpdateSchemeMod updateScheme;
 
     public BekToolsMod(){
+        this(
+            vanillaOverlayUi(),
+            MarkerBridge.UNSUPPORTED,
+            PowerGridMinimapMod::new,
+            StealthPathMod::new,
+            RadialBuildMenuMod::new,
+            ServerPlayerDataBaseMod::new,
+            BetterProjectorOverlayMod::new,
+            BetterHotKeyMod::new,
+            UpdateSchemeMod::new
+        );
+    }
+
+    protected BekToolsMod(
+        OverlayUiBridge overlayUi,
+        MarkerBridge markerBridge,
+        ModSupplier<PowerGridMinimapMod> pgmmSupplier,
+        ModSupplier<StealthPathMod> stealthPathSupplier,
+        ModSupplier<RadialBuildMenuMod> radialBuildMenuSupplier,
+        ModSupplier<ServerPlayerDataBaseMod> serverPlayerDataBaseSupplier,
+        ModSupplier<BetterProjectorOverlayMod> betterProjectorOverlaySupplier,
+        ModSupplier<BetterHotKeyMod> betterHotKeySupplier,
+        ModSupplier<UpdateSchemeMod> updateSchemeSupplier
+    ){
         PowerGridMinimapMod.bekBundled = true;
         StealthPathMod.bekBundled = true;
         RadialBuildMenuMod.bekBundled = true;
@@ -55,31 +82,34 @@ public class BekToolsMod extends Mod{
         HiddenMessageMod.bekBundled = true;
         UpdateSchemeMod.bekBundled = true;
 
-        pgmm = new PowerGridMinimapMod();
-        stealthPath = new StealthPathMod();
-        radialBuildMenu = new RadialBuildMenuMod();
+        BetterScreenShotFeature.configureOverlayUi(overlayUi);
+        CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
+
+        pgmm = pgmmSupplier.get();
+        stealthPath = stealthPathSupplier.get();
+        radialBuildMenu = radialBuildMenuSupplier.get();
         betterMiniMap = new BetterMiniMapMod();
         betterMiniMap.init();
         ServerPlayerDataBaseMod spdb = null;
         try{
-            spdb = new ServerPlayerDataBaseMod();
+            spdb = serverPlayerDataBaseSupplier.get();
         }catch(Throwable t){
             Log.err("Neon: failed to initialize bundled ServerPlayerDataBase module; continuing without it.", t);
         }
         serverPlayerDataBase = spdb;
         betterMapEditor = new BetterMapEditorMod();
         betterMapEditor.init();
-        betterProjectorOverlay = new BetterProjectorOverlayMod();
+        betterProjectorOverlay = betterProjectorOverlaySupplier.get();
         betterProjectorOverlay.init();
         betterLogisticsSpeed = new BetterLogisticsSpeedMod();
         betterLogisticsSpeed.init();
-        betterHotKey = new BetterHotKeyMod();
+        betterHotKey = betterHotKeySupplier.get();
         betterHotKey.init();
         modUpdater = new ModUpdaterMod();
         modUpdater.init();
         hiddenMessage = new HiddenMessageMod();
         hiddenMessage.init();
-        updateScheme = new UpdateSchemeMod();
+        updateScheme = updateSchemeSupplier.get();
         updateScheme.init();
         CustomMarkerFeature.init();
         BetterScreenShotFeature.init();
@@ -89,6 +119,16 @@ public class BekToolsMod extends Mod{
             registerSettings();
             GithubUpdateCheck.checkOnce();
         });
+    }
+
+    private static OverlayUiBridge vanillaOverlayUi(){
+        LegacyMindustryXGuard.rejectLegacyMindustryX("Neon");
+        return OverlayUiBridge.UNSUPPORTED;
+    }
+
+    @FunctionalInterface
+    protected interface ModSupplier<T>{
+        T get();
     }
 
     @Override

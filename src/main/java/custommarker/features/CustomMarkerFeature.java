@@ -31,6 +31,8 @@ import arc.util.Time;
 import arc.util.Tmp;
 import arc.util.pooling.Pools;
 import bektools.ui.VscodeSettingsStyle;
+import mdtxcompat.MarkerBridge;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.gen.Call;
 import mindustry.gen.Icon;
@@ -52,7 +54,6 @@ import java.util.regex.Pattern;
 
 import static mindustry.Vars.control;
 import static mindustry.Vars.headless;
-import static mindustry.Vars.mods;
 import static mindustry.Vars.net;
 import static mindustry.Vars.player;
 import static mindustry.Vars.state;
@@ -114,13 +115,22 @@ public class CustomMarkerFeature {
     private static Table fallbackOverlayHost;
     private static Table markHitter;
 
-    private static final MindustryXMarkers xMarkers = new MindustryXMarkers();
+    private static MarkerBridge xMarkers = MarkerBridge.UNSUPPORTED;
     private static final NativeMarkers nativeMarkers = new NativeMarkers();
-    private static final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
-    private static Object xOverlayWindow;
-    private static Object xChatListWindow;
+    private static final VanillaPingMarkers vanillaPingMarkers = new VanillaPingMarkers();
+    private static OverlayUiBridge xOverlayUi = OverlayUiBridge.UNSUPPORTED;
+    private static OverlayUiBridge.OverlayWindowHandle xOverlayWindow;
+    private static OverlayUiBridge.OverlayWindowHandle xChatListWindow;
     private static boolean lastOverlayVisible;
     private static ChatMarksWindow chatMarksWindowContent;
+
+    public static void configureCompat(OverlayUiBridge overlayUi, MarkerBridge markers) {
+        xOverlayUi = overlayUi == null ? OverlayUiBridge.UNSUPPORTED : overlayUi;
+        xMarkers = markers == null ? MarkerBridge.UNSUPPORTED : markers;
+        xOverlayWindow = null;
+        xChatListWindow = null;
+        lastOverlayVisible = false;
+    }
 
     public static void init() {
         if (inited) return;
@@ -134,8 +144,8 @@ public class CustomMarkerFeature {
             ensureTemplateDefaults();
             reloadRuntimeSettings();
             reloadTemplatesFromSettings();
-            xMarkers.tryInit();
             nativeMarkers.tryInit();
+            vanillaPingMarkers.tryInit();
             ensureUiAttached();
             syncOverlayButtonWindow(true);
         });
@@ -262,10 +272,10 @@ public class CustomMarkerFeature {
     }
 
     private static void syncOverlayWindowStateFromOverlayUi() {
-        if (xOverlayWindow == null || !xOverlayUi.isInstalled()) return;
+        if (xOverlayWindow == null || xOverlayWindow.asElement() == null || !xOverlayUi.isSupported()) return;
         if (!enabled) return;
 
-        Boolean visible = xOverlayUi.getEnabled(xOverlayWindow);
+        Boolean visible = xOverlayWindow.getEnabled();
         if (visible == null || visible == overlayWindowVisible) return;
 
         overlayWindowVisible = visible;
@@ -300,7 +310,7 @@ public class CustomMarkerFeature {
     }
 
     private static void ensureOverlayButtonAttached() {
-        if (xOverlayUi.isInstalled()) {
+        if (xOverlayUi.isSupported()) {
             removeFallbackOverlayHost();
 
             if (xOverlayWindow == null) {
@@ -310,9 +320,11 @@ public class CustomMarkerFeature {
                     createOverlayButtonContent(),
                     () -> true
                 );
-                xOverlayUi.tryConfigureWindow(xOverlayWindow, true, false);
+                if (xOverlayWindow != null) {
+                    xOverlayWindow.configure(true, false);
+                }
                 if (hadStoredState) {
-                    Boolean visible = xOverlayUi.getEnabled(xOverlayWindow);
+                    Boolean visible = xOverlayWindow == null ? null : xOverlayWindow.getEnabled();
                     if (visible != null) {
                         overlayWindowVisible = visible;
                         lastOverlayVisible = visible;
@@ -341,7 +353,7 @@ public class CustomMarkerFeature {
     }
 
     private static void ensureChatListWindowAttached() {
-        if (!xOverlayUi.isInstalled()) return;
+        if (!xOverlayUi.isSupported()) return;
         if (xChatListWindow != null) return;
 
         chatMarksWindowContent = new ChatMarksWindow();
@@ -350,9 +362,11 @@ public class CustomMarkerFeature {
             chatMarksWindowContent,
             () -> state != null && state.isGame()
         );
-        xOverlayUi.tryConfigureWindow(xChatListWindow, false, true);
-        if (!hasStoredOverlayWindowState(chatListWindowName)) {
-            xOverlayUi.setEnabledAndPinned(xChatListWindow, true, false);
+        if (xChatListWindow != null) {
+            xChatListWindow.configure(false, true);
+        }
+        if (xChatListWindow != null && !hasStoredOverlayWindowState(chatListWindowName)) {
+            xChatListWindow.setEnabledAndPinned(true, false);
         }
     }
 
@@ -374,7 +388,7 @@ public class CustomMarkerFeature {
         host.touchable = Touchable.childrenOnly;
         host.bottom().left();
         host.add(createOverlayButtonContent()).pad(6f);
-        host.update(() -> host.visible = desiredOverlayVisible() && canUseMarkerUi() && !xOverlayUi.isInstalled());
+        host.update(() -> host.visible = desiredOverlayVisible() && canUseMarkerUi() && !xOverlayUi.isSupported());
         return host;
     }
 
@@ -406,7 +420,7 @@ public class CustomMarkerFeature {
         Core.app.post(() -> {
             if (!canUseMarkerUi()) return;
 
-            xOverlayUi.tryCloseOverlayEditor();
+            xOverlayUi.closeEditorIfOpen();
             if (markHitter == null) {
                 markHitter = createMarkHitter();
             }
@@ -421,12 +435,12 @@ public class CustomMarkerFeature {
     }
 
     private static void syncOverlayButtonWindow(boolean force) {
-        if (xOverlayWindow == null) return;
+        if (xOverlayWindow == null || xOverlayWindow.asElement() == null) return;
 
         boolean visible = desiredOverlayVisible();
         if (!force && visible == lastOverlayVisible) return;
         lastOverlayVisible = visible;
-        xOverlayUi.setEnabledAndPinned(xOverlayWindow, visible, visible);
+        xOverlayWindow.setEnabledAndPinned(visible, visible);
     }
 
     private static void showPanelAtMouse() {
@@ -598,8 +612,9 @@ public class CustomMarkerFeature {
     }
 
     private static void dispatchMarkerCompat(String message, int tileX, int tileY) {
-        xMarkers.tryMark(message, tileX, tileY);
+        xMarkers.mark(message, tileX, tileY);
         nativeMarkers.tryMark(message, tileX, tileY);
+        vanillaPingMarkers.tryPing(message, tileX, tileY);
     }
 
     private static void markCurrent(int index) {
@@ -986,223 +1001,6 @@ public class CustomMarkerFeature {
         }
     }
 
-    private static class MindustryXOverlayUI {
-        private boolean initialized;
-        private boolean installed;
-        private Object instance;
-        private Method registerWindow;
-        private Method setAvailability;
-        private Method setResizable;
-        private Method setAutoHeight;
-        private Method getData;
-        private Method setEnabled;
-        private Method setPinned;
-        private Method getEnabled;
-        private Field enabledField;
-        private Method getOpen;
-        private Method toggleOverlay;
-        private boolean accessorsInitialized;
-
-        boolean isInstalled() {
-            if (initialized) return installed;
-            initialized = true;
-
-            try {
-                installed = mods != null && mods.locateMod("mindustryx") != null;
-            } catch (Throwable ignored) {
-                installed = false;
-            }
-            if (!installed) return false;
-
-            try {
-                Class<?> c = Class.forName("mindustryX.features.ui.OverlayUI");
-                instance = c.getField("INSTANCE").get(null);
-                registerWindow = c.getMethod("registerWindow", String.class, Table.class);
-                try {
-                    getOpen = c.getMethod("getOpen");
-                } catch (Throwable ignored) {
-                    getOpen = null;
-                }
-                try {
-                    toggleOverlay = c.getMethod("toggle");
-                } catch (Throwable ignored) {
-                    toggleOverlay = null;
-                }
-            } catch (Throwable t) {
-                installed = false;
-                return false;
-            }
-            return true;
-        }
-
-        Object registerWindow(String name, Table table, Prov<Boolean> availability) {
-            if (!isInstalled()) return null;
-            try {
-                Object window = registerWindow.invoke(instance, name, table);
-                tryInitWindowAccessors(window);
-                if (window != null && availability != null && setAvailability != null) {
-                    setAvailability.invoke(window, availability);
-                }
-                return window;
-            } catch (Throwable ignored) {
-                return null;
-            }
-        }
-
-        void setEnabledAndPinned(Object window, boolean enabled, boolean pinned) {
-            if (window == null) return;
-            try {
-                tryInitWindowAccessors(window);
-                if (getData == null) return;
-
-                Object data = getData.invoke(window);
-                if (data == null) return;
-
-                if (setEnabled != null) setEnabled.invoke(data, enabled);
-                if (setPinned != null) setPinned.invoke(data, pinned);
-            } catch (Throwable ignored) {
-            }
-        }
-
-        Boolean getEnabled(Object window) {
-            if (window == null) return null;
-            try {
-                tryInitWindowAccessors(window);
-                if (getData == null) return null;
-
-                Object data = getData.invoke(window);
-                if (data == null) return null;
-                if (getEnabled != null) {
-                    Object out = getEnabled.invoke(data);
-                    if (out instanceof Boolean) return (Boolean) out;
-                }
-                if (enabledField != null) {
-                    Object out = enabledField.get(data);
-                    if (out instanceof Boolean) return (Boolean) out;
-                }
-                return null;
-            } catch (Throwable ignored) {
-                return null;
-            }
-        }
-
-        void tryConfigureWindow(Object window, boolean autoHeight, boolean resizable) {
-            if (window == null) return;
-            try {
-                tryInitWindowAccessors(window);
-                if (setAutoHeight != null) setAutoHeight.invoke(window, autoHeight);
-                if (setResizable != null) setResizable.invoke(window, resizable);
-            } catch (Throwable ignored) {
-            }
-        }
-
-        void tryCloseOverlayEditor() {
-            if (!isInstalled()) return;
-            if (instance == null || getOpen == null || toggleOverlay == null) return;
-
-            try {
-                Object openObj = getOpen.invoke(instance);
-                boolean open = openObj instanceof Boolean && (Boolean) openObj;
-                if (open) {
-                    toggleOverlay.invoke(instance);
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-
-        private void tryInitWindowAccessors(Object window) {
-            if (window == null) return;
-            if (accessorsInitialized && (getData != null || setAvailability != null || setResizable != null || setAutoHeight != null)) return;
-
-            try {
-                Class<?> wc = window.getClass();
-                try {
-                    setAvailability = wc.getMethod("setAvailability", Prov.class);
-                } catch (Throwable ignored) {
-                    setAvailability = null;
-                }
-                try {
-                    setResizable = wc.getMethod("setResizable", boolean.class);
-                } catch (Throwable ignored) {
-                    setResizable = null;
-                }
-                try {
-                    setAutoHeight = wc.getMethod("setAutoHeight", boolean.class);
-                } catch (Throwable ignored) {
-                    setAutoHeight = null;
-                }
-
-                getData = wc.getMethod("getData");
-                Object data = getData.invoke(window);
-                if (data != null) {
-                    Class<?> dc = data.getClass();
-                    try {
-                        setEnabled = dc.getMethod("setEnabled", boolean.class);
-                    } catch (Throwable ignored) {
-                        setEnabled = null;
-                    }
-                    try {
-                        setPinned = dc.getMethod("setPinned", boolean.class);
-                    } catch (Throwable ignored) {
-                        setPinned = null;
-                    }
-                    try {
-                        getEnabled = dc.getMethod("isEnabled");
-                    } catch (Throwable ignored) {
-                        try {
-                            getEnabled = dc.getMethod("getEnabled");
-                        } catch (Throwable ignoredAgain) {
-                            getEnabled = null;
-                        }
-                    }
-                    try {
-                        enabledField = dc.getDeclaredField("enabled");
-                        enabledField.setAccessible(true);
-                    } catch (Throwable ignored) {
-                        enabledField = null;
-                    }
-                }
-
-                accessorsInitialized = true;
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private static class MindustryXMarkers {
-        private boolean initialized;
-        private boolean available;
-        private Method newMarkFromChat;
-
-        void tryInit() {
-            if (initialized) return;
-            initialized = true;
-
-            try {
-                if (mods == null || mods.locateMod("mindustryx") == null) {
-                    available = false;
-                    return;
-                }
-
-                Class<?> markerType = Class.forName("mindustryX.features.MarkerType");
-                newMarkFromChat = markerType.getMethod("newMarkFromChat", String.class, Vec2.class);
-                available = true;
-            } catch (Throwable ignored) {
-                available = false;
-            }
-        }
-
-        void tryMark(String message, int tileX, int tileY) {
-            if (!available || newMarkFromChat == null) return;
-
-            try {
-                newMarkFromChat.invoke(null, message, new Vec2(tileX, tileY));
-            } catch (Throwable ignored) {
-                available = false;
-            }
-        }
-    }
-
     private static class NativeMarkers {
         private static final float markerLifetime = 1800f;
         private static final float pointRadius = 6f;
@@ -1334,6 +1132,40 @@ public class CustomMarkerFeature {
 
         private String sanitizeLabel(String text) {
             return text == null ? "" : text.replace('\n', ' ').replace('\r', ' ').trim();
+        }
+    }
+
+    private static class VanillaPingMarkers {
+        private boolean initialized;
+        private boolean available;
+        private Method pingLocation;
+
+        void tryInit() {
+            if (initialized) return;
+            initialized = true;
+
+            try {
+                pingLocation = Call.class.getMethod("pingLocation", mindustry.gen.Player.class, float.class, float.class, String.class);
+                available = true;
+            } catch (Throwable ignored) {
+                available = false;
+                pingLocation = null;
+            }
+        }
+
+        void tryPing(String message, int tileX, int tileY) {
+            if (!available || pingLocation == null) return;
+            if (net == null || !net.active() || player == null) return;
+
+            try {
+                float worldX = tileX * tilesize;
+                float worldY = tileY * tilesize;
+                String label = nativeMarkers.buildLabel(message);
+                pingLocation.invoke(null, player, worldX, worldY, label.isEmpty() ? null : label);
+            } catch (Throwable ignored) {
+                available = false;
+                pingLocation = null;
+            }
         }
     }
 }

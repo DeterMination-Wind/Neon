@@ -11,13 +11,13 @@ import arc.util.Time;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
+import mdtxcompat.OverlayUiBridge;
 
 final class UpdateSchemeOverlay {
 
-    private static final MindustryXOverlayUI overlayUi = new MindustryXOverlayUI();
     private static boolean initialized;
     private static Table content;
-    private static Object window;
+    private static OverlayUiBridge.OverlayWindowHandle window;
     private static boolean lastEnabled;
 
     private UpdateSchemeOverlay() {
@@ -31,19 +31,19 @@ final class UpdateSchemeOverlay {
     }
 
     static void syncVisibility() {
-        if (window == null) return;
+        if (window == null || window.asElement() == null) return;
         if (lastEnabled == UpdateSchemeFeature.enabled) return;
         lastEnabled = UpdateSchemeFeature.enabled;
-        overlayUi.setEnabledAndPinned(window, lastEnabled, lastEnabled);
+        window.setEnabledAndPinned(lastEnabled, lastEnabled);
     }
 
     private static void ensureAttached() {
-        if (window != null || !overlayUi.isInstalled()) return;
+        if (window != null || !UpdateSchemeFeature.overlayUi.isSupported()) return;
         ensureContent();
         Prov<Boolean> availability = () -> Vars.state != null && Vars.state.isGame();
-        window = overlayUi.registerWindow("updatescheme-quick-parse", content, availability);
-        if (window == null) return;
-        overlayUi.tryConfigureWindow(window, true, false);
+        window = UpdateSchemeFeature.overlayUi.registerWindow("updatescheme-quick-parse", content, availability);
+        if (window == null || window.asElement() == null) return;
+        window.configure(true, false);
         lastEnabled = !UpdateSchemeFeature.enabled;
         syncVisibility();
     }

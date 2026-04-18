@@ -24,6 +24,8 @@ import arc.util.Time;
 import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonValue;
+import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.ClientServerConnectEvent;
@@ -99,7 +101,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     private final JsonReader jsonReader = new JsonReader();
     private final PlayerDatabase playerDb = new PlayerDatabase();
     private final ChatDatabase chatDb = new ChatDatabase();
-    private final MindustryXOverlayUI overlayUI = new MindustryXOverlayUI();
+    private final OverlayUiBridge overlayUI;
     private final ObjectMap<String, String> ipGeoCache = new ObjectMap<>();
     private final ObjectSet<String> ipGeoPending = new ObjectSet<>();
     private final Seq<String> debugLines = new Seq<>();
@@ -126,8 +128,8 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private TraceDialog originalTraceDialog;
 
-    private Object overlayQueryWindow;
-    private Object overlayDebugWindow;
+    private OverlayUiBridge.OverlayWindowHandle overlayQueryWindow;
+    private OverlayUiBridge.OverlayWindowHandle overlayDebugWindow;
     private OverlayQueryContent overlayQueryContent;
     private DebugContent debugContent;
     private float nextAttachAttempt;
@@ -140,6 +142,11 @@ public class ServerPlayerDataBaseMod extends Mod{
     private java.lang.reflect.Field chatMessagesField;
 
     public ServerPlayerDataBaseMod(){
+        this(vanillaOverlayUi());
+    }
+
+    protected ServerPlayerDataBaseMod(OverlayUiBridge overlayUi){
+        overlayUI = overlayUi;
         Events.on(ClientLoadEvent.class, e -> {
             if(Vars.headless) return;
 
@@ -251,7 +258,9 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private void releaseOverlayFocusIfPointerOutside(){
         if(Core.scene == null || Core.input == null) return;
-        if(overlayQueryContent == null && debugContent == null && !(overlayQueryWindow instanceof Element) && !(overlayDebugWindow instanceof Element)) return;
+        if(overlayQueryContent == null && debugContent == null
+            && (overlayQueryWindow == null || overlayQueryWindow.asElement() == null)
+            && (overlayDebugWindow == null || overlayDebugWindow.asElement() == null)) return;
         if(!hasOverlayOwnedFocus()) return;
         if(isUiPointerActive()) return;
         if(isPointerOverOverlayContent()) return;
@@ -290,8 +299,8 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         if(overlayQueryContent != null) Core.scene.unfocus(overlayQueryContent.root);
         if(debugContent != null) Core.scene.unfocus(debugContent.root);
-        if(overlayQueryWindow instanceof Element) Core.scene.unfocus((Element)overlayQueryWindow);
-        if(overlayDebugWindow instanceof Element) Core.scene.unfocus((Element)overlayDebugWindow);
+        if(overlayQueryWindow != null && overlayQueryWindow.asElement() != null) Core.scene.unfocus(overlayQueryWindow.asElement());
+        if(overlayDebugWindow != null && overlayDebugWindow.asElement() != null) Core.scene.unfocus(overlayDebugWindow.asElement());
 
         Core.scene.setScrollFocus(null);
         Core.scene.setKeyboardFocus(null);
@@ -309,32 +318,20 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private boolean ownsOverlayFocus(Element focus){
         if(focus == null) return false;
-        if(ownsOverlayElement(focus)) return true;
-        return hasMindustryXAncestor(focus);
+        return ownsOverlayElement(focus);
     }
 
     private boolean ownsOverlayElement(Element element){
         if(element == null) return false;
         if(overlayQueryContent != null && (element == overlayQueryContent.root || element.isDescendantOf(overlayQueryContent.root))) return true;
         if(debugContent != null && (element == debugContent.root || element.isDescendantOf(debugContent.root))) return true;
-        if(overlayQueryWindow instanceof Element){
-            Element queryWindow = (Element)overlayQueryWindow;
+        if(overlayQueryWindow != null && overlayQueryWindow.asElement() != null){
+            Element queryWindow = overlayQueryWindow.asElement();
             if(element == queryWindow || element.isDescendantOf(queryWindow)) return true;
         }
-        if(overlayDebugWindow instanceof Element){
-            Element debugWindow = (Element)overlayDebugWindow;
+        if(overlayDebugWindow != null && overlayDebugWindow.asElement() != null){
+            Element debugWindow = overlayDebugWindow.asElement();
             if(element == debugWindow || element.isDescendantOf(debugWindow)) return true;
-        }
-        return hasMindustryXAncestor(element);
-    }
-
-    private boolean hasMindustryXAncestor(Element element){
-        Element cur = element;
-        int guard = 0;
-        while(cur != null && guard++ < 32){
-            String cls = cur.getClass().getName();
-            if(cls != null && cls.startsWith("mindustryX.features.ui")) return true;
-            cur = cur.parent;
         }
         return false;
     }
@@ -850,16 +847,16 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private void ensureOverlayAttached(){
         if(Vars.headless || Vars.ui == null || Vars.ui.hudGroup == null) return;
-        if(!overlayUI.isInstalled()) return;
+        if(!overlayUI.isSupported()) return;
 
         if(overlayQueryContent == null){
             overlayQueryContent = new OverlayQueryContent();
         }
         if(overlayQueryWindow == null){
             overlayQueryWindow = overlayUI.registerWindow(overlayQueryWindowName, overlayQueryContent.root, () -> Vars.state.isGame());
-            overlayUI.tryConfigureWindow(overlayQueryWindow, false, true);
-            if(!hasStoredOverlayWindowState(overlayQueryWindowName)){
-                overlayUI.setEnabledAndPinned(overlayQueryWindow, true, false);
+            if(overlayQueryWindow != null) overlayQueryWindow.configure(false, true);
+            if(overlayQueryWindow != null && !hasStoredOverlayWindowState(overlayQueryWindowName)){
+                overlayQueryWindow.setEnabledAndPinned(true, false);
             }
         }
 
@@ -868,9 +865,9 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
         if(overlayDebugWindow == null){
             overlayDebugWindow = overlayUI.registerWindow(overlayDebugWindowName, debugContent.root, () -> Vars.state.isGame());
-            overlayUI.tryConfigureWindow(overlayDebugWindow, false, true);
-            if(!hasStoredOverlayWindowState(overlayDebugWindowName)){
-                overlayUI.setEnabledAndPinned(overlayDebugWindow, false, false);
+            if(overlayDebugWindow != null) overlayDebugWindow.configure(false, true);
+            if(overlayDebugWindow != null && !hasStoredOverlayWindowState(overlayDebugWindowName)){
+                overlayDebugWindow.setEnabledAndPinned(false, false);
             }
         }
     }
@@ -1207,6 +1204,11 @@ public class ServerPlayerDataBaseMod extends Mod{
                 Vars.ui.showErrorMessage("SPDB: 玩家库导入失败。");
             }
         });
+    }
+
+    private static OverlayUiBridge vanillaOverlayUi(){
+        LegacyMindustryXGuard.rejectLegacyMindustryX("ServerPlayerDataBase");
+        return OverlayUiBridge.UNSUPPORTED;
     }
 
     private void exportPlayersToFile(){
@@ -4597,129 +4599,4 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
     }
 
-    private static class MindustryXOverlayUI{
-        private boolean initialized;
-        private boolean installed;
-
-        private Object instance;
-        private Method registerWindow;
-        private Method setAvailability;
-        private Method getData;
-        private Method setEnabled;
-        private Method setPinned;
-        private Method setResizable;
-        private Method setAutoHeight;
-
-        boolean isInstalled(){
-            if(initialized) return installed;
-            initialized = true;
-
-            try{
-                installed = Vars.mods != null && Vars.mods.locateMod("mindustryx") != null;
-            }catch(Throwable ignored){
-                installed = false;
-            }
-            if(!installed) return false;
-
-            try{
-                Class<?> cls = Class.forName("mindustryX.features.ui.OverlayUI");
-                instance = cls.getField("INSTANCE").get(null);
-                registerWindow = cls.getMethod("registerWindow", String.class, Table.class);
-            }catch(Throwable t){
-                installed = false;
-                Log.err("SPDB: OverlayUI reflection init failed.", t);
-            }
-
-            return installed;
-        }
-
-        Object registerWindow(String name, Table table, Prov<Boolean> availability){
-            if(!isInstalled()) return null;
-
-            try{
-                Object window = registerWindow.invoke(instance, name, table);
-                tryInitWindowAccessors(window);
-                if(window != null && availability != null && setAvailability != null){
-                    setAvailability.invoke(window, availability);
-                }
-                return window;
-            }catch(Throwable t){
-                Log.err("SPDB: OverlayUI.registerWindow failed.", t);
-                return null;
-            }
-        }
-
-        void tryConfigureWindow(Object window, boolean autoHeight, boolean resizable){
-            if(window == null) return;
-            try{
-                tryInitWindowAccessors(window);
-                if(setAutoHeight != null) setAutoHeight.invoke(window, autoHeight);
-                if(setResizable != null) setResizable.invoke(window, resizable);
-            }catch(Throwable ignored){
-            }
-        }
-
-        void setEnabledAndPinned(Object window, boolean enabled, boolean pinned){
-            if(window == null) return;
-
-            try{
-                tryInitWindowAccessors(window);
-                if(getData == null) return;
-
-                Object data = getData.invoke(window);
-                if(data == null) return;
-
-                if(setEnabled != null) setEnabled.invoke(data, enabled);
-                if(setPinned != null) setPinned.invoke(data, pinned);
-            }catch(Throwable ignored){
-            }
-        }
-
-        private void tryInitWindowAccessors(Object window){
-            if(window == null) return;
-            if(getData != null || setAvailability != null) return;
-
-            try{
-                Class<?> wc = window.getClass();
-
-                try{
-                    setAvailability = wc.getMethod("setAvailability", Prov.class);
-                }catch(Throwable ignored){
-                    setAvailability = null;
-                }
-
-                try{
-                    setResizable = wc.getMethod("setResizable", boolean.class);
-                }catch(Throwable ignored){
-                    setResizable = null;
-                }
-
-                try{
-                    setAutoHeight = wc.getMethod("setAutoHeight", boolean.class);
-                }catch(Throwable ignored){
-                    setAutoHeight = null;
-                }
-
-                getData = wc.getMethod("getData");
-
-                Object data = getData.invoke(window);
-                if(data != null){
-                    Class<?> dc = data.getClass();
-
-                    try{
-                        setEnabled = dc.getMethod("setEnabled", boolean.class);
-                    }catch(Throwable ignored){
-                        setEnabled = null;
-                    }
-
-                    try{
-                        setPinned = dc.getMethod("setPinned", boolean.class);
-                    }catch(Throwable ignored){
-                        setPinned = null;
-                    }
-                }
-            }catch(Throwable ignored){
-            }
-        }
-    }
 }

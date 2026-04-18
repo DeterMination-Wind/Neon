@@ -31,6 +31,8 @@ import arc.util.Strings;
 import arc.util.Time;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.Jformat;
+import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.gen.Groups;
@@ -134,8 +136,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     public static final KeyBind radialMenu = KeyBind.add("rbm_radial_menu", KeyCode.unset, "blocks");
     public static final KeyBind toggleSlotGroup = KeyBind.add("rbm_toggle_slot_group", KeyCode.unset, "blocks");
 
-    private final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
-    private Object xMobileToggleWindow;
+    private final OverlayUiBridge xOverlayUi;
+    private OverlayUiBridge.OverlayWindowHandle xMobileToggleWindow;
 
     private boolean condAfterLatched;
     private boolean condInitActive;
@@ -150,6 +152,11 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     private static final float condEvalIntervalFrames = 10f;
 
     public RadialBuildMenuMod(){
+        this(vanillaOverlayUi());
+    }
+
+    protected RadialBuildMenuMod(OverlayUiBridge overlayUi){
+        xOverlayUi = overlayUi;
         Events.on(ClientLoadEvent.class, e -> {
             ensureDefaults();
             registerSettings();
@@ -163,6 +170,11 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensureMobileToggleAttached);
         });
+    }
+
+    private static OverlayUiBridge vanillaOverlayUi(){
+        LegacyMindustryXGuard.rejectLegacyMindustryX("Radial Build Menu");
+        return OverlayUiBridge.UNSUPPORTED;
     }
 
     private void ensureDefaults(){
@@ -1390,16 +1402,16 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         ensureOverlayAttached();
 
         // Prefer MindustryX OverlayUI if available.
-        if(xOverlayUi.isInstalled()){
+        if(xOverlayUi.isSupported()){
             if(xMobileToggleWindow == null){
                 try{
                     Table content = buildMobileToggleContent();
                     xMobileToggleWindow = xOverlayUi.registerWindow(mobileWindowName, content, () -> state != null && state.isGame());
-                    if(xMobileToggleWindow != null){
-                        xOverlayUi.configureWindow(xMobileToggleWindow, true, false);
+                    if(xMobileToggleWindow != null && xMobileToggleWindow.asElement() != null){
+                        xMobileToggleWindow.configure(false, true);
                         // Auto-enable only on first registration; afterwards keep OverlayUI's persisted visibility.
                         if(!hasStoredOverlayWindowState(mobileWindowName)){
-                            xOverlayUi.setEnabledAndPinned(xMobileToggleWindow, true, false);
+                            xMobileToggleWindow.setEnabledAndPinned(true, false);
                         }
                         return;
                     }
@@ -2005,120 +2017,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 && block.placeablePlayer
                 && block.environmentBuildable()
                 && block.supportsEnv(state.rules.env);
-        }
-    }
-
-    /** Optional integration with MindustryX OverlayUI. Uses reflection so vanilla builds won't crash. */
-    private static class MindustryXOverlayUI{
-        private boolean initialized = false;
-        private boolean installed = false;
-        private Object instance;
-        private Method registerWindow;
-        private Method setAvailability;
-        private Method getData;
-        private Method setEnabled;
-        private Method setPinned;
-        private Method setResizable;
-        private Method setAutoHeight;
-
-        boolean isInstalled(){
-            if(initialized) return installed;
-            initialized = true;
-            try{
-                installed = mindustry.Vars.mods != null && mindustry.Vars.mods.locateMod("mindustryx") != null;
-            }catch(Throwable ignored){
-                installed = false;
-            }
-            if(!installed) return false;
-
-            try{
-                Class<?> c = Class.forName("mindustryX.features.ui.OverlayUI");
-                instance = c.getField("INSTANCE").get(null);
-                registerWindow = c.getMethod("registerWindow", String.class, Table.class);
-            }catch(Throwable t){
-                installed = false;
-                Log.err("RBM: MindustryX detected but OverlayUI reflection init failed.", t);
-                return false;
-            }
-            return true;
-        }
-
-        Object registerWindow(String name, Table table, Prov<Boolean> availability){
-            if(!isInstalled()) return null;
-            try{
-                Object window = registerWindow.invoke(instance, name, table);
-                tryInitWindowAccessors(window);
-                if(window != null && availability != null && setAvailability != null){
-                    setAvailability.invoke(window, availability);
-                }
-                return window;
-            }catch(Throwable t){
-                Log.err("RBM: OverlayUI.registerWindow failed.", t);
-                return null;
-            }
-        }
-
-        void configureWindow(Object window, boolean resizable, boolean autoHeight){
-            if(window == null) return;
-            try{
-                tryInitWindowAccessors(window);
-                if(setResizable != null) setResizable.invoke(window, resizable);
-                if(setAutoHeight != null) setAutoHeight.invoke(window, autoHeight);
-            }catch(Throwable ignored){
-            }
-        }
-
-        void setEnabledAndPinned(Object window, boolean enabled, boolean pinned){
-            if(window == null) return;
-            try{
-                tryInitWindowAccessors(window);
-                if(getData == null) return;
-                Object data = getData.invoke(window);
-                if(data == null) return;
-                if(setEnabled != null) setEnabled.invoke(data, enabled);
-                if(pinned && setPinned != null) setPinned.invoke(data, true);
-            }catch(Throwable ignored){
-            }
-        }
-
-        private void tryInitWindowAccessors(Object window){
-            if(window == null) return;
-            if(getData != null || setAvailability != null) return;
-            try{
-                Class<?> wc = window.getClass();
-                try{
-                    setAvailability = wc.getMethod("setAvailability", Prov.class);
-                }catch(Throwable ignored){
-                    setAvailability = null;
-                }
-                try{
-                    setResizable = wc.getMethod("setResizable", boolean.class);
-                }catch(Throwable ignored){
-                    setResizable = null;
-                }
-                try{
-                    setAutoHeight = wc.getMethod("setAutoHeight", boolean.class);
-                }catch(Throwable ignored){
-                    setAutoHeight = null;
-                }
-                getData = wc.getMethod("getData");
-
-                Object data = getData.invoke(window);
-                if(data != null){
-                    Class<?> dc = data.getClass();
-                    try{
-                        setEnabled = dc.getMethod("setEnabled", boolean.class);
-                    }catch(Throwable ignored){
-                        setEnabled = null;
-                    }
-                    try{
-                        setPinned = dc.getMethod("setPinned", boolean.class);
-                    }catch(Throwable ignored){
-                        setPinned = null;
-                    }
-                }
-            }catch(Throwable ignored){
-            }
         }
     }
 

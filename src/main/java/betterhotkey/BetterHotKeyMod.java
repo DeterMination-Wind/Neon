@@ -2,6 +2,8 @@ package betterhotkey;
 
 import arc.Events;
 import betterhotkey.features.BetterHotKeyFeature;
+import mdtxcompat.OverlayUiBridge;
+import mdtxcompat.LegacyMindustryXGuard;
 import mindustry.game.EventType;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -14,6 +16,19 @@ public class BetterHotKeyMod extends Mod {
     public static boolean bekBundled = false;
 
     private static boolean settingsAdded;
+
+    public BetterHotKeyMod() {
+        this(vanillaOverlayUi());
+    }
+
+    protected BetterHotKeyMod(OverlayUiBridge overlayUi) {
+        BetterHotKeyFeature.configureOverlayUi(overlayUi);
+    }
+
+    private static OverlayUiBridge vanillaOverlayUi() {
+        LegacyMindustryXGuard.rejectLegacyMindustryX("betterHotKey");
+        return OverlayUiBridge.UNSUPPORTED;
+    }
 
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table) {
         BetterHotKeyFeature.buildSettings(table);

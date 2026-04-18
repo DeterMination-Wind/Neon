@@ -2,11 +2,12 @@
   "name": "bek-tools",
   "displayName": "Neon / 氖",
   "author": "DeterMination (BEK)",
-  "repo": "Wind-DeterMination-backup/Neon",
+  "repo": "DeterMination-Wind/Neon",
   "description": "A bundled toolkit with 14 client modules, including UpdateScheme schematic publishing/subscription. / 辅助模组十四合一，含 UpdateScheme 蓝图发布/订阅。",
-  "version": "6.4.1",
+  "version": "6.6.0",
   "minGameVersion": 154,
   "hidden": true,
   "java": true,
-  "main": "bektools.BekToolsMod"
+  "main": "bektools.BekToolsMod",
+  "mainX": "bektools.BekToolsModX"
 }

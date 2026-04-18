@@ -3,15 +3,12 @@ package updatescheme.features;
 import arc.Core;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextButton.TextButtonStyle;
-import arc.util.Log;
 import mindustry.game.Schematic;
 import mindustry.game.Schematics;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import mindustry.ui.dialogs.SchematicsDialog;
-
-import java.lang.reflect.Method;
 
 import static mindustry.Vars.platform;
 import static mindustry.Vars.schematicExtension;
@@ -20,11 +17,6 @@ import static mindustry.Vars.steam;
 import static mindustry.Vars.ui;
 
 final class UpdateSchemeSchematicsDialog extends SchematicsDialog {
-
-    private static final String shareFeatureClassName = "mindustryX.features.ShareFeature";
-    private static Method shareChatMethod;
-    private static Method shareClipboardMethod;
-    private static boolean shareChecked;
 
     UpdateSchemeSchematicsDialog() {
         super();
@@ -61,18 +53,15 @@ final class UpdateSchemeSchematicsDialog extends SchematicsDialog {
                 }).get());
                 t.row();
 
-                ensureShareFeature();
-                if (shareChatMethod != null) {
+                if (UpdateSchemeFeature.shareBridge.isSupported()) {
                     styleButton(t.button("@us.uc.mdx-share-chat", Icon.chat, style, () -> {
                         dialog.hide();
-                        invokeShare(shareChatMethod, s);
+                        UpdateSchemeFeature.shareBridge.shareToChat(s);
                     }).get());
                     t.row();
-                }
-                if (shareClipboardMethod != null) {
                     styleButton(t.button("@us.uc.mdx-share-clipboard", Icon.star, style, () -> {
                         dialog.hide();
-                        invokeShare(shareClipboardMethod, s);
+                        UpdateSchemeFeature.shareBridge.shareToClipboard(s);
                     }).get());
                     t.row();
                 }
@@ -92,27 +81,6 @@ final class UpdateSchemeSchematicsDialog extends SchematicsDialog {
 
         dialog.addCloseButton();
         dialog.show();
-    }
-
-    private static void ensureShareFeature() {
-        if (shareChecked) return;
-        shareChecked = true;
-        try {
-            Class<?> cls = Class.forName(shareFeatureClassName);
-            shareChatMethod = cls.getMethod("shareSchematic", Schematic.class);
-            shareClipboardMethod = cls.getMethod("shareSchematicClipboard", Schematic.class);
-        } catch (Throwable ignored) {
-            shareChatMethod = null;
-            shareClipboardMethod = null;
-        }
-    }
-
-    private static void invokeShare(Method method, Schematic schematic) {
-        try {
-            method.invoke(null, schematic);
-        } catch (Throwable t) {
-            Log.warn("UpdateScheme: failed to invoke ShareFeature", t);
-        }
     }
 
     private static void styleButton(TextButton button) {

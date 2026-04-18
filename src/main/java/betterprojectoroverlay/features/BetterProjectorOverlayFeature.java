@@ -16,10 +16,10 @@ import arc.struct.IntSet;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Interval;
-import arc.util.Log;
 import arc.util.Time;
 import arc.util.pooling.Pools;
 import betterprojectoroverlay.GithubUpdateCheck;
+import mdtxcompat.MarkerBridge;
 import mindustry.content.Blocks;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
@@ -85,12 +85,16 @@ public class BetterProjectorOverlayFeature {
     private static final IntFloatMap graphCurrentBalance = new IntFloatMap();
     private static final IntFloatMap graphDelta = new IntFloatMap();
 
-    private static final MindustryXMarkers xMarkers = new MindustryXMarkers();
+    private static MarkerBridge xMarkers = MarkerBridge.UNSUPPORTED;
 
     private static boolean forceRescan = true;
     private static int lastPreviewTile = Integer.MIN_VALUE;
     private static Block lastPreviewBlock;
     private static float nextPreviewComputeAt;
+
+    public static void configureMarkers(MarkerBridge markers) {
+        xMarkers = markers == null ? MarkerBridge.UNSUPPORTED : markers;
+    }
 
     public static void init() {
         if (inited) return;
@@ -105,7 +109,6 @@ public class BetterProjectorOverlayFeature {
             Core.settings.defaults(keyPreviewTextScale, 125);
             Core.settings.defaults(keyPreviewTextAlpha, 100);
 
-            xMarkers.tryInit();
             refreshSettings();
             forceRescan = true;
         });
@@ -375,7 +378,9 @@ public class BetterProjectorOverlayFeature {
             int tileY = target.tileY();
 
             if (markedPositions.add(pos)) {
-                xMarkers.markNeedRemove(tileX, tileY);
+                String label = Core.bundle.get("bpo.mark.remove", "Need remove overdrive");
+                String text = "[scarlet]" + label + "[] (" + tileX + "," + tileY + ")";
+                xMarkers.mark(text, tileX, tileY);
             }
 
             if (announcedPositions.add(pos)) {
@@ -484,37 +489,4 @@ public class BetterProjectorOverlayFeature {
         }
     }
 
-    /** Optional integration with MindustryX marker API. Uses reflection so missing MindustryX won't crash. */
-    private static class MindustryXMarkers {
-        private boolean initialized;
-        private boolean available;
-        private Method newMarkFromChat;
-
-        void tryInit() {
-            if (initialized) return;
-            initialized = true;
-
-            try {
-                Class<?> markerType = Class.forName("mindustryX.features.MarkerType");
-                newMarkFromChat = markerType.getMethod("newMarkFromChat", String.class, Vec2.class);
-                available = true;
-                Log.info("BPO: MindustryX marker API detected.");
-            } catch (Throwable ignored) {
-                available = false;
-            }
-        }
-
-        void markNeedRemove(int tileX, int tileY) {
-            if (!available || newMarkFromChat == null) return;
-
-            try {
-                String label = Core.bundle.get("bpo.mark.remove", "Need remove overdrive");
-                String text = "[scarlet]" + label + "[] (" + tileX + "," + tileY + ")";
-                newMarkFromChat.invoke(null, text, new Vec2(tileX, tileY));
-            } catch (Throwable t) {
-                available = false;
-                Log.err("BPO: MindustryX marker call failed; disabling integration.", t);
-            }
-        }
-    }
 }

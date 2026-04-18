@@ -15,12 +15,11 @@ import arc.scene.ui.layout.Table;
 import arc.util.Interval;
 import arc.util.Strings;
 import betterscreenshot.core.Screenshot;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
-
-import java.lang.reflect.Method;
 
 import static mindustry.Vars.state;
 import static mindustry.Vars.ui;
@@ -44,7 +43,7 @@ public class BetterScreenShotFeature {
     private static final float attachRefreshTime = 1f;
     private static final float sizeRefreshTime = 0.2f;
 
-    private static final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
+    private static OverlayUiBridge xOverlayUi = OverlayUiBridge.UNSUPPORTED;
 
     private static boolean inited;
     private static boolean keybindsRegistered;
@@ -62,9 +61,16 @@ public class BetterScreenShotFeature {
     private static Label statusLabel;
     private static TextButton captureButton;
 
-    private static Object xWindow;
+    private static OverlayUiBridge.OverlayWindowHandle xWindow;
     private static boolean hostedByOverlayUI;
     private static boolean lastOverlayEnabled;
+
+    public static void configureOverlayUi(OverlayUiBridge overlayUi) {
+        xOverlayUi = overlayUi == null ? OverlayUiBridge.UNSUPPORTED : overlayUi;
+        xWindow = null;
+        hostedByOverlayUI = false;
+        lastOverlayEnabled = false;
+    }
 
     public static void init() {
         if (inited) return;
@@ -116,8 +122,8 @@ public class BetterScreenShotFeature {
         resolutionPercent = Mathf.clamp(Core.settings.getInt(keyResolution, 100), 25, 400);
         showProgress = Core.settings.getBool(keyShowProgress, true);
 
-        if (xWindow != null && lastOverlayEnabled != enabled) {
-            xOverlayUi.setEnabledAndPinned(xWindow, enabled, enabled);
+        if (xWindow != null && xWindow.asElement() != null && lastOverlayEnabled != enabled) {
+            xWindow.setEnabledAndPinned(enabled, enabled);
             lastOverlayEnabled = enabled;
         }
 
@@ -168,23 +174,23 @@ public class BetterScreenShotFeature {
     private static void ensurePanelAttached() {
         if (panel == null || ui == null || ui.hudGroup == null) return;
 
-        if (xOverlayUi.isInstalled()) {
+        if (xOverlayUi.isSupported()) {
             if (xWindow == null) {
                 xWindow = xOverlayUi.registerWindow(overlayWindowName, panel, () -> state != null && state.isGame());
-                if (xWindow != null) {
-                    xOverlayUi.tryConfigureWindow(xWindow, false, true);
+                if (xWindow != null && xWindow.asElement() != null) {
+                    xWindow.configure(false, true);
                     if (Core.settings != null && !Core.settings.has("overlayUI." + overlayWindowName) && enabled) {
-                        xOverlayUi.setEnabledAndPinned(xWindow, true, true);
+                        xWindow.setEnabledAndPinned(true, true);
                     }
                     lastOverlayEnabled = enabled;
                 }
             }
 
-            if (xWindow != null) {
+            if (xWindow != null && xWindow.asElement() != null) {
                 hostedByOverlayUI = true;
                 panel.touchable = Touchable.childrenOnly;
                 if (lastOverlayEnabled != enabled) {
-                    xOverlayUi.setEnabledAndPinned(xWindow, enabled, enabled);
+                    xWindow.setEnabledAndPinned(enabled, enabled);
                     lastOverlayEnabled = enabled;
                 }
                 return;
@@ -316,133 +322,4 @@ public class BetterScreenShotFeature {
         return new Rect(0f, 0f, world.unitWidth(), world.unitHeight());
     }
 
-    private static class MindustryXOverlayUI {
-        private boolean initialized;
-        private boolean installed;
-
-        private Object instance;
-        private Method registerWindow;
-
-        private Method setAvailability;
-        private Method setResizable;
-        private Method setAutoHeight;
-        private Method getData;
-        private Method setEnabled;
-        private Method setPinned;
-
-        private boolean accessorsInitialized;
-
-        boolean isInstalled() {
-            if (initialized) return installed;
-            initialized = true;
-
-            try {
-                installed = mindustry.Vars.mods != null && mindustry.Vars.mods.locateMod("mindustryx") != null;
-            } catch (Throwable ignored) {
-                installed = false;
-            }
-            if (!installed) return false;
-
-            try {
-                Class<?> c = Class.forName("mindustryX.features.ui.OverlayUI");
-                instance = c.getField("INSTANCE").get(null);
-                registerWindow = c.getMethod("registerWindow", String.class, Table.class);
-                return true;
-            } catch (Throwable t) {
-                installed = false;
-                return false;
-            }
-        }
-
-        Object registerWindow(String name, Table table, Prov<Boolean> availability) {
-            if (!isInstalled()) return null;
-            try {
-                Object window = registerWindow.invoke(instance, name, table);
-                tryInitWindowAccessors(window);
-                if (window != null && availability != null && setAvailability != null) {
-                    setAvailability.invoke(window, availability);
-                }
-                return window;
-            } catch (Throwable ignored) {
-                return null;
-            }
-        }
-
-        void tryConfigureWindow(Object window, boolean autoHeight, boolean resizable) {
-            if (window == null) return;
-            try {
-                tryInitWindowAccessors(window);
-                if (setAutoHeight != null) setAutoHeight.invoke(window, autoHeight);
-                if (setResizable != null) setResizable.invoke(window, resizable);
-            } catch (Throwable ignored) {
-            }
-        }
-
-        void setEnabledAndPinned(Object window, boolean enabled, boolean pinned) {
-            if (window == null) return;
-            try {
-                tryInitWindowAccessors(window);
-                if (getData == null) return;
-
-                Object data = getData.invoke(window);
-                if (data == null) return;
-
-                if (setEnabled != null) setEnabled.invoke(data, enabled);
-                if (setPinned != null) setPinned.invoke(data, pinned);
-            } catch (Throwable ignored) {
-            }
-        }
-
-        private void tryInitWindowAccessors(Object window) {
-            if (window == null) return;
-            if (accessorsInitialized) return;
-            accessorsInitialized = true;
-
-            try {
-                Class<?> wc = window.getClass();
-
-                try {
-                    setAvailability = wc.getMethod("setAvailability", Prov.class);
-                } catch (Throwable ignored) {
-                    setAvailability = null;
-                }
-
-                try {
-                    setResizable = wc.getMethod("setResizable", boolean.class);
-                } catch (Throwable ignored) {
-                    setResizable = null;
-                }
-
-                try {
-                    setAutoHeight = wc.getMethod("setAutoHeight", boolean.class);
-                } catch (Throwable ignored) {
-                    setAutoHeight = null;
-                }
-
-                try {
-                    getData = wc.getMethod("getData");
-                } catch (Throwable ignored) {
-                    getData = null;
-                }
-
-                if (getData != null) {
-                    Object data = getData.invoke(window);
-                    if (data != null) {
-                        Class<?> dc = data.getClass();
-                        try {
-                            setEnabled = dc.getMethod("setEnabled", boolean.class);
-                        } catch (Throwable ignored) {
-                            setEnabled = null;
-                        }
-                        try {
-                            setPinned = dc.getMethod("setPinned", boolean.class);
-                        } catch (Throwable ignored) {
-                            setPinned = null;
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-    }
 }

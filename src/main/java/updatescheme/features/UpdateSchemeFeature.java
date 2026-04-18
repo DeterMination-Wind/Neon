@@ -4,6 +4,8 @@ import arc.Core;
 import arc.Events;
 import arc.util.Interval;
 import arc.util.Log;
+import mdtxcompat.OverlayUiBridge;
+import mdtxcompat.SchematicShareBridge;
 import mindustry.Vars;
 import mindustry.game.EventType;
 import mindustry.ui.dialogs.SchematicsDialog;
@@ -34,6 +36,8 @@ public final class UpdateSchemeFeature {
     static long nextAutoCheckAtMs;
     static long hookDeadlineAtMs;
     static SchematicsDialog originalSchematicsDialog;
+    static OverlayUiBridge overlayUi = OverlayUiBridge.UNSUPPORTED;
+    static SchematicShareBridge shareBridge = SchematicShareBridge.UNSUPPORTED;
 
     private UpdateSchemeFeature() {
     }
@@ -75,6 +79,11 @@ public final class UpdateSchemeFeature {
             UpdateSchemeOverlay.syncVisibility();
             UpdateSchemeFetcher.tickQueue();
         });
+    }
+
+    public static void configureCompat(OverlayUiBridge overlay, SchematicShareBridge share) {
+        overlayUi = overlay == null ? OverlayUiBridge.UNSUPPORTED : overlay;
+        shareBridge = share == null ? SchematicShareBridge.UNSUPPORTED : share;
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {

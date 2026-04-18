@@ -2,6 +2,8 @@ package betterprojectoroverlay;
 
 import arc.Events;
 import betterprojectoroverlay.features.BetterProjectorOverlayFeature;
+import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.MarkerBridge;
 import mindustry.game.EventType;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -12,6 +14,19 @@ public class BetterProjectorOverlayMod extends Mod {
     public static boolean bekBundled = false;
 
     private static boolean settingsAdded;
+
+    public BetterProjectorOverlayMod() {
+        this(vanillaMarkers());
+    }
+
+    protected BetterProjectorOverlayMod(MarkerBridge markers) {
+        BetterProjectorOverlayFeature.configureMarkers(markers);
+    }
+
+    private static MarkerBridge vanillaMarkers() {
+        LegacyMindustryXGuard.rejectLegacyMindustryX("BetterProjectorOverlay");
+        return MarkerBridge.UNSUPPORTED;
+    }
 
     public static void bekBuildSettings(mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable table) {
         BetterProjectorOverlayFeature.buildSettings(table);

@@ -25,7 +25,7 @@ import arc.struct.Seq;
 import arc.util.Strings;
 import arc.util.Time;
 import arc.util.Align;
-import betterhotkey.integration.MindustryXOverlayUI;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.content.Blocks;
 import mindustry.gen.Icon;
@@ -122,10 +122,17 @@ public class BetterHotKeyFeature {
     private static Label bhkOverlayNumber;
     private static Label bhkOverlayOccupied;
 
-    private static final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
-    private static Object xHotkeyWindow;
+    private static OverlayUiBridge xOverlayUi = OverlayUiBridge.UNSUPPORTED;
+    private static OverlayUiBridge.OverlayWindowHandle xHotkeyWindow;
     private static boolean hostedByOverlayUI;
     private static boolean lastOverlaySyncEnabled;
+
+    public static void configureOverlayUi(OverlayUiBridge overlayUi) {
+        xOverlayUi = overlayUi == null ? OverlayUiBridge.UNSUPPORTED : overlayUi;
+        xHotkeyWindow = null;
+        hostedByOverlayUI = false;
+        lastOverlaySyncEnabled = false;
+    }
 
     private static final float overlayPad = 8f;
     private static final float overlayRightInset = 56f; // leave room for the '?' button
@@ -238,7 +245,7 @@ public class BetterHotKeyFeature {
 
     private static void ensureOverlayUiAttached() {
         if (hostedByOverlayUI) return;
-        if (!xOverlayUi.isInstalled()) return;
+        if (!xOverlayUi.isSupported()) return;
 
         // Create content first so OverlayUI can wrap it.
         ensureOverlayTable();
@@ -250,11 +257,11 @@ public class BetterHotKeyFeature {
         Prov<Boolean> availability = () -> state != null && state.isGame();
         boolean hadStoredState = hasStoredOverlayWindowState(overlayWindowName);
         xHotkeyWindow = xOverlayUi.registerWindow(overlayWindowName, bhkOverlay, availability);
-        if (xHotkeyWindow == null) return;
+        if (xHotkeyWindow == null || xHotkeyWindow.asElement() == null) return;
 
         hostedByOverlayUI = true;
         // Small info panel: auto-height, not resizable by default.
-        xOverlayUi.tryConfigureWindow(xHotkeyWindow, true, false);
+        xHotkeyWindow.configure(true, false);
         if (hadStoredState) {
             lastOverlaySyncEnabled = enabled;
         } else {
@@ -265,11 +272,11 @@ public class BetterHotKeyFeature {
     }
 
     private static void syncOverlayUiEnabled() {
-        if (xHotkeyWindow == null) return;
+        if (xHotkeyWindow == null || xHotkeyWindow.asElement() == null) return;
         if (enabled == lastOverlaySyncEnabled) return;
         lastOverlaySyncEnabled = enabled;
         // Default behavior: when enabled, make it visible (pinned). Players can unpin/hide from OverlayUI.
-        xOverlayUi.setEnabledAndPinned(xHotkeyWindow, enabled, enabled);
+        xHotkeyWindow.setEnabledAndPinned(enabled, enabled);
     }
 
     private static boolean hasStoredOverlayWindowState(String windowName) {

@@ -112,6 +112,26 @@
       "bundlesDir": "src/main/resources/bundles",
       "injectBekHooks": false,
       "allowNoGit": true
+    },
+    {
+      "id": "wutb",
+      "name": "WhoUsesThisBuilding",
+      "localPath": "../WhoUsesThisBuilding",
+      "javaPackageDir": "src/main/java/whousesthisbuilding",
+      "sourceJavaDir": "src/whousesthisbuilding",
+      "mainClassFile": "WhoUsesThisBuildingMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "sourceBundlesDir": "assets/bundles"
+    },
+    {
+      "id": "pv",
+      "name": "PatchViewer",
+      "localPath": "../PatchViewer",
+      "javaPackageDir": "src/main/java/patchviewer",
+      "sourceJavaDir": "src/patchviewer",
+      "mainClassFile": "PatchViewerMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "sourceBundlesDir": "assets/bundles"
     }
   ]
 }

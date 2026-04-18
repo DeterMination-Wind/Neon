@@ -56,7 +56,6 @@ public final class GithubUpdateCheck {
         long now = System.currentTimeMillis();
         long last = Core.settings.getLong(keyUpdateCheckLastAt, 0L);
         if (last > 0L && now - last < checkIntervalMs) return;
-        Core.settings.put(keyUpdateCheckLastAt, now);
 
         Mods.LoadedMod mod = Vars.mods.getMod(modName);
         if (mod == null || mod.meta == null) return;
@@ -72,6 +71,7 @@ public final class GithubUpdateCheck {
             .header("User-Agent", "Mindustry")
             .error(err -> checkFromRawModJson(mod, current, ignored))
             .submit(res -> {
+                Core.settings.put(keyUpdateCheckLastAt, now);
                 try {
                     Jval json = Jval.read(res.getResultAsString());
                     String latest = normalizeVersion(Strings.stripColors(json.getString("tag_name", "")));

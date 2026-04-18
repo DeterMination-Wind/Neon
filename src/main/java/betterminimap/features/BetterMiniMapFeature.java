@@ -274,8 +274,9 @@ public class BetterMiniMapFeature {
         if (blockEnabledById == null) rebuildBlockFilterCache();
         if (player == null) return;
 
+        Team playerTeam = player.team();
+
         if (enabled && unitsEnabled) {
-            Team playerTeam = player.team();
             for (int i = 0; i < Groups.unit.size(); i++) {
                 Unit u = Groups.unit.index(i);
                 if (u == null || !u.isValid() || u.type == null) continue;
@@ -290,7 +291,6 @@ public class BetterMiniMapFeature {
         }
 
         if (enabled && buildingsEnabled) {
-            Team playerTeam = player.team();
             for (int i = 0; i < Groups.build.size(); i++) {
                 Building build = Groups.build.index(i);
                 if (build == null || !build.isValid() || build.block == null) continue;
@@ -313,13 +313,15 @@ public class BetterMiniMapFeature {
         if (unitEnabledById == null) rebuildUnitFilterCache();
         if (blockEnabledById == null) rebuildBlockFilterCache();
 
+        Team playerTeam = player.team();
+
         if (enabled && unitsEnabled) {
             buildUnitClusters(minimapScale);
             Color friendly = Tmp.c1.set(Color.gray);
             for (int i = 0; i < visibleUnitClusters.size; i++) {
                 UnitCluster cluster = visibleUnitClusters.get(i);
                 if (cluster == null || cluster.count <= 0 || cluster.type == null) continue;
-                boolean enemy = cluster.team != player.team();
+                boolean enemy = cluster.team != playerTeam;
                 Color c = enemy ? cluster.team.color : friendly;
                 drawUnitCluster(cluster, c, invScale);
             }
@@ -335,7 +337,7 @@ public class BetterMiniMapFeature {
                 float by = normalizeWorldCoord(b.y);
 
                 if (tintBuildingIcons) {
-                    boolean enemy = b.team != player.team();
+                    boolean enemy = b.team != playerTeam;
                     Draw.color(enemy ? b.team.color : Color.gray, iconBgAlpha);
                     Fill.rect(bx, by, s * 1.08f, s * 1.08f);
                 }

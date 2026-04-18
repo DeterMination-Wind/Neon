@@ -663,7 +663,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         if(bekBundled) return;
 
 
-        ui.settings.addCategory("@sp.category", Icon.map, this::bekBuildSettings);
+        if(!bekBundled) ui.settings.addCategory("@sp.category", Icon.map, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){

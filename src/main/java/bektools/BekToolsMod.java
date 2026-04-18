@@ -21,11 +21,13 @@ import mindustry.mod.Mod;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import modupdater.ModUpdaterMod;
 import bektools.ui.RbmStyle;
+import patchviewer.PatchViewerMod;
 import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
 import stealthpath.StealthPathMod;
 import updatescheme.UpdateSchemeMod;
+import whousesthisbuilding.WhoUsesThisBuildingMod;
 
 import static mindustry.Vars.ui;
 
@@ -44,6 +46,8 @@ public class BekToolsMod extends Mod{
     private final ModUpdaterMod modUpdater;
     private final HiddenMessageMod hiddenMessage;
     private final UpdateSchemeMod updateScheme;
+    private final WhoUsesThisBuildingMod whoUsesThisBuilding;
+    private final PatchViewerMod patchViewer;
 
     public BekToolsMod(){
         this(
@@ -81,6 +85,8 @@ public class BekToolsMod extends Mod{
         ModUpdaterMod.bekBundled = true;
         HiddenMessageMod.bekBundled = true;
         UpdateSchemeMod.bekBundled = true;
+        WhoUsesThisBuildingMod.bekBundled = true;
+        PatchViewerMod.bekBundled = true;
 
         BetterScreenShotFeature.configureOverlayUi(overlayUi);
         CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
@@ -111,6 +117,10 @@ public class BekToolsMod extends Mod{
         hiddenMessage.init();
         updateScheme = updateSchemeSupplier.get();
         updateScheme.init();
+        whoUsesThisBuilding = new WhoUsesThisBuildingMod();
+        whoUsesThisBuilding.init();
+        patchViewer = new PatchViewerMod();
+        patchViewer.init();
         CustomMarkerFeature.init();
         BetterScreenShotFeature.init();
 
@@ -166,6 +176,8 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, betterHotKey::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.us", "UpdateScheme"), Icon.download, updateScheme::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, whoUsesThisBuilding::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, patchViewer::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.hm", "Hidden Message"), Icon.chat, st -> {
                 st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hm.none"));
             });

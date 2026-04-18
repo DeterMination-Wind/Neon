@@ -433,7 +433,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
 
         String category = Core.bundle.get("pgmm.category", "Power Grid Minimap");
-        ui.settings.addCategory(category, Icon.powerSmall, this::bekBuildSettings);
+        if(!bekBundled) ui.settings.addCategory(category, Icon.powerSmall, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){

@@ -30,6 +30,9 @@ class SubMod:
     extra_java_dirs: List[Path]
     main_class_file: str
     bundles_dir: Path
+    source_java_dir: Optional[Path] = None
+    source_extra_java_dirs: List[Path] = dataclasses.field(default_factory=list)
+    source_bundles_dir: Optional[Path] = None
     inject_bek_hooks: bool = True
     allow_no_git: bool = False
 
@@ -57,6 +60,8 @@ def load_config() -> List[SubMod]:
         local_path = m.get("localPath")
         if not local_path:
             raise ValueError(f"Missing localPath for mod entry: {m.get('id')}")
+        source_java_dir = m.get("sourceJavaDir")
+        source_bundles_dir = m.get("sourceBundlesDir")
         mods.append(
             SubMod(
                 id=m["id"],
@@ -66,6 +71,9 @@ def load_config() -> List[SubMod]:
                 extra_java_dirs=[ROOT / p for p in m.get("extraJavaDirs", [])],
                 main_class_file=m["mainClassFile"],
                 bundles_dir=ROOT / m["bundlesDir"],
+                source_java_dir=Path(source_java_dir) if source_java_dir else None,
+                source_extra_java_dirs=[Path(p) for p in m.get("sourceExtraJavaDirs", [])],
+                source_bundles_dir=Path(source_bundles_dir) if source_bundles_dir else None,
                 inject_bek_hooks=bool(m.get("injectBekHooks", True)),
                 allow_no_git=bool(m.get("allowNoGit", False)),
             )
@@ -102,17 +110,57 @@ def git_head(repo_dir: Path) -> str:
     return run(["git", "rev-parse", "HEAD"], cwd=repo_dir).strip()
 
 
-def nogit_head(repo_dir: Path) -> str:
+def repo_join(repo_dir: Path, rel_or_abs: Path) -> Path:
+    return rel_or_abs if rel_or_abs.is_absolute() else (repo_dir / rel_or_abs)
+
+
+def _default_source_main_java_dir(mod: SubMod) -> Path:
+    return mod.java_package_dir.relative_to(ROOT)
+
+
+def _default_source_extra_java_dirs(mod: SubMod) -> List[Path]:
+    return [d.relative_to(ROOT) for d in mod.extra_java_dirs]
+
+
+def _source_main_java_dir(mod: SubMod) -> Path:
+    return mod.source_java_dir if mod.source_java_dir is not None else _default_source_main_java_dir(mod)
+
+
+def _source_extra_java_dirs(mod: SubMod) -> List[Path]:
+    if mod.source_extra_java_dirs:
+        if len(mod.source_extra_java_dirs) != len(mod.extra_java_dirs):
+            raise ValueError(
+                f"[{mod.id}] sourceExtraJavaDirs size {len(mod.source_extra_java_dirs)} "
+                f"does not match extraJavaDirs size {len(mod.extra_java_dirs)}"
+            )
+        return list(mod.source_extra_java_dirs)
+    return _default_source_extra_java_dirs(mod)
+
+
+def _source_bundles_dir(mod: SubMod) -> Path:
+    return mod.source_bundles_dir if mod.source_bundles_dir is not None else Path("src/main/resources/bundles")
+
+
+def nogit_head(mod: SubMod, repo_dir: Path) -> str:
     """Computes a content hash for directories without git metadata."""
     h = hashlib.sha1()
-    include_patterns = [
-        "src/main/java/**/*.java",
-        "src/main/resources/bundles/bundle*.properties",
-        "src/main/resources/mod.json",
-    ]
     files: List[Path] = []
-    for pat in include_patterns:
-        files.extend(repo_dir.glob(pat))
+
+    java_dirs = [_source_main_java_dir(mod)] + _source_extra_java_dirs(mod)
+    for rel in java_dirs:
+        src_dir = repo_join(repo_dir, rel)
+        if not src_dir.exists():
+            continue
+        files.extend(src_dir.glob("**/*.java"))
+
+    bundle_dir = repo_join(repo_dir, _source_bundles_dir(mod))
+    if bundle_dir.exists():
+        files.extend(bundle_dir.glob("bundle*.properties"))
+
+    for descriptor in ("mod.json", "mod.hjson"):
+        descriptor_path = repo_dir / descriptor
+        if descriptor_path.exists():
+            files.append(descriptor_path)
 
     files = sorted(set(p for p in files if p.is_file()))
     if not files:
@@ -130,7 +178,7 @@ def nogit_head(repo_dir: Path) -> str:
 def source_head(mod: SubMod, repo_dir: Path) -> str:
     if (repo_dir / ".git").exists():
         return git_head(repo_dir)
-    return nogit_head(repo_dir)
+    return nogit_head(mod, repo_dir)
 
 
 def read_text(path: Path) -> str:
@@ -194,6 +242,89 @@ def find_lambda_body(src: str, marker_regex: re.Pattern[str]) -> Tuple[int, int,
     return lambda_start, open_brace, close_brace
 
 
+def find_method_close(src: str, method_regex: re.Pattern[str]) -> Optional[int]:
+    m = method_regex.search(src)
+    if not m:
+        return None
+
+    open_brace = src.find("{", m.end() - 1)
+    if open_brace == -1:
+        return None
+
+    depth = 0
+    i = open_brace
+    in_string = False
+    in_char = False
+    esc = False
+    while i < len(src):
+        ch = src[i]
+        if in_string:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_string = False
+        elif in_char:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == "'":
+                in_char = False
+        else:
+            if ch == '"':
+                in_string = True
+            elif ch == "'":
+                in_char = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return i
+        i += 1
+
+    return None
+
+
+def ensure_bek_build_settings_wrapper(java_src: str) -> str:
+    if "public void bekBuildSettings(SettingsMenuDialog.SettingsTable table)" in java_src:
+        return java_src
+
+    method_regex = re.compile(
+        r"(?:private|protected|public)\s+void\s+buildSettings\s*\(\s*SettingsMenuDialog\.SettingsTable\s+\w+\s*\)\s*\{"
+    )
+    close = find_method_close(java_src, method_regex)
+    if close is None:
+        return java_src
+
+    wrapper = (
+        "\n\n"
+        "    /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */\n"
+        "    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){\n"
+        "        buildSettings(table);\n"
+        "    }\n"
+    )
+    return java_src[: close + 1] + wrapper + java_src[close + 1 :]
+
+
+def guard_add_category_calls(java_src: str) -> str:
+    java_src = re.sub(
+        r"^(\s*)(ui\.settings\.addCategory\()",
+        r"\1if(!bekBundled) \2",
+        java_src,
+        flags=re.MULTILINE,
+    )
+    java_src = re.sub(
+        r"^(\s*)(Vars\.ui\.settings\.addCategory\()",
+        r"\1if(!bekBundled) \2",
+        java_src,
+        flags=re.MULTILINE,
+    )
+    return java_src
+
+
 def inject_bek_hooks(mod_id: str, java_src: str) -> str:
     # 1) Ensure SettingsMenuDialog import exists if bekBuildSettings is referenced.
     if "mindustry.ui.dialogs.SettingsMenuDialog" not in java_src:
@@ -243,73 +374,81 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
     if "this::bekBuildSettings" in java_src and "public void bekBuildSettings" in java_src:
         # Still ensure bundled early-return exists.
         java_src = ensure_bundled_return(java_src)
+        java_src = guard_add_category_calls(java_src)
         return java_src
 
-    lambda_start, open_brace, close_brace = find_lambda_body(java_src, marker)
-    body = java_src[open_brace + 1 : close_brace].strip("\n")
+    try:
+        lambda_start, open_brace, close_brace = find_lambda_body(java_src, marker)
+        body = java_src[open_brace + 1 : close_brace].strip("\n")
 
-    # Replace lambda with method reference.
-    java_src = java_src[:lambda_start] + "this::bekBuildSettings" + java_src[close_brace + 1 :]
+        # Replace lambda with method reference.
+        java_src = java_src[:lambda_start] + "this::bekBuildSettings" + java_src[close_brace + 1 :]
 
-    # Add method if missing.
-    if "public void bekBuildSettings(SettingsMenuDialog.SettingsTable table)" not in java_src:
-        method = (
-            "\n    /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */\n"
-            + "    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){\n"
-            + body
-            + "\n    }\n"
-        )
+        # Add method if missing.
+        if "public void bekBuildSettings(SettingsMenuDialog.SettingsTable table)" not in java_src:
+            method = (
+                "\n    /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */\n"
+                + "    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){\n"
+                + body
+                + "\n    }\n"
+            )
 
-        # Insert method right after registerSettings() method end.
-        reg_m = re.search(r"private\s+void\s+registerSettings\s*\(\)\s*\{", java_src)
-        if not reg_m:
-            raise ValueError(f"[{mod_id}] Could not find registerSettings() to anchor insertion.")
-        reg_start = reg_m.start()
-        # Find end brace of registerSettings with brace matching.
-        reg_open = java_src.find("{", reg_m.end() - 1)
-        if reg_open == -1:
-            raise ValueError(f"[{mod_id}] registerSettings() has no opening brace.")
-        depth = 0
-        i = reg_open
-        in_string = False
-        in_char = False
-        esc = False
-        while i < len(java_src):
-            ch = java_src[i]
-            if in_string:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_string = False
-            elif in_char:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == "'":
-                    in_char = False
+            # Insert method right after registerSettings() method end.
+            reg_m = re.search(r"private\s+void\s+registerSettings\s*\(\)\s*\{", java_src)
+            if not reg_m:
+                raise ValueError(f"[{mod_id}] Could not find registerSettings() to anchor insertion.")
+            reg_start = reg_m.start()
+            # Find end brace of registerSettings with brace matching.
+            reg_open = java_src.find("{", reg_m.end() - 1)
+            if reg_open == -1:
+                raise ValueError(f"[{mod_id}] registerSettings() has no opening brace.")
+            depth = 0
+            i = reg_open
+            in_string = False
+            in_char = False
+            esc = False
+            while i < len(java_src):
+                ch = java_src[i]
+                if in_string:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_string = False
+                elif in_char:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == "'":
+                        in_char = False
+                else:
+                    if ch == '"':
+                        in_string = True
+                    elif ch == "'":
+                        in_char = True
+                    elif ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            reg_close = i
+                            break
+                i += 1
             else:
-                if ch == '"':
-                    in_string = True
-                elif ch == "'":
-                    in_char = True
-                elif ch == "{":
-                    depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        reg_close = i
-                        break
-            i += 1
-        else:
-            raise ValueError(f"[{mod_id}] Unterminated registerSettings() braces.")
+                raise ValueError(f"[{mod_id}] Unterminated registerSettings() braces.")
 
-        insert_method_at = reg_close + 1
-        java_src = java_src[:insert_method_at] + method + java_src[insert_method_at:]
+            insert_method_at = reg_close + 1
+            java_src = java_src[:insert_method_at] + method + java_src[insert_method_at:]
+    except ValueError:
+        # Fallback for modules that already expose buildSettings() via method reference.
+        if "this::buildSettings" in java_src:
+            java_src = java_src.replace("this::buildSettings", "this::bekBuildSettings")
+        java_src = ensure_bek_build_settings_wrapper(java_src)
 
     java_src = ensure_bundled_return(java_src)
+    java_src = guard_add_category_calls(java_src)
     return java_src
 
 
@@ -358,8 +497,8 @@ def parse_properties(text: str) -> Dict[str, str]:
 def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
     # Collect union of bundle filenames across all mods.
     bundle_names: set[str] = set()
-    for _, repo_dir in mods:
-        bundles = repo_dir / "src/main/resources/bundles"
+    for sm, repo_dir in mods:
+        bundles = repo_join(repo_dir, _source_bundles_dir(sm))
         for p in bundles.glob("bundle*.properties"):
             bundle_names.add(p.name)
 
@@ -371,7 +510,7 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
         origins: Dict[str, str] = {}
         collisions: List[str] = []
         for sm, repo_dir in mods:
-            src_path = repo_dir / "src/main/resources/bundles" / name
+            src_path = repo_join(repo_dir, _source_bundles_dir(sm)) / name
             if not src_path.exists():
                 continue
             props = parse_properties(read_text(src_path))
@@ -408,10 +547,12 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
 
 
 def copy_java(mod: SubMod, repo_dir: Path) -> None:
-    target_dirs = [mod.java_package_dir] + list(mod.extra_java_dirs)
+    source_pairs: List[Tuple[Path, Path]] = [
+        (mod.java_package_dir, _source_main_java_dir(mod))
+    ] + list(zip(mod.extra_java_dirs, _source_extra_java_dirs(mod)))
 
-    for target_pkg_dir in target_dirs:
-        upstream_pkg_dir = repo_dir / target_pkg_dir.relative_to(ROOT)
+    for target_pkg_dir, source_rel in source_pairs:
+        upstream_pkg_dir = repo_join(repo_dir, source_rel)
         if not upstream_pkg_dir.exists():
             raise FileNotFoundError(f"Upstream java dir not found: {upstream_pkg_dir}")
 

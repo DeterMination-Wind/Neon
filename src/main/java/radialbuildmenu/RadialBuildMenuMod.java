@@ -236,7 +236,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         if(bekBundled) return;
 
 
-        ui.settings.addCategory("@rbm.category", this::bekBuildSettings);
+        if(!bekBundled) ui.settings.addCategory("@rbm.category", this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){

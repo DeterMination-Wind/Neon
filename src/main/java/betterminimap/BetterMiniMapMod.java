@@ -5,6 +5,7 @@ import betterminimap.features.BetterMiniMapFeature;
 import mindustry.game.EventType;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
+import mindustry.ui.dialogs.SettingsMenuDialog;
 
 import static mindustry.Vars.ui;
 
@@ -13,7 +14,7 @@ public class BetterMiniMapMod extends Mod {
 
     private static boolean settingsAdded;
 
-    public static void bekBuildSettings(mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable table) {
+    public static void bekBuildSettings(SettingsMenuDialog.SettingsTable table) {
         BetterMiniMapFeature.buildSettings(table);
     }
 

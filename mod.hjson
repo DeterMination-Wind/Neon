@@ -3,8 +3,8 @@
   displayName: "Neon / 氖"
   author: "DeterMination (BEK)"
   repo: "DeterMination-Wind/Neon"
-  description: "A bundled toolkit with 14 client modules, including UpdateScheme schematic publishing/subscription. / 辅助模组十四合一，含 UpdateScheme 蓝图发布/订阅。"
-  version: "6.6.0"
+  description: "A bundled toolkit with 16 client modules, now including WhoUsesThisBuilding and PatchViewer in Neon unified settings. / 辅助模组十六合一，现并入 WhoUsesThisBuilding 与 PatchViewer 并统一到 Neon 设置入口。"
+  version: "7.0.0"
   minGameVersion: 154
   hidden: true
   java: true

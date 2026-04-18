@@ -820,7 +820,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         Core.settings.defaults(keyAutoTrace, true);
         Core.settings.defaults(keyShowAutoTraceDialog, false);
 
-        Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
+        if(!bekBundled) Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){

@@ -1,21 +1,21 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-03-22T12:15:09Z",
+  "generatedAtUtc": "2026-04-18T16:16:01Z",
   "mods": {
     "pgmm": {
-      "head": "dd25e2a5bc655cb1a593d2b3cd2a103bef077ed5",
+      "head": "aab9d48bdc4eac0c0a15d1deab8c52dfa715b0c7",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Power-Grid-Minimap-repo-clone"
     },
     "sp": {
-      "head": "0be873aa16a482c279f8bbe6cad484d31e087d34",
+      "head": "b035e5fe71905e7059d386e1169cae6362fc13ad",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\StealthPath"
     },
     "rbm": {
-      "head": "108f7bce4813a309ebd45f2cbe39a436fbfff4ed",
+      "head": "eb2168fd2f84917c7ed35c2590411fd6d1a31fda",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Radial-Build-Menu-hud-"
     },
     "bmm": {
-      "head": "df9a1294cd1bf7de3ba781879e330caf7578d33c",
+      "head": "2c04adb2b4372c32f07792bb05aa8c5ad4e36665",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\betterMiniMap"
     },
     "spdb": {
@@ -23,32 +23,40 @@
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\ServerPlayerDataBase"
     },
     "bme": {
-      "head": "8d1564a02268e7fbea9c4e3613fd4bb65461f94a",
+      "head": "368b4cd3b7e08b88b87390c51bd20af4113b42ef",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterMapEditor"
     },
     "bpo": {
-      "head": "fbf75fa72664235f029864f8bb1ec8f98d3976bf",
+      "head": "c5e4531efba470a1224b5df37b20dbdfab5a0069",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterProjectorOverlay"
     },
     "bls": {
-      "head": "nogit-64639f6a7e304030c13c713438ded3d47938afb6",
+      "head": "nogit-2e8b49011a3b579b353785b4ce46ec4c63366901",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\betterLogisticsSpeed"
     },
     "bhk": {
-      "head": "nogit-c0a5d5fa5a736bbbf0a6f5099cdb90b5e5ff877f",
+      "head": "nogit-399e012459c472ea6aad0130f809e6a7a0d2cfa5",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\betterHotKey"
     },
     "mu": {
-      "head": "nogit-b72868eb644c2a789e8a7aa33eef9868114269fc",
+      "head": "nogit-7431034969493fb6fd1b192b41a64341528d7af1",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\modUpdater"
     },
     "hm": {
-      "head": "nogit-393f09b890f32aa9f8dc164fe1af57597b5b8acf",
+      "head": "nogit-499a8d15cdc9e884cdc3b5f0a55b5f1d28cc1bde",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\hiddenMessage"
     },
     "us": {
-      "head": "nogit-53044c734d0d2e5e6ab64f01d24782dfcaf3d0b3",
+      "head": "8de9c5b44f2b15ebc307b8c578ded9e5d530ba61",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\UpdateScheme"
+    },
+    "wutb": {
+      "head": "c061efa3558d242b920060889b8b54bd5cb11b0d",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\WhoUsesThisBuilding"
+    },
+    "pv": {
+      "head": "65dd2cc09b3824357573347a8040e5e718479063",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\PatchViewer"
     }
   }
 }

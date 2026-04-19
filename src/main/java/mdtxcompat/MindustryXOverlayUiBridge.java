@@ -30,37 +30,23 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
     };
 
     private boolean available = true;
-    private Object overlayInstance;
+    private boolean resolved;
+    private Field instanceField;
     private Method registerWindowMethod;
     private Method getOpenMethod;
     private Method toggleMethod;
 
-    public MindustryXOverlayUiBridge() {
-        try {
-            Class<?> overlayClass = Class.forName("mindustryX.features.ui.OverlayUI");
-            Field instanceField = overlayClass.getField("INSTANCE");
-            overlayInstance = instanceField.get(null);
-            registerWindowMethod = overlayClass.getMethod("registerWindow", String.class, Table.class);
-            getOpenMethod = overlayClass.getMethod("getOpen");
-            toggleMethod = overlayClass.getMethod("toggle");
-        } catch (Throwable t) {
-            available = false;
-            overlayInstance = null;
-            registerWindowMethod = null;
-            getOpenMethod = null;
-            toggleMethod = null;
-        }
-    }
-
     @Override
     public boolean isSupported() {
-        return available;
+        return resolveSymbols();
     }
 
     @Override
     public OverlayWindowHandle registerWindow(String name, Table table, Prov<Boolean> availability) {
-        if (!available) return NO_WINDOW;
+        if (!resolveSymbols()) return NO_WINDOW;
         try {
+            Object overlayInstance = instanceField.get(null);
+            if (overlayInstance == null) return NO_WINDOW;
             Object window = registerWindowMethod.invoke(overlayInstance, name, table);
             if (window == null) return NO_WINDOW;
             if (availability != null) {
@@ -75,8 +61,10 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
 
     @Override
     public void closeEditorIfOpen() {
-        if (!available) return;
+        if (!resolveSymbols()) return;
         try {
+            Object overlayInstance = instanceField.get(null);
+            if (overlayInstance == null) return;
             Object open = getOpenMethod.invoke(overlayInstance);
             if (Boolean.TRUE.equals(open)) {
                 toggleMethod.invoke(overlayInstance);
@@ -86,9 +74,36 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         }
     }
 
+    private boolean resolveSymbols() {
+        if (!available) return false;
+        if (resolved) return true;
+
+        try {
+            ClassLoader loader = MindustryXOverlayUiBridge.class.getClassLoader();
+            Class<?> overlayClass = Class.forName("mindustryX.features.ui.OverlayUI", false, loader);
+            instanceField = overlayClass.getField("INSTANCE");
+            registerWindowMethod = overlayClass.getMethod("registerWindow", String.class, Table.class);
+            getOpenMethod = overlayClass.getMethod("getOpen");
+            toggleMethod = overlayClass.getMethod("toggle");
+            resolved = true;
+            return true;
+        } catch (ClassNotFoundException notFound) {
+            available = false;
+            return false;
+        } catch (Throwable t) {
+            disable("MindustryX OverlayUI symbols resolve failed; disabling integration.", t);
+            return false;
+        }
+    }
+
     private void disable(String message, Throwable t) {
         if (!available) return;
         available = false;
+        resolved = false;
+        instanceField = null;
+        registerWindowMethod = null;
+        getOpenMethod = null;
+        toggleMethod = null;
         Log.err(message, t);
     }
 

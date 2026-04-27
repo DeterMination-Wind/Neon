@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-04-18T16:16:01Z",
+  "generatedAtUtc": "2026-04-27T11:00:30Z",
   "mods": {
     "pgmm": {
       "head": "aab9d48bdc4eac0c0a15d1deab8c52dfa715b0c7",
@@ -11,7 +11,7 @@
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\StealthPath"
     },
     "rbm": {
-      "head": "eb2168fd2f84917c7ed35c2590411fd6d1a31fda",
+      "head": "8edea0b6244f9ee1a3d98a5c180034dde50106ed",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Radial-Build-Menu-hud-"
     },
     "bmm": {

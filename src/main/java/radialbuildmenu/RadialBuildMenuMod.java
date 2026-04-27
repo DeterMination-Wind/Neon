@@ -78,6 +78,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     private static final String keyEnabled = "rbm-enabled";
     private static final String keyHudScale = "rbm-hudscale";
     private static final String keyHudAlpha = "rbm-hudalpha";
+    private static final String keyPersistentHud = "rbm-persistent-hud";
+    private static final String keyPersistentHudAlpha = "rbm-persistent-hud-alpha";
     private static final String keyInnerRadius = "rbm-inner-radius";
     private static final String keyOuterRadius = "rbm-outer-radius";
     private static final String keyIconScale = "rbm-icon-scale";
@@ -182,6 +184,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyHudScale, 100);
         Core.settings.defaults(keyHudAlpha, 100);
+        Core.settings.defaults(keyPersistentHud, false);
+        Core.settings.defaults(keyPersistentHudAlpha, 35);
         Core.settings.defaults(keyInnerRadius, 80);
         Core.settings.defaults(keyOuterRadius, 140);
         Core.settings.defaults(keyIconScale, 100);
@@ -251,6 +255,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             table.sliderPref(keyHudScale, 100, 50, 200, 5, v -> v + "%");
             table.sliderPref(keyHudAlpha, 100, 0, 100, 5, v -> v + "%");
+            table.checkPref(keyPersistentHud, false);
+            table.sliderPref(keyPersistentHudAlpha, 35, 0, 100, 5, v -> v + "%");
             table.sliderPref(keyInnerRadius, 80, 40, 200, 5, v -> v + "px");
             table.sliderPref(keyOuterRadius, 140, 60, 360, 5, v -> v + "px");
             table.pref(new HudColorSetting());
@@ -1263,6 +1269,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         root.put("hudScale", Core.settings.getInt(keyHudScale, 100));
         root.put("hudAlpha", Core.settings.getInt(keyHudAlpha, 100));
+        root.put("persistentHud", Core.settings.getBool(keyPersistentHud, false));
+        root.put("persistentHudAlpha", Core.settings.getInt(keyPersistentHudAlpha, 35));
         root.put("innerRadius", Core.settings.getInt(keyInnerRadius, 80));
         root.put("outerRadius", Core.settings.getInt(keyOuterRadius, 140));
         root.put("iconScale", Core.settings.getInt(keyIconScale, 100));
@@ -1324,6 +1332,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             if(root.has("hudScale")) Core.settings.put(keyHudScale, root.getInt("hudScale", 100));
             if(root.has("hudAlpha")) Core.settings.put(keyHudAlpha, root.getInt("hudAlpha", 100));
+            if(root.has("persistentHud")) Core.settings.put(keyPersistentHud, root.getBool("persistentHud", false));
+            if(root.has("persistentHudAlpha")) Core.settings.put(keyPersistentHudAlpha, Mathf.clamp(root.getInt("persistentHudAlpha", 35), 0, 100));
             if(root.has("innerRadius")) Core.settings.put(keyInnerRadius, root.getInt("innerRadius", 80));
             if(root.has("outerRadius")) Core.settings.put(keyOuterRadius, root.getInt("outerRadius", 140));
             if(root.has("iconScale")) Core.settings.put(keyIconScale, root.getInt("iconScale", 100));
@@ -1589,6 +1599,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     mod.toggleSlotGroupNow(true);
                 }
                 if(mobile) return;
+                syncPassivePreview();
                 if(canActivate() && Core.input.keyTap(radialMenu)){
                     begin();
                 }
@@ -1600,6 +1611,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             // Read settings once, derive all geometry, and precompute slot positions.
             float alpha = parentAlpha * Mathf.clamp(Core.settings.getInt(keyHudAlpha, 100) / 100f);
+            if(!active){
+                alpha *= Mathf.clamp(Core.settings.getInt(keyPersistentHudAlpha, 35) / 100f);
+            }
             float scale = Mathf.clamp(Core.settings.getInt(keyHudScale, 100) / 100f, 0.1f, 5f);
             int innerSetting = Core.settings.getInt(keyInnerRadius, 80);
             int outerSetting = Core.settings.getInt(keyOuterRadius, 140);
@@ -1655,7 +1669,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         @Override
         public void draw(){
-            if(!active) return;
+            if(!active && !shouldDrawPassivePreview()) return;
 
             updateLayout();
             HudLayout l = layout;
@@ -1760,6 +1774,35 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             if(ui.consolefrag != null && ui.consolefrag.shown()) return false;
             if(player == null || player.dead()) return false;
             return state.rules.editor || player.isBuilder();
+        }
+
+        private boolean shouldDrawPassivePreview(){
+            return !mobile
+                && !active
+                && Core.settings.getBool(keyPersistentHud, false)
+                && canActivate();
+        }
+
+        private void syncPassivePreview(){
+            if(!shouldDrawPassivePreview()){
+                hovered = -1;
+                return;
+            }
+
+            if(Core.settings.getBool(keyCenterScreen, false)){
+                centerX = getWidth() / 2f;
+                centerY = getHeight() / 2f;
+            }else{
+                centerX = Core.input.mouseX();
+                centerY = Core.input.mouseY();
+            }
+
+            for(int i = 0; i < slots.length; i++){
+                slots[i] = mod.contextSlotBlock(i);
+            }
+
+            rebuildActiveSlotLists();
+            hovered = -1;
         }
 
         private void begin(){

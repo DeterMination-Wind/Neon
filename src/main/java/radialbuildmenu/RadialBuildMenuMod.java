@@ -255,8 +255,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             table.sliderPref(keyHudScale, 100, 50, 200, 5, v -> v + "%");
             table.sliderPref(keyHudAlpha, 100, 0, 100, 5, v -> v + "%");
-            table.checkPref(keyPersistentHud, false);
-            table.sliderPref(keyPersistentHudAlpha, 35, 0, 100, 5, v -> v + "%");
+            table.pref(new IconCheckSetting(keyPersistentHud, false, null));
+            table.pref(new IconSliderSetting(keyPersistentHudAlpha, 35, 0, 100, 5, null, v -> v + "%"));
             table.sliderPref(keyInnerRadius, 80, 40, 200, 5, v -> v + "px");
             table.sliderPref(keyOuterRadius, 140, 60, 360, 5, v -> v + "px");
             table.pref(new HudColorSetting());

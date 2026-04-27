@@ -12,3 +12,4 @@ tools/generate_detail.py
 # OS
 .DS_Store
 Thumbs.db
+dist/

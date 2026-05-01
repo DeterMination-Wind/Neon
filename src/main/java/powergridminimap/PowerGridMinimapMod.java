@@ -55,6 +55,7 @@ import mindustry.game.EventType.BuildTeamChangeEvent;
 import mindustry.game.EventType.ConfigEvent;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.game.EventType.Trigger;
+import mindustry.game.MapObjectives;
 import mindustry.game.Team;
 import mindustry.graphics.Drawf;
 import mindustry.graphics.Pal;
@@ -73,6 +74,9 @@ import rhino.ScriptableObject;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static mindustry.Vars.control;
 import static mindustry.Vars.player;
@@ -118,6 +122,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private static final String keyPowerTableEnabled = "pgmm-power-table";
     private static final String keyPowerTableThreshold = "pgmm-power-table-threshold";
     private static final String keyPowerTableBgAlpha = "pgmm-power-table-bgalpha";
+    private static final String markerCompatType = "PGMM";
     //debounce cache rebuilds after block changes (tenths of a second)
     private static final String keyUpdateWaitTenths = "pgmm-updatewait";
     //Ignore power grids whose functional area (producers/consumers/batteries) is below this threshold (tiles^2).
@@ -143,6 +148,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private final RescueAlert rescueAlert = new RescueAlert();
     private final PowerTableOverlay powerTable = new PowerTableOverlay();
     private final MarkerBridge xMarkers;
+    private final NativeMarkers nativeMarkers = new NativeMarkers();
     // MindustryX OverlayUI integration is injected by the dedicated mainX entry.
     private final OverlayUiBridge xOverlayUi;
     private OverlayUiBridge.OverlayWindowHandle xPowerTableWindow = null;
@@ -487,7 +493,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.update", "Update"), Icon.refreshSmall));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
-        
     }
 
 
@@ -515,6 +520,21 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
     }
 
+    private static String cleanMarkerLabel(String text){
+        return text == null ? "" : Strings.stripColors(text)
+            .replace('\n', ' ')
+            .replace('\r', ' ')
+            .replace("<", "")
+            .replace(">", "")
+            .replace("(", "")
+            .replace(")", "")
+            .trim();
+    }
+
+    private static String formatCompatMarkerMessage(String label, int tileX, int tileY){
+        return "<" + markerCompatType + "><" + cleanMarkerLabel(label) + ">(" + tileX + "," + tileY + ")";
+    }
+
     private void trySendSplitAlertMultiplayerChat(int tileX, int tileY){
         if(!Core.settings.getBool(keySplitAlertMultiplayerEnabled, false)) return;
         if(mindustry.Vars.net == null || !mindustry.Vars.net.active()) return;
@@ -524,7 +544,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         int intervalSeconds = Mathf.clamp(Core.settings.getInt(keySplitAlertMultiplayerIntervalSeconds, 8), 1, 60);
         nextSplitAlertMultiplayerChatAt = Time.time + intervalSeconds * 60f;
 
-        Call.sendChatMessage("<PGMM><[red]断电建议连接点[]>(" + tileX + "," + tileY + ")");
+        Call.sendChatMessage(formatCompatMarkerMessage(Core.bundle.get("pgmm.mark.reconnect", "Reconnect point"), tileX, tileY));
     }
 
     private void ensureOverlayAttached(){
@@ -2246,6 +2266,173 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         int rank;
     }
 
+    private static class NativeMarkers{
+        private static final float markerLifetime = 1800f;
+        private static final float pointRadius = 6f;
+        private static final float pointStroke = 11f;
+        private static final float textYOffset = 14f;
+        private static final Pattern templatedMarkerPattern = Pattern.compile("^<([^<>]*)><([^<>]*)>\\(([-+]?\\d+)\\s*,\\s*([-+]?\\d+)\\)$");
+        private static final Pattern coordPattern = Pattern.compile("\\s*\\(([-+]?\\d+)\\s*,\\s*([-+]?\\d+)\\)\\s*$");
+
+        private boolean available = true;
+        private int nextMarkerSeq = 1;
+
+        void tryMark(String message, int tileX, int tileY){
+            if(!available) return;
+
+            try{
+                String label = buildLabel(message);
+                Color color = resolveColor(message);
+                float worldX = tileX * tilesize;
+                float worldY = tileY * tilesize;
+
+                int pointId = nextMarkerId();
+                int textId = pointId + 1;
+
+                MapObjectives.PointMarker pointMarker = new MapObjectives.PointMarker(Math.round(worldX), Math.round(worldY), pointRadius, pointStroke, color);
+                pointMarker.minimap = true;
+                Call.createMarker(pointId, pointMarker);
+
+                boolean textCreated = false;
+                if(!label.isEmpty()){
+                    MapObjectives.TextMarker textMarker = new MapObjectives.TextMarker(label, worldX, worldY + textYOffset);
+                    Call.createMarker(textId, textMarker);
+                    textCreated = true;
+                }
+
+                boolean finalTextCreated = textCreated;
+                Time.run(markerLifetime, () -> {
+                    tryRemove(pointId);
+                    if(finalTextCreated){
+                        tryRemove(textId);
+                    }
+                });
+            }catch(Throwable t){
+                available = false;
+                Log.err("PGMM native marker call failed; disabling integration.", t);
+            }
+        }
+
+        private void tryRemove(int markerId){
+            try{
+                Call.removeMarker(markerId);
+            }catch(Throwable ignored){
+                available = false;
+            }
+        }
+
+        private int nextMarkerId(){
+            int playerPart = player == null ? 0 : (player.id & 1023);
+            int id = (playerPart << 20) | (nextMarkerSeq++ << 1);
+            if(nextMarkerSeq >= (1 << 19)){
+                nextMarkerSeq = 1;
+            }
+            return Math.max(id, 2);
+        }
+
+        private String buildLabel(String message){
+            if(message == null) return "";
+
+            String plain = Strings.stripColors(message.trim()).trim();
+            Matcher templated = templatedMarkerPattern.matcher(plain);
+            if(templated.matches()){
+                String second = sanitizeLabel(templated.group(2));
+                if(!second.isEmpty()) return second;
+                return sanitizeLabel(templated.group(1));
+            }
+
+            Matcher coordMatcher = coordPattern.matcher(plain);
+            if(coordMatcher.find()){
+                plain = plain.substring(0, coordMatcher.start()).trim();
+            }
+
+            plain = plain.replace('<', ' ').replace('>', ' ').trim();
+            if(plain.length() > 24){
+                plain = plain.substring(0, 24);
+            }
+            return plain;
+        }
+
+        private String sanitizeLabel(String text){
+            return cleanMarkerLabel(text);
+        }
+
+        private Color resolveColor(String message){
+            if(message == null) return Color.white.cpy();
+
+            String trimmed = message.trim();
+            if(trimmed.startsWith("[")){
+                int end = trimmed.indexOf(']');
+                if(end > 1){
+                    Color parsed = parseColorTag(trimmed.substring(1, end));
+                    if(parsed != null) return parsed;
+                }
+            }
+
+            String plain = Strings.stripColors(trimmed).trim();
+            Matcher templated = templatedMarkerPattern.matcher(plain);
+            if(templated.matches()){
+                Color parsed = resolveTemplateColor(sanitizeLabel(templated.group(2)));
+                if(parsed != null) return parsed;
+            }
+
+            return Color.white.cpy();
+        }
+
+        private Color resolveTemplateColor(String label){
+            String clean = sanitizeLabel(label);
+            if(clean.isEmpty()) return null;
+
+            if(clean.equalsIgnoreCase(cleanMarkerLabel(Core.bundle.get("pgmm.mark.reconnect", "Reconnect point")))){
+                return Color.orange.cpy();
+            }
+            if(clean.equalsIgnoreCase(cleanMarkerLabel(Core.bundle.get("pgmm.mark.rescue", "Power rescue")))){
+                return Color.scarlet.cpy();
+            }
+            return null;
+        }
+
+        private Color parseColorTag(String tag){
+            if(tag == null) return null;
+
+            String normalized = tag.trim();
+            if(normalized.isEmpty()) return null;
+
+            String lower = normalized.toLowerCase(Locale.ROOT);
+            if("orange".equals(lower)) return Color.orange.cpy();
+            if("scarlet".equals(lower)) return Color.scarlet.cpy();
+            if("red".equals(lower)) return Color.red.cpy();
+            if("white".equals(lower)) return Color.white.cpy();
+            if("yellow".equals(lower)) return Color.yellow.cpy();
+
+            if(normalized.startsWith("#")){
+                normalized = normalized.substring(1);
+            }
+
+            if(normalized.length() != 6 && normalized.length() != 8) return null;
+
+            try{
+                long parsed = Long.parseLong(normalized, 16);
+                Color out = new Color();
+                if(normalized.length() == 6){
+                    float r = ((parsed >> 16) & 0xff) / 255f;
+                    float g = ((parsed >> 8) & 0xff) / 255f;
+                    float b = (parsed & 0xff) / 255f;
+                    out.set(r, g, b, 1f);
+                }else{
+                    float r = ((parsed >> 24) & 0xff) / 255f;
+                    float g = ((parsed >> 16) & 0xff) / 255f;
+                    float b = ((parsed >> 8) & 0xff) / 255f;
+                    float a = (parsed & 0xff) / 255f;
+                    out.set(r, g, b, a);
+                }
+                return out;
+            }catch(Throwable ignored){
+                return null;
+            }
+        }
+    }
+
     private class SplitAlert{
         private ReconnectHint hint;
         private float textExpiresAt = 0f;
@@ -2277,9 +2464,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             int tileX = Mathf.clamp((int)(midWorldX / tilesize), 0, world.width() - 1);
             int tileY = Mathf.clamp((int)(midWorldY / tilesize), 0, world.height() - 1);
             trySendSplitAlertMultiplayerChat(tileX, tileY);
-            String label = Core.bundle.get("pgmm.mark.reconnect", "Reconnect point");
-            String text = "[orange]" + label + "[] (" + tileX + "," + tileY + ")";
+            String text = formatCompatMarkerMessage(Core.bundle.get("pgmm.mark.reconnect", "Reconnect point"), tileX, tileY);
             xMarkers.mark(text, tileX, tileY);
+            nativeMarkers.tryMark(text, tileX, tileY);
         }
 
         void drawHudMinimapMarker(float invScale, Rect viewRect){
@@ -2415,9 +2602,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                     tileY = Mathf.clamp((int)(h.centerY / tilesize), 0, world.height() - 1);
                 }
                 if(tileX >= 0 && tileY >= 0){
-                    String label = Core.bundle.get("pgmm.mark.rescue", "Power rescue");
-                    String text = "[scarlet]" + label + "[] (" + tileX + "," + tileY + ")";
+                    String text = formatCompatMarkerMessage(Core.bundle.get("pgmm.mark.rescue", "Power rescue"), tileX, tileY);
                     xMarkers.mark(text, tileX, tileY);
+                    nativeMarkers.tryMark(text, tileX, tileY);
                 }
             }
         }

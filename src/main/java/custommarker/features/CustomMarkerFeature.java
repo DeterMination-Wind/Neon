@@ -30,6 +30,7 @@ import arc.util.Strings;
 import arc.util.Time;
 import arc.util.Tmp;
 import arc.util.pooling.Pools;
+import bektools.profiler.NeonProfiler;
 import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -222,6 +223,7 @@ public class CustomMarkerFeature {
     }
 
     private static void update() {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("CM", "Update", "update", NeonProfiler.threadMain)){
         reloadRuntimeSettings();
         guardChatWindowScrollFocus();
 
@@ -250,6 +252,7 @@ public class CustomMarkerFeature {
         }
         if (Core.input.keyTap(keyPickLocation)) {
             toggleMarkHitterUI();
+        }
         }
     }
 

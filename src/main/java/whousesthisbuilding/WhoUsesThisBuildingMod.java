@@ -21,6 +21,7 @@ import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Time;
 import arc.util.pooling.Pools;
+import bektools.profiler.NeonProfiler;
 import mindustry.game.EventType;
 import mindustry.editor.MapView;
 import mindustry.gen.Building;
@@ -106,6 +107,7 @@ public class WhoUsesThisBuildingMod extends Mod{
 
 
     private void updateOverlayState(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("WUTB", "Update", "updateOverlayState", NeonProfiler.threadMain)){
         refreshSettings();
         if(!enabled || !isInputAllowed()){
             clearOverlay();
@@ -129,9 +131,11 @@ public class WhoUsesThisBuildingMod extends Mod{
             lastScanAt = now;
             rebuildMatches(hovered);
         }
+        }
     }
 
     private void drawOverlay(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("WUTB", "Draw", "drawOverlay", NeonProfiler.threadMain)){
         if(!overlayActive || matches.isEmpty()) return;
 
         Seq<RectArea> blockObstacles = new Seq<>();
@@ -157,6 +161,7 @@ public class WhoUsesThisBuildingMod extends Mod{
             if(placement == null) continue;
             drawPlaceTextScaled(match.text, placement.centerX, placement.lineY, processor.x, processor.y, Pal.accent, false, fontScale);
             occupied.add(placement);
+        }
         }
     }
 

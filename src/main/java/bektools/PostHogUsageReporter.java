@@ -25,6 +25,7 @@ final class PostHogUsageReporter{
     private static final String eventName = "mod_session_end";
 
     private static final String keyPendingMinutes = "bek-posthog-pending-minutes";
+    private static final String keyStablePlayerId = "bek-posthog-stable-player-id";
     private static final int minFlushMinutes = 2;
 
     private final Class<? extends Mod> modType;
@@ -43,6 +44,7 @@ final class PostHogUsageReporter{
         installed = true;
 
         Core.settings.defaults(keyPendingMinutes, 0);
+        Core.settings.defaults(keyStablePlayerId, "");
         Log.info(logTag + " initialized. thresholdMinutes=" + minFlushMinutes + ", pendingMinutes=" + Math.max(0, Core.settings.getInt(keyPendingMinutes, 0)));
         Events.run(EventType.Trigger.update, this::onUpdate);
         Events.on(EventType.DisposeEvent.class, e -> flush("dispose-event"));
@@ -74,9 +76,10 @@ final class PostHogUsageReporter{
 
         ModMeta meta = resolveModMeta();
         String gameVersion = normalize(Version.buildString(), "unknown");
-        String distinctId = normalize(resolvePlayerId(), "unknown");
+        PlayerIdResolution idResolution = resolvePlayerId();
+        String distinctId = normalize(idResolution.playerId, "unknown");
         String playerName = normalize(resolvePlayerName(), "unknown");
-        Log.info(logTag + " send prepared. distinct_id=" + distinctId + ", player_id=" + distinctId + ", player_name=" + playerName + ", game_version=" + gameVersion + ", mod_version=" + meta.modVersion + ", usage_minutes=" + nextPending);
+        Log.info(logTag + " send prepared. distinct_id=" + distinctId + ", player_id=" + distinctId + ", player_id_source=" + idResolution.source + ", raw_player_uuid=" + idResolution.rawPlayerUuid + ", raw_platform_uuid=" + idResolution.rawPlatformUuid + ", cached_player_id=" + idResolution.cachedPlayerId + ", player_name=" + playerName + ", game_version=" + gameVersion + ", mod_version=" + meta.modVersion + ", usage_minutes=" + nextPending);
 
         if(sendUsage(distinctId, playerName, gameVersion, meta.modVersion, nextPending)){
             persistPendingMinutes(0);
@@ -161,19 +164,43 @@ final class PostHogUsageReporter{
         return new ModMeta(modName, modVersion);
     }
 
-    private static String resolvePlayerId(){
+    private PlayerIdResolution resolvePlayerId(){
+        String cachedPlayerId = normalizeRaw(Core.settings.getString(keyStablePlayerId, ""));
+        if(isOnlineUuid(cachedPlayerId)){
+            return new PlayerIdResolution(cachedPlayerId, "stable-cache", "", "", cachedPlayerId);
+        }
+
+        String rawPlayerUuid = "";
         if(Vars.player != null){
             String playerUuid = Vars.player.uuid();
-            if(playerUuid != null && !playerUuid.trim().isEmpty()){
-                return playerUuid.trim();
+            rawPlayerUuid = playerUuid == null ? "" : playerUuid.trim();
+            if(isOnlineUuid(playerUuid)){
+                persistStablePlayerId(rawPlayerUuid);
+                return new PlayerIdResolution(rawPlayerUuid, "player.uuid->stable-cache", rawPlayerUuid, "", rawPlayerUuid);
             }
         }
-        return Vars.platform == null ? "" : Vars.platform.getUUID();
+        String platformUuid = Vars.platform == null ? "" : normalizeRaw(Vars.platform.getUUID());
+        if(isOnlineUuid(platformUuid)){
+            persistStablePlayerId(platformUuid);
+            return new PlayerIdResolution(platformUuid, "platform.uuid->stable-cache", rawPlayerUuid, platformUuid, platformUuid);
+        }
+        return new PlayerIdResolution("", "none", rawPlayerUuid, platformUuid, cachedPlayerId);
     }
 
     private static String resolvePlayerName(){
         if(Vars.player == null || Vars.player.name == null) return "";
         return Vars.player.name;
+    }
+
+    private static boolean isOnlineUuid(String value){
+        if(value == null) return false;
+        String normalized = value.trim();
+        if(normalized.isEmpty()) return false;
+        return !"[LOCAL]".equalsIgnoreCase(normalized) && !"LOCAL".equalsIgnoreCase(normalized);
+    }
+
+    private static String normalizeRaw(String value){
+        return value == null ? "" : value.trim();
     }
 
     private static String normalize(String value, String fallback){
@@ -236,6 +263,18 @@ final class PostHogUsageReporter{
         }
     }
 
+    private void persistStablePlayerId(String value){
+        if(!isOnlineUuid(value)) return;
+        String normalized = normalizeRaw(value);
+        if(normalized.equals(normalizeRaw(Core.settings.getString(keyStablePlayerId, "")))) return;
+        Core.settings.put(keyStablePlayerId, normalized);
+        try{
+            Core.settings.forceSave();
+        }catch(Throwable t){
+            Log.warn(logTag + " stable player id forceSave failed", t);
+        }
+    }
+
     private static final class ModMeta{
         final String modName;
         final String modVersion;
@@ -243,6 +282,22 @@ final class PostHogUsageReporter{
         ModMeta(String modName, String modVersion){
             this.modName = modName;
             this.modVersion = modVersion;
+        }
+    }
+
+    private static final class PlayerIdResolution{
+        final String playerId;
+        final String source;
+        final String rawPlayerUuid;
+        final String rawPlatformUuid;
+        final String cachedPlayerId;
+
+        PlayerIdResolution(String playerId, String source, String rawPlayerUuid, String rawPlatformUuid, String cachedPlayerId){
+            this.playerId = playerId;
+            this.source = source;
+            this.rawPlayerUuid = rawPlayerUuid == null ? "" : rawPlayerUuid;
+            this.rawPlatformUuid = rawPlatformUuid == null ? "" : rawPlatformUuid;
+            this.cachedPlayerId = cachedPlayerId == null ? "" : cachedPlayerId;
         }
     }
 }

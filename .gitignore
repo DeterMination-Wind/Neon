@@ -13,3 +13,10 @@ tools/generate_detail.py
 .DS_Store
 Thumbs.db
 dist/
+
+# Embedded models (downloaded by gradle downloadEmbeddingModel; >100MB)
+models/*.gguf
+
+# Python caches
+tools/__pycache__/
+**/__pycache__/

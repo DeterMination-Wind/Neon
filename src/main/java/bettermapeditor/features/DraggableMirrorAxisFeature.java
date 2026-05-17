@@ -15,6 +15,7 @@ import arc.struct.Seq;
 import arc.struct.SnapshotSeq;
 import arc.util.Log;
 import arc.util.Time;
+import bektools.profiler.NeonProfiler;
 import mindustry.editor.MapGenerateDialog;
 import mindustry.game.EventType;
 import mindustry.maps.Maps;
@@ -74,6 +75,7 @@ public class DraggableMirrorAxisFeature {
     }
 
     private static void update() {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BME", "Update", "update", NeonProfiler.threadMain)){
         if (ui == null || ui.editor == null) {
             clearAttached();
             return;
@@ -114,6 +116,7 @@ public class DraggableMirrorAxisFeature {
             attachedPreview = preview;
             dragListener = new AxisDragListener(dialog, preview);
             attachedPreview.addListener(dragListener);
+        }
         }
     }
 

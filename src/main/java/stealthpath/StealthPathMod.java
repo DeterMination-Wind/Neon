@@ -31,6 +31,7 @@ import arc.util.Align;
 import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
+import bektools.profiler.NeonProfiler;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.*;
@@ -1167,6 +1168,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void update(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("SP", "Update", "update", NeonProfiler.threadMain)){
         if(mobile) return;
         if(!Core.settings.getBool(keyEnabled, true)) return;
 
@@ -1253,6 +1255,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         autoHandleAutoMoveKey();
         autoMonitorUnexpectedDamage();
         autoUpdate();
+        }
     }
 
     private void autoHandleAutoMoveKey(){
@@ -1726,6 +1729,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         void step(){
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SP", "Compute", "autoStep", NeonProfiler.threadMain)){
             if(done) return;
             int end = Math.min(clusters.size, index + clustersPerTick);
             for(; index < end; index++){
@@ -1772,6 +1776,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
             if(index >= clusters.size){
                 done = true;
+            }
             }
         }
     }
@@ -2534,6 +2539,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void computePath(boolean includeUnits, boolean showToasts){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SP", "Compute", "computePath", NeonProfiler.threadMain)){
         long planStarted = System.nanoTime();
         clearPaths();
 
@@ -2678,6 +2684,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         logPlan(logFormat("sp.log.plan.done", targetModeName(mode), paths, firstPathTiles, Strings.autoFixed(lastDamage, 2), elapsedMillis(planStarted)));
+        }
     }
 
     private Seq<Building> anchorBuildings(){
@@ -3181,6 +3188,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private int issueRtsMoveAlongPath(ControlledCluster cluster, IntSeq tilePath, int width){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SP", "Command", "issueRtsPath", NeonProfiler.threadMain)){
         long issuedStarted = System.nanoTime();
         if(tilePath == null || tilePath.isEmpty()) return Integer.MIN_VALUE;
         if(player == null || player.unit() == null) return Integer.MIN_VALUE;
@@ -3316,6 +3324,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             elapsedMillis(issuedStarted)));
 
         return routedHash;
+        }
     }
 
     private int rtsWaypointHash(ControlledCluster cluster, IntSeq tilePath, int width){
@@ -3868,6 +3877,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     // Generic helpers extracted into `StealthPathMathUtil` (no behavior changes).
 
     private ThreatMap buildThreatMap(Unit unit, Seq<Unit> pathUnits, boolean includeUnits, boolean moveFlying, boolean threatsAir, boolean threatsGround, float passClearanceWorld, float threatClearanceWorld){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SP", "Compute", "buildThreatMap", NeonProfiler.threadMain)){
         ThreatMap map = obtainThreatMapScratch();
         map.safeBias = Mathf.clamp(threatClearanceWorld / tilesize, 0f, 10f);
 
@@ -3890,6 +3900,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             map.safeDist = null;
         }
         return map;
+        }
     }
 
     private void applyThreatsToRisk(ThreatMap map, Seq<Threat> threats, float threatInflate){
@@ -4528,6 +4539,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private PathResult findPath(ThreatMap map, int startX, int startY, IntSeq goals, boolean[] goalMask, PathMode mode, Unit unit, Seq<Unit> pathUnits, float speed){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SP", "Compute", "findPath", NeonProfiler.threadMain)){
         long searchStarted = System.nanoTime();
         Unit costUnit = useSlowestUnitForPathCost() ? slowestUnitRef(pathUnits, unit) : unit;
         float costSpeed = useSlowestUnitForPathCost() ? slowestUnitSpeed(pathUnits, unit) : Math.max(0.0001f, speed);
@@ -4604,12 +4616,15 @@ public class StealthPathMod extends mindustry.mod.Mod{
         }
 
         return result;
+        }
     }
 
     private PathResult runPathSearch(ThreatMap map, int startX, int startY, IntSeq goals, boolean[] goalMask, PathMode mode, Unit unit, float speed){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SP", "Compute", "runPathSearch", NeonProfiler.threadMain)){
         return pathfinderMode() == pathfinderDfs
             ? findPathDfs(map, startX, startY, goals, goalMask, mode, unit, speed)
             : findPathAStar(map, startX, startY, goals, goalMask, mode, unit, speed);
+        }
     }
 
     private static float segmentDistanceWorld(ThreatMap map, int a, int b){

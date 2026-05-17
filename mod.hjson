@@ -4,7 +4,7 @@
   author: "DeterMination (BEK)"
   repo: "DeterMination-Wind/Neon"
   description: "A bundled toolkit with 16 client modules, now including WhoUsesThisBuilding and PatchViewer in Neon unified settings. / 辅助模组十六合一，现并入 WhoUsesThisBuilding 与 PatchViewer 并统一到 Neon 设置入口。"
-  version: "8.1.0"
+  version: "8.2.1"
   minGameVersion: 154
   hidden: true
   java: true

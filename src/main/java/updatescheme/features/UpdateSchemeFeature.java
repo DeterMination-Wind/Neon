@@ -4,6 +4,7 @@ import arc.Core;
 import arc.Events;
 import arc.util.Interval;
 import arc.util.Log;
+import bektools.profiler.NeonProfiler;
 import mdtxcompat.OverlayUiBridge;
 import mdtxcompat.SchematicShareBridge;
 import mindustry.Vars;
@@ -70,6 +71,7 @@ public final class UpdateSchemeFeature {
         });
 
         Events.run(EventType.Trigger.update, () -> {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("US", "Update", "update", NeonProfiler.threadMain)){
             if (interval.check(idSettings, settingsRefreshTime)) refreshSettings();
             if (interval.check(idAutoTick, autoTickTime)) tickAutoCheck();
             if (hookDeadlineAtMs > 0L && System.currentTimeMillis() < hookDeadlineAtMs && interval.check(idHookTick, hookTickTime)) {
@@ -78,6 +80,7 @@ public final class UpdateSchemeFeature {
             redirectOriginalSchematicsDialogIfShown();
             UpdateSchemeOverlay.syncVisibility();
             UpdateSchemeFetcher.tickQueue();
+            }
         });
     }
 

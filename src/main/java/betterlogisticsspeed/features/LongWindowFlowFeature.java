@@ -26,6 +26,7 @@ import mindustry.world.meta.StatUnit;
 import mindustry.world.modules.ItemModule;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 
 import static mindustry.Vars.content;
@@ -62,6 +63,21 @@ public class LongWindowFlowFeature {
     private static Building trackedBuild;
     private static BuildFlowTracker trackedTracker;
 
+    // ---------- MI2-Utilities-Java reflection bridge ----------
+    // Activates only when the user enables "MI2UI.replaceTopTable" inside MI2U.
+    // In that mode MI2U pulls the vanilla hover info out of PlacementFragment.topTable
+    // and re-runs build.display(...) inside HoverTopTable.buildt, while overwriting
+    // PlacementFragment.hover with a Unit. We follow the build into hoverInfo.buildt
+    // so the moving-average row still appears beneath the per-second flow row.
+    private static boolean mi2uAvailable;
+    private static boolean mi2uClassMissing;
+    private static Object mi2uMi2uiInstance;          // mi2u.MI2UVars.mi2ui
+    private static Field mi2uMi2uiSettingsField;       // mi2u.ui.elements.Mindow2#settings
+    private static Method mi2uSettingsGetBool;         // mi2u.io.SettingHandler#getBool(String)
+    private static Field mi2uHoverInfoField;           // mi2u.ui.HoverTopTable#hoverInfo (static)
+    private static Field mi2uHoverBuildField;          // hoverInfo#build
+    private static Field mi2uHoverBuildtField;         // hoverInfo#buildt
+
     public static void init() {
         if (inited) return;
         inited = true;
@@ -75,6 +91,7 @@ public class LongWindowFlowFeature {
         Events.on(EventType.ClientLoadEvent.class, e -> {
             refreshSettings();
             tryInitReflection();
+            probeMi2u();
             rebuildItemIconCache();
             clearTracking();
         });
@@ -150,33 +167,60 @@ public class LongWindowFlowFeature {
         tryInitReflection();
         if (!reflectReady) return;
 
+        probeMi2u();
+        boolean mi2uMode = isMi2uReplaceActive();
+
         try {
             Object pf = ui.hudfrag.blockfrag;
             Table topTable = (Table) fieldTopTable.get(pf);
             if (topTable == null) return;
 
+            Table mi2uBuildt = mi2uMode ? getMi2uBuildt() : null;
+
             if (!enabled || trackedTracker == null || trackedBuild == null) {
                 hideInjectedRows(topTable);
+                hideInjectedRows(mi2uBuildt);
                 return;
             }
 
-            Block menuHoverBlock = (Block) fieldMenuHoverBlock.get(pf);
-            Displayable hover = (Displayable) fieldHover.get(pf);
+            Table searchRoot;
+            Building displayBuild;
 
-            if (menuHoverBlock != null || control.input.block != null || !(hover instanceof Building)) {
+            if (mi2uMode) {
+                Building hoverBuild = getMi2uHoverBuild();
+                if (mi2uBuildt == null || hoverBuild == null) {
+                    hideInjectedRows(topTable);
+                    hideInjectedRows(mi2uBuildt);
+                    return;
+                }
+                searchRoot = mi2uBuildt;
+                displayBuild = hoverBuild;
+                // Strip any leftover row that was injected during a previous vanilla-mode frame.
                 hideInjectedRows(topTable);
-                return;
+            } else {
+                Block menuHoverBlock = (Block) fieldMenuHoverBlock.get(pf);
+                Displayable hover = (Displayable) fieldHover.get(pf);
+
+                if (menuHoverBlock != null || control.input.block != null || !(hover instanceof Building)) {
+                    hideInjectedRows(topTable);
+                    hideInjectedRows(getMi2uBuildt());
+                    return;
+                }
+
+                searchRoot = topTable;
+                displayBuild = (Building) hover;
+                // Strip any leftover row inside MI2U buildt from a previous MI2U-mode frame.
+                hideInjectedRows(getMi2uBuildt());
             }
 
-            Building displayBuild = (Building) hover;
             if (displayBuild != trackedBuild || displayBuild.flowItems() == null) {
-                hideInjectedRows(topTable);
+                hideInjectedRows(searchRoot);
                 return;
             }
 
-            Table flowTable = findItemFlowTable(topTable);
+            Table flowTable = findItemFlowTable(searchRoot);
             if (flowTable == null) {
-                hideInjectedRows(topTable);
+                hideInjectedRows(searchRoot);
                 return;
             }
 
@@ -353,6 +397,88 @@ public class LongWindowFlowFeature {
             reflectReady = true;
         } catch (Throwable ignored) {
             reflectReady = false;
+        }
+    }
+
+    /**
+     * Best-effort detection of MI2-Utilities-Java. Retries on transient failures
+     * (e.g. MI2U statics not yet initialized) and gives up permanently when the
+     * mod is absent (ClassNotFoundException / NoClassDefFoundError).
+     */
+    private static void probeMi2u() {
+        if (mi2uAvailable || mi2uClassMissing) return;
+
+        try {
+            Class<?> vars = Class.forName("mi2u.MI2UVars");
+            Field varsField = vars.getDeclaredField("mi2ui");
+            varsField.setAccessible(true);
+            Object instance = varsField.get(null);
+            if (instance == null) return; // MI2U not yet initialized; retry later
+
+            Class<?> mindow2 = Class.forName("mi2u.ui.elements.Mindow2");
+            Field settingsField = mindow2.getDeclaredField("settings");
+            settingsField.setAccessible(true);
+
+            Class<?> settingHandler = Class.forName("mi2u.io.SettingHandler");
+            Method getBool = settingHandler.getMethod("getBool", String.class);
+
+            Class<?> hover = Class.forName("mi2u.ui.HoverTopTable");
+            Field hoverInfoField = hover.getDeclaredField("hoverInfo");
+            hoverInfoField.setAccessible(true);
+            Field buildField = hover.getDeclaredField("build");
+            buildField.setAccessible(true);
+            Field buildtField = hover.getDeclaredField("buildt");
+            buildtField.setAccessible(true);
+
+            mi2uMi2uiInstance = instance;
+            mi2uMi2uiSettingsField = settingsField;
+            mi2uSettingsGetBool = getBool;
+            mi2uHoverInfoField = hoverInfoField;
+            mi2uHoverBuildField = buildField;
+            mi2uHoverBuildtField = buildtField;
+            mi2uAvailable = true;
+        } catch (ClassNotFoundException notFound) {
+            mi2uClassMissing = true;
+        } catch (NoClassDefFoundError notFoundDef) {
+            mi2uClassMissing = true;
+        } catch (Throwable ignored) {
+            // transient — leave both flags false so probeMi2u retries next frame
+        }
+    }
+
+    private static boolean isMi2uReplaceActive() {
+        if (!mi2uAvailable) return false;
+        try {
+            Object handler = mi2uMi2uiSettingsField.get(mi2uMi2uiInstance);
+            if (handler == null) return false;
+            Object value = mi2uSettingsGetBool.invoke(handler, "replaceTopTable");
+            return value instanceof Boolean && (Boolean) value;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static Building getMi2uHoverBuild() {
+        if (!mi2uAvailable) return null;
+        try {
+            Object hoverInfo = mi2uHoverInfoField.get(null);
+            if (hoverInfo == null) return null;
+            Object build = mi2uHoverBuildField.get(hoverInfo);
+            return build instanceof Building ? (Building) build : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Table getMi2uBuildt() {
+        if (!mi2uAvailable) return null;
+        try {
+            Object hoverInfo = mi2uHoverInfoField.get(null);
+            if (hoverInfo == null) return null;
+            Object buildt = mi2uHoverBuildtField.get(hoverInfo);
+            return buildt instanceof Table ? (Table) buildt : null;
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 

@@ -24,6 +24,7 @@ import arc.util.Time;
 import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonValue;
+import bektools.profiler.NeonProfiler;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
@@ -81,6 +82,8 @@ public class ServerPlayerDataBaseMod extends Mod{
     private static final String keyAutoTrace = "spdb-auto-trace";
     private static final String keyShowAutoTraceDialog = "spdb-show-auto-trace-dialog";
     private static final String integrityAlgorithm = "sha256-spdb-v1";
+    private static final String embeddedModelResource = "models/bge-base-zh-v1.5-q8_0.gguf";
+    private static final long embeddingFlushIntervalMs = 5L * 60L * 1000L;
 
     private static final int integrityValid = 0;
     private static final int integrityMissing = 1;
@@ -119,12 +122,17 @@ public class ServerPlayerDataBaseMod extends Mod{
     private Fi chatsDir;
     private Fi chatsIndexFile;
     private Fi legacyChatsFile;
+    private Fi semanticSearchModelFile;
+    private Fi semanticSearchNativeDir;
 
     private boolean playersDirty;
     private boolean chatsDirty;
     private String currentServer = "offline";
     private int playersFileIntegrityState = integrityMissing;
     private final Seq<String> playersIntegrityIssues = new Seq<>();
+    private EmbeddingEngine embeddingEngine;
+    private EmbeddingIndex embeddingIndex;
+    private long lastEmbeddingFlushAt;
 
     private TraceDialog originalTraceDialog;
 
@@ -158,6 +166,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             initStorage();
             loadLocalData();
+            initEmbedding();
             registerSettings();
             GithubUpdateCheck.checkOnce();
             installTraceInterceptor();
@@ -216,8 +225,18 @@ public class ServerPlayerDataBaseMod extends Mod{
             String sender = snapshot != null && snapshot.senderName != null ? snapshot.senderName : safeName(e.player.name);
             String message = snapshot != null && snapshot.message != null ? snapshot.message : safeMessage(e.message);
 
-            if(chatDb.add(uid, sender, message, currentServer, Time.millis())){
+            int entryId = chatDb.add(uid, sender, message, currentServer, Time.millis());
+            if(entryId > 0){
                 chatsDirty = true;
+                if(embeddingIndex != null){
+                    ChatEntry entry = new ChatEntry();
+                    entry.uid = uid;
+                    entry.senderName = sender;
+                    entry.message = message;
+                    entry.server = normalizeServer(currentServer);
+                    entry.time = Time.millis();
+                    embeddingIndex.addEntryAsync(entryId, entry);
+                }
             }
         });
 
@@ -228,9 +247,14 @@ public class ServerPlayerDataBaseMod extends Mod{
     public void registerClientCommands(CommandHandler handler){
         handler.<Player>register("spdb", "打开 ServerPlayerDataBase 查询窗口。", (args, player) -> Core.app.post(this::showStandaloneQueryDialog));
         handler.<Player>register("spdb-debug", "打开 ServerPlayerDataBase 调试窗口。", (args, player) -> Core.app.post(this::showStandaloneDebugDialog));
+        handler.<Player>register("spdb-search", "<query...>", "打开语义搜索并填入查询。", (args, player) -> {
+            String query = args == null || args.length == 0 ? "" : String.join(" ", args).trim();
+            Core.app.post(() -> showSemanticSearchDialog(query));
+        });
     }
 
     private void update(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("SPDB", "Update", "update", NeonProfiler.threadMain)){
         if(Vars.headless) return;
 
         releaseOverlayFocusIfPointerOutside();
@@ -253,6 +277,12 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         if(timer.get(2, 60f)){
             pruneTracePending();
+        }
+
+        if(embeddingIndex != null && Time.millis() - lastEmbeddingFlushAt >= embeddingFlushIntervalMs){
+            lastEmbeddingFlushAt = Time.millis();
+            embeddingIndex.flushIfDirty();
+        }
         }
     }
 
@@ -337,6 +367,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void collectPlayers(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "Event", "collectPlayers", NeonProfiler.threadMain)){
         long now = Time.millis();
 
         for(Player p : Groups.player){
@@ -360,6 +391,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             if(canAutoTraceIps()){
                 requestTraceIfNeeded(p, now);
             }
+        }
         }
     }
 
@@ -408,11 +440,13 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void installTraceInterceptor(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "UI", "installTraceInterceptor", NeonProfiler.threadMain)){
         if(Vars.ui == null || Vars.ui.traces == null) return;
         if(Vars.ui.traces instanceof TraceInterceptorDialog) return;
 
         originalTraceDialog = Vars.ui.traces;
         Vars.ui.traces = new TraceInterceptorDialog();
+        }
     }
 
     private class TraceInterceptorDialog extends TraceDialog{
@@ -725,6 +759,62 @@ public class ServerPlayerDataBaseMod extends Mod{
         chatsDir.mkdirs();
         chatsIndexFile = chatsDir.child("chat_index.json");
         legacyChatsFile = dataDir.child("chats.json");
+        semanticSearchModelFile = dataDir.child("models").child("bge-base-zh-v1.5-q8_0.gguf");
+        semanticSearchNativeDir = dataDir.child("native").child("llama-4.1.0");
+    }
+
+    private void initEmbedding(){
+        if(isAndroidRuntime()){
+            Log.info("SPDB: semantic search disabled on Android runtime.");
+            return;
+        }
+        if(chatsDbFile == null){
+            Log.warn("SPDB: semantic search skipped because chat database path is unavailable.");
+            return;
+        }
+
+        try{
+            Fi extractedModel = extractEmbeddedModel();
+            if(extractedModel == null || !extractedModel.exists()){
+                Log.warn("SPDB: semantic search model resource missing.");
+                return;
+            }
+
+            int threads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+            embeddingEngine = EmbeddingEngine.load(extractedModel.file(), semanticSearchNativeDir == null ? null : semanticSearchNativeDir.file(), threads);
+            embeddingIndex = new EmbeddingIndex(embeddingEngine, chatDb);
+            embeddingIndex.initialize();
+            lastEmbeddingFlushAt = Time.millis();
+        }catch(Throwable t){
+            embeddingIndex = null;
+            if(embeddingEngine != null){
+                try{
+                    embeddingEngine.close();
+                }catch(Throwable ignored){
+                }
+                embeddingEngine = null;
+            }
+            Log.err("SPDB: semantic search initialization failed.", t);
+        }
+    }
+
+    private Fi extractEmbeddedModel() throws Exception{
+        if(semanticSearchModelFile == null) return null;
+        if(semanticSearchModelFile.parent() != null) semanticSearchModelFile.parent().mkdirs();
+        if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L) return semanticSearchModelFile;
+
+        InputStream input = getClass().getClassLoader().getResourceAsStream(embeddedModelResource);
+        if(input == null) return null;
+
+        try(InputStream in = input){
+            semanticSearchModelFile.write(in, false);
+        }
+        return semanticSearchModelFile;
+    }
+
+    private boolean isAndroidRuntime(){
+        String runtime = System.getProperty("java.runtime.name", "");
+        return runtime != null && runtime.toLowerCase(Locale.ROOT).contains("android");
     }
 
     private void loadLocalData(){
@@ -784,6 +874,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void saveDirty(boolean force){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "IO", "saveDirty", NeonProfiler.threadMain)){
         if(dataDir == null) return;
 
         dataDir.mkdirs();
@@ -808,6 +899,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 Log.err("SPDB: failed to save chat database.", t);
             }
         }
+        }
     }
 
     private void registerSettings(){
@@ -820,7 +912,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         Core.settings.defaults(keyAutoTrace, true);
         Core.settings.defaults(keyShowAutoTraceDialog, false);
 
-        if(!bekBundled) Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
+        Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
@@ -937,6 +1029,13 @@ public class ServerPlayerDataBaseMod extends Mod{
                 .minHeight(0f);
 
         fallbackQueryDialog.show();
+    }
+
+    private void showSemanticSearchDialog(String query){
+        showStandaloneQueryDialog();
+        if(fallbackQueryContent != null){
+            fallbackQueryContent.openSemanticSearch(query);
+        }
     }
 
     private void showStandaloneDebugDialog(){
@@ -1608,6 +1707,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         final Table root = new Table();
         final Table playerTab = new Table();
         final Table chatTab = new Table();
+        final Table semanticTab = new Table();
         final Table uidResult = new Table();
         final Table pidResult = new Table();
         final Table nameResult = new Table();
@@ -1615,6 +1715,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         final Table chatResult = new Table();
         final Table allPlayersResult = new Table();
         final Table allChatsResult = new Table();
+        SemanticSearchContent semanticContent;
 
         TextField uidField;
         TextField pidField;
@@ -1689,6 +1790,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 tabs.left().defaults().height(40f).pad(6f).growX();
                 tabs.button("玩家库", Icon.players, Styles.togglet, () -> activeTab = 0).checked(b -> activeTab == 0).growX();
                 tabs.button("聊天记录", Icon.chat, Styles.togglet, () -> activeTab = 1).checked(b -> activeTab == 1).growX();
+                tabs.button("语义搜索", Icon.zoom, Styles.togglet, () -> activeTab = 2).checked(b -> activeTab == 2).growX();
             }).growX().padBottom(8f).row();
 
             playerTab.clear();
@@ -1911,13 +2013,58 @@ public class ServerPlayerDataBaseMod extends Mod{
             }).growX().row();
             chatTab.add(allChatsResult).growX().growY().row();
 
+            semanticTab.clear();
+            semanticTab.left().top().defaults().left().pad(4f).growX();
+            semanticContent = new SemanticSearchContent(new SemanticSearchContent.Host(){
+                @Override
+                public boolean compactUi(){
+                    return ServerPlayerDataBaseMod.this.compactUi();
+                }
+
+                @Override
+                public String formatTime(long millis){
+                    return ServerPlayerDataBaseMod.formatTime(millis);
+                }
+
+                @Override
+                public String escapeMarkup(String text){
+                    return ServerPlayerDataBaseMod.escapeMarkup(text);
+                }
+
+                @Override
+                public String safeLine(String text, int maxLen){
+                    return ServerPlayerDataBaseMod.safeLine(text, maxLen);
+                }
+
+                @Override
+                public void copy(String value){
+                    ServerPlayerDataBaseMod.this.copy(value);
+                }
+
+                @Override
+                public void openUid(String uid){
+                    if(uidField != null) uidField.setText(uid);
+                    if(chatUidField != null) chatUidField.setText(uid);
+                    activeTab = 0;
+                    refreshUidResult();
+                }
+
+                @Override
+                public void showInfo(String message){
+                    if(Vars.ui != null) Vars.ui.showInfoFade(message);
+                }
+            }, embeddingIndex);
+            semanticTab.add(semanticContent.root).grow().minWidth(0f).minHeight(0f).row();
+
             root.stack(
                 new Table(t -> t.pane(playerTab).scrollX(false).grow()),
-                new Table(t -> t.pane(chatTab).scrollX(false).grow())
+                new Table(t -> t.pane(chatTab).scrollX(false).grow()),
+                new Table(t -> t.pane(semanticTab).scrollX(false).grow())
             ).update(stack -> {
-                if(stack.getChildren().size >= 2){
+                if(stack.getChildren().size >= 3){
                     stack.getChildren().get(0).visible = activeTab == 0;
                     stack.getChildren().get(1).visible = activeTab == 1;
+                    stack.getChildren().get(2).visible = activeTab == 2;
                 }
             }).grow().minWidth(0f).minHeight(0f).padBottom(compact ? 10f : 6f);
             root.row();
@@ -1930,6 +2077,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             refreshChatResult();
             refreshAllPlayersResult();
             refreshAllChatsResult();
+            if(semanticContent != null) semanticContent.refreshStatus();
         }
 
         private void refreshUidResult(){
@@ -2538,6 +2686,18 @@ public class ServerPlayerDataBaseMod extends Mod{
 
                 row.button(Icon.copySmall, Styles.emptyi, () -> copy(value)).size(compact ? 30f : 28f);
             }).growX().left().row();
+        }
+
+        void openSemanticSearch(String query){
+            activeTab = 2;
+            if(semanticContent != null){
+                semanticContent.setQueryText(query);
+                if(query != null && !query.trim().isEmpty()){
+                    semanticContent.runSearch();
+                }else{
+                    semanticContent.refreshStatus();
+                }
+            }
         }
     }
 
@@ -3683,7 +3843,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         public long integrityTime;
     }
 
-    private static class ChatDatabase{
+    static class ChatDatabase{
         private static final int maxCachedDays = 8;
         private SqliteChatBackend sqlite;
         private boolean useSqlite;
@@ -3910,7 +4070,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             int merged = 0;
             for(ChatEntry entry : incoming.entries){
                 if(entry == null) continue;
-                if(add(entry.uid, entry.senderName, entry.message, entry.server, entry.time)){
+                if(add(entry.uid, entry.senderName, entry.message, entry.server, entry.time) > 0){
                     merged++;
                 }
             }
@@ -3956,11 +4116,11 @@ public class ServerPlayerDataBaseMod extends Mod{
             return changed;
         }
 
-        boolean add(String uid, String senderName, String message, String server, long time){
+        int add(String uid, String senderName, String message, String server, long time){
             if(useSqlite) return sqlite.add(uid, senderName, message, server, time);
 
             uid = normalizeUid(uid);
-            if(uid == null || message == null) return false;
+            if(uid == null || message == null) return -1;
 
             ChatEntry entry = new ChatEntry();
             entry.uid = uid;
@@ -3974,14 +4134,14 @@ public class ServerPlayerDataBaseMod extends Mod{
             ObjectSet<String> dedupe = dayDedupe.get(date, ObjectSet::new);
 
             String key = dedupeKey(entry);
-            if(!dedupe.add(key)) return false;
+            if(!dedupe.add(key)) return -1;
 
             entries.add(entry);
             dirtyDates.add(date);
             touchDay(date);
             addUidDate(uid, date);
             totalEntries++;
-            return true;
+            return -1;
         }
 
         Seq<ChatEntry> findByUid(String uid){
@@ -4032,6 +4192,13 @@ public class ServerPlayerDataBaseMod extends Mod{
                 out.add(all.get(i));
             }
             return out;
+        }
+
+        Connection openSqliteConnection() throws SQLException{
+            if(!useSqlite || sqlite == null){
+                throw new SQLException("SQLite backend is not active.");
+            }
+            return sqlite.openConnection();
         }
 
         private Seq<ChatEntry> ensureDayLoaded(String date){
@@ -4363,7 +4530,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
                 try(PreparedStatement stmt = conn.prepareStatement("insert or ignore into chat_entries(uid, sender_name, message, server, time, dedupe_key) values (?, ?, ?, ?, ?, ?)")){
                     for(ChatEntry raw : incoming.entries){
-                        if(insertEntry(stmt, raw)) merged++;
+                        if(insertEntry(stmt, raw) > 0L) merged++;
                     }
                 }
 
@@ -4423,18 +4590,28 @@ public class ServerPlayerDataBaseMod extends Mod{
             }
         }
 
-        boolean add(String uid, String senderName, String message, String server, long time){
+        int add(String uid, String senderName, String message, String server, long time){
             ChatEntry normalized = normalizeEntry(uid, senderName, message, server, time);
-            if(normalized == null) return false;
+            if(normalized == null) return -1;
 
-            try(Connection conn = openConnection();
-                PreparedStatement stmt = conn.prepareStatement("insert or ignore into chat_entries(uid, sender_name, message, server, time, dedupe_key) values (?, ?, ?, ?, ?, ?)")){
-                boolean inserted = insertEntry(stmt, normalized);
-                if(inserted) totalEntries++;
-                return inserted;
+            try(Connection conn = openConnection()){
+                Long existingId = findExistingEntryId(conn, normalized);
+                if(existingId != null) return existingId.intValue();
+
+                try(PreparedStatement stmt = conn.prepareStatement(
+                    "insert or ignore into chat_entries(uid, sender_name, message, server, time, dedupe_key) values (?, ?, ?, ?, ?, ?)",
+                    Statement.RETURN_GENERATED_KEYS
+                )){
+                    long insertedId = insertEntry(stmt, normalized);
+                    if(insertedId > 0L){
+                        totalEntries++;
+                        return (int)insertedId;
+                    }
+                }
+                return -1;
             }catch(Throwable t){
                 addIntegrityIssue("SQLite 聊天记录写入失败。", t);
-                return false;
+                return -1;
             }
         }
 
@@ -4499,7 +4676,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                             ChatDayFile loaded = serializer.fromJson(ChatDayFile.class, file.readString("UTF-8"));
                             if(loaded == null || loaded.entries == null) continue;
                             for(ChatEntry raw : loaded.entries){
-                                if(insertEntry(stmt, raw)) migrated++;
+                                if(insertEntry(stmt, raw) > 0L) migrated++;
                             }
                         }catch(Throwable t){
                             addIntegrityIssue("SQLite 迁移旧聊天分片失败：" + file.name(), t);
@@ -4516,7 +4693,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             return migrated;
         }
 
-        private Connection openConnection() throws SQLException{
+        Connection openConnection() throws SQLException{
             return DriverManager.getConnection("jdbc:sqlite:" + databaseFile.file().getAbsolutePath());
         }
 
@@ -4533,6 +4710,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 stmt.execute("create table if not exists chat_entries (id integer primary key autoincrement, uid text not null, sender_name text, message text not null, server text not null, time integer not null, dedupe_key text not null unique)");
                 stmt.execute("create index if not exists idx_chat_uid_time on chat_entries(uid, time desc)");
                 stmt.execute("create index if not exists idx_chat_time on chat_entries(time desc)");
+                stmt.execute("create table if not exists chat_vectors (entry_id integer primary key references chat_entries(id) on delete cascade, vector blob not null)");
             }
         }
 
@@ -4567,9 +4745,9 @@ public class ServerPlayerDataBaseMod extends Mod{
             return message != null && message.toLowerCase(Locale.ROOT).contains("unique");
         }
 
-        private boolean insertEntry(PreparedStatement stmt, ChatEntry raw) throws SQLException{
+        private long insertEntry(PreparedStatement stmt, ChatEntry raw) throws SQLException{
             ChatEntry entry = normalizeEntry(raw == null ? null : raw.uid, raw == null ? null : raw.senderName, raw == null ? null : raw.message, raw == null ? null : raw.server, raw == null ? 0L : raw.time);
-            if(entry == null) return false;
+            if(entry == null) return -1L;
 
             stmt.setString(1, entry.uid);
             stmt.setString(2, entry.senderName);
@@ -4577,7 +4755,21 @@ public class ServerPlayerDataBaseMod extends Mod{
             stmt.setString(4, entry.server);
             stmt.setLong(5, entry.time);
             stmt.setString(6, ChatDatabase.dedupeKey(entry));
-            return stmt.executeUpdate() > 0;
+            if(stmt.executeUpdate() <= 0) return -1L;
+
+            try(ResultSet generatedKeys = stmt.getGeneratedKeys()){
+                if(generatedKeys.next()) return generatedKeys.getLong(1);
+            }
+            return -1L;
+        }
+
+        private Long findExistingEntryId(Connection conn, ChatEntry entry) throws SQLException{
+            try(PreparedStatement stmt = conn.prepareStatement("select id from chat_entries where dedupe_key = ?")){
+                stmt.setString(1, ChatDatabase.dedupeKey(entry));
+                try(ResultSet rs = stmt.executeQuery()){
+                    return rs.next() ? rs.getLong(1) : null;
+                }
+            }
         }
 
         private static ChatEntry normalizeEntry(String uid, String senderName, String message, String server, long time){

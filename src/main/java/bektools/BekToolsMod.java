@@ -4,6 +4,7 @@ import arc.Core;
 import arc.Events;
 import arc.util.CommandHandler;
 import arc.util.Log;
+import bektools.profiler.NeonProfilerFeature;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -91,6 +92,8 @@ public class BekToolsMod extends Mod{
 
         BetterScreenShotFeature.configureOverlayUi(overlayUi);
         CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
+        NeonProfilerFeature.configureOverlayUi(overlayUi);
+        NeonProfilerFeature.init();
 
         pgmm = pgmmSupplier.get();
         stealthPath = stealthPathSupplier.get();
@@ -146,6 +149,7 @@ public class BekToolsMod extends Mod{
 
     @Override
     public void registerClientCommands(CommandHandler handler){
+        NeonProfilerFeature.registerClientCommands(handler);
         pgmm.registerClientCommands(handler);
         stealthPath.registerClientCommands(handler);
         radialBuildMenu.registerClientCommands(handler);
@@ -184,6 +188,7 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.hm", "Hidden Message"), Icon.chat, st -> {
                 st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hm.none"));
             });
+            addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
             addGroup(table, Core.bundle.get("bektools.section.update", "Update"), Icon.refresh, st -> {
                 st.checkPref(GithubUpdateCheck.enabledKey(), true);
                 st.checkPref(GithubUpdateCheck.showDialogKey(), true);

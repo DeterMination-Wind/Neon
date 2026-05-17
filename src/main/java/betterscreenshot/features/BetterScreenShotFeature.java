@@ -14,6 +14,7 @@ import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import arc.util.Interval;
 import arc.util.Strings;
+import bektools.profiler.NeonProfiler;
 import betterscreenshot.core.Screenshot;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
@@ -90,10 +91,12 @@ public class BetterScreenShotFeature {
         Events.on(EventType.WorldLoadEvent.class, e -> updateSizeHint());
 
         Events.run(EventType.Trigger.update, () -> {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BSS", "Update", "update", NeonProfiler.threadMain)){
             if (interval.check(idSettings, settingsRefreshTime)) refreshSettings();
             if (interval.check(idAttach, attachRefreshTime)) ensurePanelAttached();
             if (interval.check(idSize, sizeRefreshTime)) updateSizeHint();
             handleCaptureHotkey();
+            }
         });
     }
 

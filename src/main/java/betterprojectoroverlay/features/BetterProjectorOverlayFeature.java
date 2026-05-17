@@ -18,6 +18,7 @@ import arc.util.Align;
 import arc.util.Interval;
 import arc.util.Time;
 import arc.util.pooling.Pools;
+import bektools.profiler.NeonProfiler;
 import betterprojectoroverlay.GithubUpdateCheck;
 import mdtxcompat.MarkerBridge;
 import mindustry.content.Blocks;
@@ -36,6 +37,7 @@ import mindustry.world.blocks.defense.OverdriveProjector;
 import mindustry.world.blocks.power.PowerGraph;
 
 import java.lang.reflect.Method;
+import java.util.IdentityHashMap;
 import java.util.Locale;
 
 import static mindustry.Vars.control;
@@ -62,6 +64,11 @@ public class BetterProjectorOverlayFeature {
 
     private static final float settingsRefreshTime = 0.5f;
     private static final float previewRefreshTicks = 8f;
+    private static final float minScanGapTicks = 60f;
+
+    private static final IdentityHashMap<Class<?>, Method> realRangeCache = new IdentityHashMap<>();
+
+    private static float lastScanAt = -1000f;
 
     private static boolean inited;
 
@@ -123,19 +130,32 @@ public class BetterProjectorOverlayFeature {
             resetPreviewCache();
         });
 
-        Events.on(EventType.BlockBuildEndEvent.class, e -> forceRescan = true);
-        Events.on(EventType.BlockDestroyEvent.class, e -> forceRescan = true);
-        Events.on(EventType.BuildRotateEvent.class, e -> forceRescan = true);
-        Events.on(EventType.BuildTeamChangeEvent.class, e -> forceRescan = true);
-        Events.on(EventType.ConfigEvent.class, e -> forceRescan = true);
+        Events.on(EventType.BlockBuildEndEvent.class, e -> {
+            if (e.tile != null && isOverdriveRelated(e.tile.build)) forceRescan = true;
+        });
+        Events.on(EventType.BlockDestroyEvent.class, e -> {
+            if (e.tile != null && isOverdriveRelated(e.tile.build)) forceRescan = true;
+        });
+        Events.on(EventType.BuildRotateEvent.class, e -> {
+            if (isOverdriveRelated(e.build)) forceRescan = true;
+        });
+        Events.on(EventType.BuildTeamChangeEvent.class, e -> {
+            if (isOverdriveRelated(e.build)) forceRescan = true;
+        });
+        Events.on(EventType.ConfigEvent.class, e -> {
+            if (isOverdriveRelated(e.tile)) forceRescan = true;
+        });
 
         Events.run(EventType.Trigger.update, () -> {
             if (interval.check(idSettings, settingsRefreshTime)) refreshSettings();
             updatePlacementPreview();
 
             if (!enabled || !markerEnabled) return;
-            if (forceRescan || interval.check(idScan, Math.max(1f, scanIntervalSeconds))) {
+            boolean intervalReady = interval.check(idScan, Math.max(1f, scanIntervalSeconds));
+            boolean debounceReady = Time.time - lastScanAt >= minScanGapTicks;
+            if ((forceRescan && debounceReady) || intervalReady) {
                 forceRescan = false;
+                lastScanAt = Time.time;
                 scanAndMarkConflicts();
             }
         });
@@ -168,6 +188,7 @@ public class BetterProjectorOverlayFeature {
     }
 
     private static void updatePlacementPreview() {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BPO", "Compute", "updatePlacementPreview", NeonProfiler.threadMain)){
         if (!enabled || !previewEnabled) {
             preview.reset();
             resetPreviewCache();
@@ -211,9 +232,11 @@ public class BetterProjectorOverlayFeature {
         nextPreviewComputeAt = Time.time + previewRefreshTicks;
 
         computePlacementPreview(tx, ty, (OverdriveProjector) block);
+        }
     }
 
     private static void drawPlacementPredictionWorld() {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BPO", "Draw", "drawPlacementPrediction", NeonProfiler.threadMain)){
         PlacementPreview p = preview;
         if (!p.active) return;
 
@@ -227,6 +250,7 @@ public class BetterProjectorOverlayFeature {
         Lines.circle(p.worldX, p.worldY, p.range);
         drawPlacementTextWorld(p, mainColor);
         Draw.reset();
+        }
     }
 
     private static void drawPlacementTextWorld(PlacementPreview p, Color color) {
@@ -269,6 +293,7 @@ public class BetterProjectorOverlayFeature {
     }
 
     private static PlacementPreview computePlacementPreview(int tx, int ty, OverdriveProjector projector) {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BPO", "Compute", "computePlacementPreview", NeonProfiler.threadMain)){
         preview.reset();
 
         if (world == null || world.width() <= 0 || world.height() <= 0) return preview;
@@ -325,6 +350,7 @@ public class BetterProjectorOverlayFeature {
         preview.positive = preview.balance >= 0f;
 
         return preview;
+        }
     }
 
     private static void resetPreviewCache() {
@@ -351,6 +377,7 @@ public class BetterProjectorOverlayFeature {
     }
 
     private static void scanAndMarkConflicts() {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BPO", "Scan", "scanAndMarkConflicts", NeonProfiler.threadMain)){
         if (!enabled || !markerEnabled) return;
         if (state == null || !state.isGame() || world == null || world.isGenerating() || player == null) return;
 
@@ -387,6 +414,11 @@ public class BetterProjectorOverlayFeature {
                 sendChatAlert(tileX, tileY);
             }
         }
+        }
+    }
+
+    private static boolean isOverdriveRelated(Building b) {
+        return b != null && b.block instanceof OverdriveProjector;
     }
 
     private static boolean isTargetProjector(Building b) {
@@ -433,17 +465,39 @@ public class BetterProjectorOverlayFeature {
         return false;
     }
 
+    private static final Method NULL_METHOD;
+    static {
+        Method m = null;
+        try {
+            m = Object.class.getMethod("hashCode");
+        } catch (NoSuchMethodException ignored) {
+        }
+        NULL_METHOD = m;
+    }
+
     private static float realOverdriveRange(Building source) {
         if (source == null || source.block == null) return 0f;
         if (!(source.block instanceof OverdriveProjector)) return 0f;
 
-        try {
-            Method realRange = source.getClass().getMethod("realRange");
-            Object out = realRange.invoke(source);
-            if (out instanceof Number) {
-                return Math.max(0f, ((Number) out).floatValue());
+        Class<?> cls = source.getClass();
+        Method realRange = realRangeCache.get(cls);
+        if (realRange == null) {
+            try {
+                realRange = cls.getMethod("realRange");
+            } catch (Throwable ignored) {
+                realRange = NULL_METHOD;
             }
-        } catch (Throwable ignored) {
+            realRangeCache.put(cls, realRange);
+        }
+
+        if (realRange != NULL_METHOD) {
+            try {
+                Object out = realRange.invoke(source);
+                if (out instanceof Number) {
+                    return Math.max(0f, ((Number) out).floatValue());
+                }
+            } catch (Throwable ignored) {
+            }
         }
 
         if (source instanceof Ranged) {

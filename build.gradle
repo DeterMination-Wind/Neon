@@ -3,11 +3,11 @@ plugins{
 }
 
 group = "bektools"
-version = "8.1.0"
+version = "8.2.2"
 
 java{
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }
 
 def mindustryVersion = (findProperty("mindustryVersion") ?: "v154.3").toString()
@@ -34,14 +34,15 @@ dependencies{
         compileOnly files(mindustryXClasses)
     }
 
+    implementation "de.kherud:llama:4.1.0"
     runtimeOnly "org.xerial:sqlite-jdbc:3.46.1.3"
 }
 
 tasks.withType(JavaCompile).configureEach{
     options.encoding = "UTF-8"
-    // Mindustry Android requires Java 8 bytecode.
+    // Neon now targets Java 11; D8 still converts the compiled classes into Android dex output.
     if(JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_1_9)){
-        options.release.set(8)
+        options.release.set(11)
     }
 }
 
@@ -129,6 +130,32 @@ def findD8 = {
 }
 
 def androidDexOutDir = layout.buildDirectory.dir("d8").get().asFile
+def modelsDir = new File(projectDir, "models")
+def embeddedModelFileName = "bge-base-zh-v1.5-q8_0.gguf"
+def embeddedModelFile = new File(modelsDir, embeddedModelFileName)
+def embeddedModelUrl = "https://hf-mirror.com/CompendiumLabs/bge-base-zh-v1.5-gguf/resolve/main/${embeddedModelFileName}"
+
+tasks.register("downloadEmbeddingModel"){
+    group = "build"
+    description = "Downloads the embedded GGUF model used for SPDB semantic search packaging."
+
+    outputs.file(embeddedModelFile)
+
+    doLast{
+        modelsDir.mkdirs()
+        if(embeddedModelFile.exists() && embeddedModelFile.length() > 0){
+            logger.lifecycle("Embedding model already present: ${embeddedModelFile}")
+            return
+        }
+
+        logger.lifecycle("Downloading embedding model from ${embeddedModelUrl}")
+        new java.net.URL(embeddedModelUrl).withInputStream{ input ->
+            embeddedModelFile.withOutputStream{ output ->
+                output << input
+            }
+        }
+    }
+}
 
 tasks.register("d8InputJar", Jar){
     group = "build"
@@ -176,6 +203,7 @@ tasks.register("jarMerged", Jar){
     description = "Packages a single jar for both desktop and Android."
     dependsOn tasks.named("classes")
     dependsOn tasks.named("dexAndroid")
+    dependsOn tasks.named("downloadEmbeddingModel")
     archiveFileName = "${mergedArchiveBase}.jar"
     destinationDirectory = layout.buildDirectory.dir("libs")
     from(sourceSets.main.output)
@@ -184,6 +212,10 @@ tasks.register("jarMerged", Jar){
     }
     from(androidDexOutDir){
         include "classes.dex"
+    }
+    from(modelsDir){
+        include embeddedModelFileName
+        into "models"
     }
     from(projectDir){
         include "mod.json"

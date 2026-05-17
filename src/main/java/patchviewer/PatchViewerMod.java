@@ -25,6 +25,7 @@ import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Scaling;
 import arc.util.Strings;
+import bektools.profiler.NeonProfiler;
 import mindustry.Vars;
 import mindustry.ctype.Content;
 import mindustry.ctype.ContentType;
@@ -111,6 +112,7 @@ public class PatchViewerMod extends Mod{
     }
 
     private void installDialogHook(){
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PV", "UI", "installDialogHook", NeonProfiler.threadMain)){
         try{
             Vars.ui.content = new ContentInfoDialog(){
                 @Override
@@ -124,6 +126,7 @@ public class PatchViewerMod extends Mod{
             };
         }catch(Throwable error){
             Log.err("[PatchViewer] Failed to hook ContentInfoDialog.", error);
+        }
         }
     }
 

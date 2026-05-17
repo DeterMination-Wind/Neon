@@ -3,6 +3,7 @@ package hiddenmessage;
 import arc.Core;
 import arc.Events;
 import arc.util.Log;
+import bektools.profiler.NeonProfiler;
 import mindustry.Vars;
 import mindustry.game.EventType;
 import mindustry.mod.Mod;
@@ -68,11 +69,13 @@ public class HiddenMessageMod extends Mod {
         Events.on(EventType.ResetEvent.class, e -> resetState());
 
         Events.run(EventType.Trigger.update, () -> {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("HM", "Update", "update", NeonProfiler.threadMain)){
             if (Vars.headless || !Vars.net.client() || Vars.player == null) return;
             long now = System.currentTimeMillis();
             long interval = verified ? HELLO_INTERVAL_MS : RETRY_INTERVAL_MS;
             if (now - lastHelloAt >= interval) {
                 sendHello();
+            }
             }
         });
     }

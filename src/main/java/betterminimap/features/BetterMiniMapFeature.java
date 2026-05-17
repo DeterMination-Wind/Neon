@@ -20,6 +20,7 @@ import arc.struct.ObjectSet;
 import arc.struct.Seq;
 import arc.util.Interval;
 import arc.util.Tmp;
+import bektools.profiler.NeonProfiler;
 import betterminimap.GithubUpdateCheck;
 import mindustry.game.EventType;
 import mindustry.game.Team;
@@ -266,6 +267,7 @@ public class BetterMiniMapFeature {
     }
 
     private static void rebuildVisibleCache(Rect viewRect) {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BMM", "Scan", "rebuildVisibleCache", NeonProfiler.threadMain)){
         visibleUnits.clear();
         visibleBuildings.clear();
         visibleRevision++;
@@ -304,9 +306,11 @@ public class BetterMiniMapFeature {
                 visibleBuildings.add(build);
             }
         }
+        }
     }
 
     private static void drawMarkers(float invScale, float minimapScale) {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BMM", "Draw", "drawMarkers", NeonProfiler.threadMain)){
         if (!enabled) return;
         if (world == null || !state.isGame() || world.isGenerating()) return;
         if (player == null) return;
@@ -348,6 +352,7 @@ public class BetterMiniMapFeature {
         }
 
         Draw.reset();
+        }
     }
 
     private static float normalizeWorldCoord(float v) {
@@ -356,6 +361,7 @@ public class BetterMiniMapFeature {
     }
 
     private static void buildUnitClusters(float minimapScale) {
+        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BMM", "Compute", "buildUnitClusters", NeonProfiler.threadMain)){
         float scale = Math.max(0.0001f, minimapScale);
         float clusterWorld = Math.max(0.1f, unitClusterPx / scale);
         if (clusteredRevision == visibleRevision && Math.abs(clusterWorld - clusteredWorld) <= 0.01f) return;
@@ -391,6 +397,7 @@ public class BetterMiniMapFeature {
             } else {
                 nearest.add(u);
             }
+        }
         }
     }
 
@@ -625,6 +632,7 @@ public class BetterMiniMapFeature {
 
         @Override
         public void draw() {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BMM", "Draw", "hudMinimap", NeonProfiler.threadMain)){
             if (!enabled) return;
             if (ui == null || ui.hudfrag == null || !ui.hudfrag.shown) return;
             if (ui.minimapfrag != null && ui.minimapfrag.shown()) return;
@@ -657,6 +665,7 @@ public class BetterMiniMapFeature {
             Draw.reset();
 
             clipEnd();
+            }
         }
     }
 

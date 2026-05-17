@@ -45,6 +45,7 @@ import arc.util.Strings;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
+import bektools.profiler.NeonProfiler;
 import mindustry.content.Blocks;
 import mindustry.core.UI;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -225,6 +226,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         Events.on(ConfigEvent.class, e -> cache.invalidateAll());
 
         Events.run(Trigger.update, () -> {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PGMM", "Update", "update", NeonProfiler.threadMain)){
             if(!Core.settings.getBool(keyEnabled, true)) return;
 
             //the HUD may be rebuilt; keep trying to attach.
@@ -253,13 +255,22 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
             splitWatcher.update();
             rescueAdvisor.update();
+            }
         });
 
         //draw rescue hints directly in the main game view.
-        Events.run(Trigger.draw, this::drawWorldRescueOverlay);
+        Events.run(Trigger.draw, () -> {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PGMM", "Draw", "worldRescue", NeonProfiler.threadMain)){
+                drawWorldRescueOverlay();
+            }
+        });
 
         //draw on top of the full-screen minimap (opened via M).
-        Events.run(Trigger.uiDrawEnd, this::drawFullMinimapOverlay);
+        Events.run(Trigger.uiDrawEnd, () -> {
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PGMM", "UI", "fullMinimap", NeonProfiler.threadMain)){
+                drawFullMinimapOverlay();
+            }
+        });
     }
 
     private void installConsoleApi(){
@@ -1515,6 +1526,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         public void updateBasic(){
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("PGMM", "Scan", "updateBasic", NeonProfiler.threadMain)){
             if(!state.isGame() || world == null || world.isGenerating() || player == null){
                 clear();
                 return;
@@ -1581,6 +1593,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
                 //For sparse laser-linked grids, render one balance marker per contiguous "chunk" of buildings.
                 addClusterMarkers(info);
+            }
             }
         }
 
@@ -1862,6 +1875,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         public void updateFullOverlay(){
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("PGMM", "Compute", "updateFullOverlay", NeonProfiler.threadMain)){
             if(!state.isGame() || world == null || world.isGenerating() || player == null){
                 clear();
                 return;
@@ -1888,6 +1902,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             lastWorldH = world.height();
 
             rebuildFullOverlay(claimDistance, gridAlpha);
+            }
         }
 
         public Texture getFullOverlayTexture(){
@@ -1913,6 +1928,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         private void rebuildFullOverlay(int claimDistance, int gridAlphaInt){
+            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("PGMM", "Compute", "rebuildFullOverlay", NeonProfiler.threadMain)){
             //basic graph list required
             updateBasic();
 
@@ -2176,6 +2192,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
 
             fullOverlayTexture.draw(fullOverlayPixmap);
+            }
         }
 
         private void ensureOverlayScratch(int tileCount){

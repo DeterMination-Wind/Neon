@@ -49,7 +49,6 @@ public class BekToolsMod extends Mod{
     private final UpdateSchemeMod updateScheme;
     private final WhoUsesThisBuildingMod whoUsesThisBuilding;
     private final PatchViewerMod patchViewer;
-    private final PostHogUsageReporter postHogUsageReporter;
 
     public BekToolsMod(){
         this(
@@ -125,12 +124,10 @@ public class BekToolsMod extends Mod{
         whoUsesThisBuilding.init();
         patchViewer = new PatchViewerMod();
         patchViewer.init();
-        postHogUsageReporter = new PostHogUsageReporter(getClass());
         CustomMarkerFeature.init();
         BetterScreenShotFeature.init();
 
         Events.on(ClientLoadEvent.class, e -> {
-            postHogUsageReporter.onClientLoad();
             GithubUpdateCheck.applyDefaults();
             registerSettings();
             GithubUpdateCheck.checkOnce();

@@ -203,6 +203,23 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `Neon.jar` 并放入 Mindustry 的 `mods` 目录。
 
+### 隐私说明 / 使用数据
+
+Neon 包含一项**使用数据采集**功能，用于统计模组活跃使用情况。详细说明如下：
+
+**收集内容**：
+- `usage_minutes` —— 单局游戏内在线时长（低于 2 分钟不触发上传）
+- `mod_version` —— 当前 Neon 版本号
+- `game_version` —— Mindustry 游戏版本号
+- `player_id` —— 稳定匿名标识符（优先使用玩家在线 UUID，回退到平台 UUID，不包含真实 UUID 原文，经规范化后仅用于去重）
+- `player_name` —— 游戏内玩家名（仅用于统计层面区分，不关联其他服务）
+
+**传输方式**：通过 PostHog 公开 API（`https://us.i.posthog.com/i/v0/e/`）发送，API key 嵌入开源代码中，仅用于该服务端验证。
+
+**触发时机**：游戏关闭/退出时触发，仅在单局游戏内累计活跃时长≥2 分钟时上传。
+
+**如何关闭**：目前没有提供开关。如果你不希望发送任何数据，可以在 `src/main/java/bektools/PostHogUsageReporter.java` 中注释 `onClientLoad()` 调用后自行编译。也可在反馈群提出需求。
+
 ### 反馈
 
 【BEK辅助mod反馈群】：https://qm.qq.com/q/cZWzPa4cTu
@@ -410,6 +427,23 @@ Neon is fully client-side; server installation is not required.
 
 Android requires a mod package that includes `classes.dex`.
 Use `Neon.jar` from Releases and place it in the Mindustry `mods` folder.
+
+### Privacy / Usage Data
+
+Neon includes **usage data collection** for active usage statistics. Details:
+
+**Collected data**:
+- `usage_minutes` — In-game session duration (not uploaded if < 2 minutes)
+- `mod_version` — Current Neon version
+- `game_version` — Mindustry version
+- `player_id` — Stable anonymous identifier (prioritizes online UUID, falls back to platform UUID; normalized and deduplication-only)
+- `player_name` — In-game player name (statistical differentiation only, no cross-service correlation)
+
+**Transmission**: Sent via PostHog public API (`https://us.i.posthog.com/i/v0/e/`). API key is embedded in the open-source code and used only for server-side authentication.
+
+**Trigger**: On game shutdown/exit, only when cumulative active in-game time ≥ 2 minutes.
+
+**Opt-out: No toggle currently. To disable, comment out the `onClientLoad()` call in `src/main/java/bektools/PostHogUsageReporter.java` and rebuild. Feature requests welcome in the feedback channel.
 
 ### Feedback
 

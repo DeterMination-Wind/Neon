@@ -170,7 +170,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             registerSettings();
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensureMobileToggleAttached);
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
         });
 
         Events.on(WorldLoadEvent.class, e -> {
@@ -186,7 +186,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private void ensureDefaults(){
-        GithubUpdateCheck.applyDefaults();
+        if(!bekBundled) GithubUpdateCheck.applyDefaults();
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyHudScale, 100);
         Core.settings.defaults(keyHudAlpha, 100);
@@ -285,8 +285,10 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             table.pref(new IoSetting());
 
-            table.checkPref(GithubUpdateCheck.enabledKey(), true);
-            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
+            if(!bekBundled){
+                table.checkPref(GithubUpdateCheck.enabledKey(), true);
+                table.checkPref(GithubUpdateCheck.showDialogKey(), true);
+            }
         
     }
 

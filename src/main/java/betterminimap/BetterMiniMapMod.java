@@ -26,9 +26,11 @@ public class BetterMiniMapMod extends Mod {
             if (settingsAdded) return;
             settingsAdded = true;
 
+            if (bekBundled) return;
+
             GithubUpdateCheck.applyDefaults();
 
-            if (!bekBundled) {
+            if (ui != null && ui.settings != null) {
                 ui.settings.addCategory("@settings.betterminimap", Icon.map, BetterMiniMapFeature::buildSettings);
             }
             GithubUpdateCheck.checkOnce();

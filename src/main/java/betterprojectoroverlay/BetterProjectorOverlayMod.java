@@ -40,9 +40,11 @@ public class BetterProjectorOverlayMod extends Mod {
             if (settingsAdded) return;
             settingsAdded = true;
 
+            if (bekBundled) return;
+
             GithubUpdateCheck.applyDefaults();
 
-            if (!bekBundled) {
+            if (ui != null && ui.settings != null) {
                 ui.settings.addCategory("@settings.bpo", Icon.map, BetterProjectorOverlayFeature::buildSettings);
             }
             GithubUpdateCheck.checkOnce();

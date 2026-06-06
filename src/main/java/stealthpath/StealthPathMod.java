@@ -356,7 +356,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
             refreshMousePathColor();
             refreshAutoColors();
             registerTriggers();
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
             // Try to attach OverlayUI windows (safe in vanilla; will fall back to HUD).
             Time.runTask(1f, this::ensureOverlayWindowsAttached);
         });
@@ -577,7 +577,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void ensureDefaults(){
-        GithubUpdateCheck.applyDefaults();
+        if(!bekBundled) GithubUpdateCheck.applyDefaults();
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyProMode, false);
         Core.settings.defaults(keyOverlayWindowMode, true);
@@ -721,9 +721,11 @@ public class StealthPathMod extends mindustry.mod.Mod{
             table.pref(new IconCheckSetting(keyGoalPointVisible, true, null, null));
             table.pref(new IconSliderSetting(keyCoreTargetCount, 1, 1, 12, 1, null, v -> String.valueOf(v), null));
 
-            table.pref(new HeaderSetting("@sp.section.update", null));
-            table.pref(new IconCheckSetting(GithubUpdateCheck.enabledKey(), true, null, null));
-            table.pref(new IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, null, null));
+            if(!bekBundled){
+                table.pref(new HeaderSetting("@sp.section.update", null));
+                table.pref(new IconCheckSetting(GithubUpdateCheck.enabledKey(), true, null, null));
+                table.pref(new IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, null, null));
+            }
 
             // Inline advanced settings (MindustryX-like: one screen; Pro Mode expands a collapsible section).
             table.pref(new HeaderSetting("@sp.setting.advanced.menu", null));

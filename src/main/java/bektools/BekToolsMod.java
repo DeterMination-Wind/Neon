@@ -80,6 +80,7 @@ public class BekToolsMod extends Mod{
         StealthPathMod.bekBundled = true;
         RadialBuildMenuMod.bekBundled = true;
         BetterMiniMapMod.bekBundled = true;
+        BetterMapEditorMod.bekBundled = true;
         ServerPlayerDataBaseMod.bekBundled = true;
         BetterProjectorOverlayMod.bekBundled = true;
         BetterLogisticsSpeedMod.bekBundled = true;

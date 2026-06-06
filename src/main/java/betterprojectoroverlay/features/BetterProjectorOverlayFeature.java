@@ -19,6 +19,7 @@ import arc.util.Interval;
 import arc.util.Time;
 import arc.util.pooling.Pools;
 import bektools.profiler.NeonProfiler;
+import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterprojectoroverlay.GithubUpdateCheck;
 import mdtxcompat.MarkerBridge;
 import mindustry.content.Blocks;
@@ -171,8 +172,10 @@ public class BetterProjectorOverlayFeature {
         table.sliderPref(keyScanInterval, 8, 1, 30, 1, i -> i + "s");
         table.sliderPref(keyPreviewTextScale, 125, 60, 260, 5, i -> i + "%");
         table.sliderPref(keyPreviewTextAlpha, 100, 20, 100, 5, i -> i + "%");
-        table.checkPref(GithubUpdateCheck.enabledKey(), true);
-        table.checkPref(GithubUpdateCheck.showDialogKey(), true);
+        if (!BetterProjectorOverlayMod.bekBundled) {
+            table.checkPref(GithubUpdateCheck.enabledKey(), true);
+            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
+        }
 
         refreshSettings();
     }

@@ -167,18 +167,21 @@ public final class ModUpdateCenter{
         Seq<ModEntry> updatable = selectEntries(e -> e.hasUpdate() && !e.blacklisted && !e.noRepo && e.error.isEmpty());
         Seq<ModEntry> upToDate = selectEntries(e -> !e.hasUpdate() && !e.blacklisted && !e.noRepo && e.error.isEmpty());
         Seq<ModEntry> blacklisted = selectEntries(e -> e.blacklisted);
-        Seq<ModEntry> noRepo = selectEntries(e -> e.noRepo && !e.blacklisted);
         Seq<ModEntry> errored = selectEntries(e -> !e.error.isEmpty() && !e.blacklisted && !e.noRepo);
 
-        addGroup("mu.group.updatable", updatable);
-        addGroup("mu.group.uptodate", upToDate);
-        addGroup("mu.group.blacklisted", blacklisted);
-        addGroup("mu.group.norepo", noRepo);
-        addGroup("mu.group.error", errored);
+        boolean visible = false;
+        visible |= addGroup("mu.group.updatable", updatable);
+        visible |= addGroup("mu.group.uptodate", upToDate);
+        visible |= addGroup("mu.group.blacklisted", blacklisted);
+        visible |= addGroup("mu.group.error", errored);
+
+        if(!visible){
+            centerContent.add(Core.bundle.get("mu.empty")).color(Color.gray).row();
+        }
     }
 
-    private static void addGroup(String titleKey, Seq<ModEntry> entries){
-        if(entries.isEmpty()) return;
+    private static boolean addGroup(String titleKey, Seq<ModEntry> entries){
+        if(entries.isEmpty()) return false;
 
         centerContent.image().color(Color.darkGray).height(2f).growX().padTop(6f).padBottom(6f).row();
         centerContent.add(Core.bundle.get(titleKey) + " (" + entries.size + ")").color(Color.white).left().padBottom(4f).row();
@@ -186,6 +189,8 @@ public final class ModUpdateCenter{
         for(ModEntry e : entries){
             addEntryCard(e);
         }
+
+        return true;
     }
 
     private static void addEntryCard(ModEntry e){
@@ -324,6 +329,18 @@ public final class ModUpdateCenter{
         rebuildCenter();
 
         Seq<ModEntry> fresh = collectEntries();
+        if(hasMissingRepos(fresh)){
+            RepoResolver.loadModIndex(loaded -> {
+                if(loaded) resolveMissingReposFromIndex(fresh);
+                continueCheck(fresh, startupPrompt);
+            });
+            return;
+        }
+
+        continueCheck(fresh, startupPrompt);
+    }
+
+    private static void continueCheck(Seq<ModEntry> fresh, boolean startupPrompt){
         Seq<ModEntry> needsFetch = new Seq<ModEntry>();
         for(ModEntry e : fresh){
             if(!e.blacklisted && !e.noRepo){
@@ -406,6 +423,29 @@ public final class ModUpdateCenter{
             out.add(e);
         }
         return out;
+    }
+
+    private static boolean hasMissingRepos(Seq<ModEntry> entries){
+        for(ModEntry e : entries){
+            if(!e.blacklisted && e.noRepo){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void resolveMissingReposFromIndex(Seq<ModEntry> entries){
+        for(ModEntry e : entries){
+            if(e == null || e.blacklisted || !e.noRepo) continue;
+            String repo = RepoResolver.resolveIndexedRepo(e.mod);
+            if(repo.isEmpty()) continue;
+
+            e.repo = repo;
+            e.noRepo = false;
+            if(e.mod != null){
+                e.mod.setRepo(repo);
+            }
+        }
     }
 
     private static boolean hasUpdates(Seq<ModEntry> entries){

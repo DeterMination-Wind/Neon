@@ -162,13 +162,13 @@ public class ServerPlayerDataBaseMod extends Mod{
             Core.settings.defaults(keyRecordChat, false);
             Core.settings.defaults(keyAutoTrace, true);
             Core.settings.defaults(keyShowAutoTraceDialog, false);
-            GithubUpdateCheck.applyDefaults();
+            if(!bekBundled) GithubUpdateCheck.applyDefaults();
 
             initStorage();
             loadLocalData();
             initEmbedding();
             registerSettings();
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
             installTraceInterceptor();
 
             nextAttachAttempt = 0f;
@@ -930,9 +930,11 @@ public class ServerPlayerDataBaseMod extends Mod{
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("查找疑似小号（同IP）", Icon.players, this::showSameIpAltDialog));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("更新", Icon.refresh));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+            if(!bekBundled){
+                table.pref(new SpdbSettingsWidgets.HeaderSetting("更新", Icon.refresh));
+                table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
+                table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+            }
         
     }
 

@@ -23,6 +23,7 @@ import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import arc.scene.ui.layout.Scl;
+import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Log;
 import arc.util.Scaling;
@@ -70,6 +71,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
     private static final int slotsPerRing = 8;
     private static final int maxSlots = 16;
+    private static final int maxWheelProfiles = 32;
 
     private static final String planetErekir = "erekir";
     private static final String planetSerpulo = "serpulo";
@@ -91,6 +93,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     static final String keyProMode = "rbm-pro-mode";
     private static final String keyTimeMinutes = "rbm-time-minutes";
     private static final String keyShowEmptySlots = "rbm-show-empty-slots";
+    private static final String keyWheelProfiles = "rbm-wheel-profiles";
+    private static final String keyWheelNextId = "rbm-wheel-next-id";
 
     static final String keyToggleSlotGroupsEnabled = "rbm-toggle-slot-groups-enabled";
     private static final String keyToggleSlotGroupState = "rbm-toggle-slot-groups-state";
@@ -140,6 +144,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
     private final OverlayUiBridge xOverlayUi;
     private OverlayUiBridge.OverlayWindowHandle xMobileToggleWindow;
+    private final Seq<WheelProfile> wheelProfiles = new Seq<>();
+    private boolean wheelProfilesLoaded;
 
     private boolean condAfterLatched;
     private boolean condInitActive;
@@ -197,6 +203,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyProMode, false);
         Core.settings.defaults(keyTimeMinutes, 0);
         Core.settings.defaults(keyShowEmptySlots, false);
+        Core.settings.defaults(keyWheelProfiles, "");
+        Core.settings.defaults(keyWheelNextId, 1);
 
         Core.settings.defaults(keyToggleSlotGroupsEnabled, false);
         Core.settings.defaults(keyToggleSlotGroupState, 0);
@@ -233,6 +241,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyPlanetErekirEnabled, true);
         Core.settings.defaults(keyPlanetSerpuloEnabled, true);
         Core.settings.defaults(keyPlanetSunEnabled, true);
+        ensureWheelProfilesLoaded();
     }
 
     private void registerSettings(){
@@ -240,14 +249,16 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         if(bekBundled) return;
 
 
-        if(!bekBundled) ui.settings.addCategory("@rbm.category", this::bekBuildSettings);
+        ui.settings.addCategory("@rbm.category", this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
             boolean toggleEnabled = Core.settings.getBool(keyToggleSlotGroupsEnabled, false);
+            ensureWheelProfilesLoaded();
 
             table.checkPref(keyEnabled, true);
             table.pref(new HotkeySetting());
+            table.pref(new WheelProfilesButtonSetting(RadialBuildMenuMod.this));
 
             table.checkPref(keyToggleSlotGroupsEnabled, false);
             table.pref(new ToggleSlotGroupHotkeySetting());
@@ -299,6 +310,455 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             t.add(pane).width(prefWidth()).growY().minHeight(380f);
         }).grow();
         dialog.show();
+    }
+
+    void showWheelProfilesDialog(){
+        ensureWheelProfilesLoaded();
+
+        BaseDialog dialog = new BaseDialog("@rbm.wheels.title");
+        dialog.addCloseButton();
+
+        final WheelProfile[] selected = {wheelProfiles.isEmpty() ? null : wheelProfiles.first()};
+        Table left = new Table();
+        Table right = new Table();
+
+        Runnable[] rebuildRight = new Runnable[1];
+        Runnable[] rebuildLeft = new Runnable[1];
+
+        rebuildRight[0] = () -> {
+            right.clearChildren();
+            right.top().left();
+
+            WheelProfile profile = selected[0];
+            if(profile == null){
+                right.add("@rbm.wheels.none").pad(20f);
+                return;
+            }
+
+            right.table(Tex.button, header -> {
+                header.left().margin(10f);
+                header.add("@rbm.wheels.name").width(110f).left();
+                TextField name = new TextField(profile.name);
+                name.setMessageText(Core.bundle.get("rbm.wheels.name.placeholder"));
+                name.changed(() -> {
+                    profile.name = normalizeWheelName(name.getText(), profile.id);
+                    saveWheelProfiles();
+                    rebuildLeft[0].run();
+                });
+                header.add(name).growX().minWidth(0f);
+            }).growX().padBottom(6f);
+            right.row();
+
+            right.table(Tex.button, keys -> {
+                keys.left().margin(10f);
+                keys.add("@rbm.wheels.hotkey").width(110f).left();
+                keys.label(() -> keyName(profile.key)).color(profile.key == KeyCode.unset ? Color.gray : Pal.accent).growX().left();
+                keys.button("@rbm.wheels.hotkey.set", Styles.flatt, () -> showWheelKeyDialog(profile, () -> {
+                    saveWheelProfiles();
+                    rebuildLeft[0].run();
+                })).width(120f).height(40f).padLeft(8f);
+                keys.button("@rbm.wheels.hotkey.clear", Styles.flatt, () -> {
+                    profile.key = KeyCode.unset;
+                    saveWheelProfiles();
+                    rebuildLeft[0].run();
+                }).width(120f).height(40f).padLeft(8f);
+            }).growX().padBottom(6f);
+            right.row();
+
+            right.table(actions -> {
+                actions.left();
+                actions.button("@rbm.wheels.copy", Styles.flatt, () -> {
+                    WheelProfile copy = copyWheelProfile(profile);
+                    if(copy != null){
+                        selected[0] = copy;
+                        rebuildLeft[0].run();
+                        rebuildRight[0].run();
+                    }
+                }).height(40f).minWidth(120f);
+                actions.button("@rbm.wheels.delete", Styles.flatt, () -> {
+                    if(wheelProfiles.size <= 1){
+                        ui.showInfoFade("@rbm.wheels.delete.last");
+                        return;
+                    }
+                    ui.showConfirm("@confirm", "@rbm.wheels.delete.confirm", () -> {
+                        wheelProfiles.remove(profile, true);
+                        saveWheelProfiles();
+                        selected[0] = wheelProfiles.isEmpty() ? null : wheelProfiles.first();
+                        rebuildLeft[0].run();
+                        rebuildRight[0].run();
+                    });
+                }).height(40f).minWidth(120f).padLeft(8f);
+            }).growX().padBottom(8f);
+            right.row();
+
+            right.add("@rbm.wheels.slots").color(Pal.accent).left().padTop(4f).padBottom(4f);
+            right.row();
+
+            for(int i = 0; i < maxSlots; i++){
+                final int slot = i;
+                right.table(Tex.button, row -> {
+                    row.left().margin(8f);
+                    row.add(Core.bundle.format("rbm.setting.slot", slot + 1)).width(105f).left();
+
+                    row.table(info -> {
+                        info.left();
+                        Image icon = info.image(Tex.clear).size(32f).padRight(8f).get();
+                        icon.setScaling(Scaling.fit);
+                        info.labelWrap(() -> {
+                            Block block = wheelSlotBlock(profile, slot);
+                            return block == null ? Core.bundle.get("rbm.setting.none") : block.localizedName;
+                        }).left().growX().fillX().minWidth(0f);
+
+                        final Block[] last = {null};
+                        info.update(() -> {
+                            Block block = wheelSlotBlock(profile, slot);
+                            if(block == last[0]) return;
+                            last[0] = block;
+                            icon.setDrawable(block == null ? Tex.clear : new TextureRegionDrawable(block.uiIcon));
+                        });
+                    }).left().growX().minWidth(0f);
+
+                    row.button("@rbm.setting.set", Styles.flatt, () -> showBlockSelectDialog(block -> {
+                        profile.slots[slot] = block == null ? "" : block.name;
+                        saveWheelProfiles();
+                    })).width(110f).height(40f).padLeft(8f);
+                }).growX().padTop(3f);
+                right.row();
+            }
+        };
+
+        rebuildLeft[0] = () -> {
+            left.clearChildren();
+            left.top().left();
+
+            for(WheelProfile profile : wheelProfiles){
+                Table row = left.table(Tex.button, b -> {
+                    b.left().margin(8f);
+                    b.add(profile.displayName()).growX().left().minWidth(0f).wrap();
+                    b.add(keyName(profile.key)).color(profile.key == KeyCode.unset ? Color.gray : Pal.accent).padLeft(8f);
+                }).growX().height(48f).padBottom(3f).get();
+                row.clicked(() -> {
+                    selected[0] = profile;
+                    rebuildLeft[0].run();
+                    rebuildRight[0].run();
+                });
+                row.update(() -> row.color.set(selected[0] == profile ? Pal.accent : Color.white));
+                left.row();
+            }
+
+            left.button("@rbm.wheels.add", Styles.flatt, () -> {
+                WheelProfile created = addWheelProfile();
+                selected[0] = created;
+                rebuildLeft[0].run();
+                rebuildRight[0].run();
+            }).growX().height(44f).disabled(b -> wheelProfiles.size >= maxWheelProfiles).padTop(6f);
+        };
+
+        rebuildLeft[0].run();
+        rebuildRight[0].run();
+
+        ScrollPane leftPane = new ScrollPane(left);
+        leftPane.setFadeScrollBars(false);
+        leftPane.setScrollingDisabled(true, false);
+        ScrollPane rightPane = new ScrollPane(right);
+        rightPane.setFadeScrollBars(false);
+        rightPane.setScrollingDisabled(true, false);
+
+        dialog.cont.table(root -> {
+            root.add(leftPane).width(260f).growY().minHeight(430f).padRight(8f);
+            root.add(rightPane).width(Math.max(520f, prefWidth() - 280f)).growY().minHeight(430f);
+        }).grow();
+
+        dialog.show();
+    }
+
+    private Seq<WheelProfile> wheelProfiles(){
+        ensureWheelProfilesLoaded();
+        return wheelProfiles;
+    }
+
+    private void ensureWheelProfilesLoaded(){
+        if(wheelProfilesLoaded) return;
+        wheelProfilesLoaded = true;
+        wheelProfiles.clear();
+
+        String raw = Core.settings.getString(keyWheelProfiles, "");
+        if(raw != null && !raw.trim().isEmpty()){
+            try{
+                importWheelProfilesValue(Jval.read(raw), false);
+            }catch(Throwable ignored){
+                wheelProfiles.clear();
+            }
+        }
+
+        if(wheelProfiles.isEmpty()){
+            addLegacyDefaultWheelProfiles();
+            saveWheelProfiles();
+        }
+    }
+
+    private void addLegacyDefaultWheelProfiles(){
+        wheelProfiles.clear();
+        wheelProfiles.add(WheelProfile.fromPrefix(nextWheelId(), Core.bundle.get("rbm.wheels.default"), KeyCode.unset, keySlotPrefix, this));
+        WheelProfile power = WheelProfile.powerPreset(nextWheelId(), Core.bundle.get("rbm.wheels.power"));
+        power.key = KeyCode.num5;
+        wheelProfiles.add(power);
+    }
+
+    private int nextWheelId(){
+        int next = Math.max(1, Core.settings.getInt(keyWheelNextId, 1));
+        Core.settings.put(keyWheelNextId, next + 1);
+        return next;
+    }
+
+    private void normalizeNextWheelId(){
+        int next = 1;
+        for(WheelProfile profile : wheelProfiles){
+            next = Math.max(next, profile.id + 1);
+        }
+        Core.settings.put(keyWheelNextId, next);
+    }
+
+    private WheelProfile addWheelProfile(){
+        ensureWheelProfilesLoaded();
+        if(wheelProfiles.size >= maxWheelProfiles){
+            ui.showInfoFade("@rbm.wheels.max");
+            return wheelProfiles.isEmpty() ? null : wheelProfiles.peek();
+        }
+        WheelProfile profile = new WheelProfile(nextWheelId(), Core.bundle.format("rbm.wheels.new", wheelProfiles.size + 1));
+        wheelProfiles.add(profile);
+        saveWheelProfiles();
+        return profile;
+    }
+
+    private WheelProfile copyWheelProfile(WheelProfile src){
+        ensureWheelProfilesLoaded();
+        if(src == null) return null;
+        if(wheelProfiles.size >= maxWheelProfiles){
+            ui.showInfoFade("@rbm.wheels.max");
+            return null;
+        }
+        WheelProfile copy = src.copy(nextWheelId(), Core.bundle.format("rbm.wheels.copy.name", src.displayName()));
+        wheelProfiles.add(copy);
+        saveWheelProfiles();
+        return copy;
+    }
+
+    private void saveWheelProfiles(){
+        normalizeNextWheelId();
+        Core.settings.put(keyWheelProfiles, exportWheelProfiles().toString(Jformat.plain));
+    }
+
+    private Jval exportWheelProfiles(){
+        Jval arr = Jval.newArray();
+        for(WheelProfile profile : wheelProfiles){
+            arr.add(profile.toJson());
+        }
+        return arr;
+    }
+
+    private void importWheelProfilesValue(Jval value, boolean save){
+        wheelProfiles.clear();
+        if(value != null && value.isArray()){
+            for(Jval child : value.asArray()){
+                if(wheelProfiles.size >= maxWheelProfiles) break;
+                WheelProfile profile = WheelProfile.fromJson(child);
+                if(profile != null) wheelProfiles.add(profile);
+            }
+        }
+
+        if(wheelProfiles.isEmpty()){
+            addLegacyDefaultWheelProfiles();
+        }
+
+        normalizeNextWheelId();
+        if(save) saveWheelProfiles();
+    }
+
+    private String normalizeWheelName(String value, int id){
+        String name = value == null ? "" : value.trim();
+        if(name.isEmpty()) return Core.bundle.format("rbm.wheels.fallback", id);
+        return name;
+    }
+
+    private Block wheelSlotBlock(WheelProfile profile, int slot){
+        if(profile == null || slot < 0 || slot >= maxSlots) return null;
+        String name = profile.slots[slot];
+        if(name == null) return null;
+        name = name.trim();
+        return name.isEmpty() ? null : content.block(name);
+    }
+
+    private String keyName(KeyCode key){
+        return key == null || key == KeyCode.unset ? Core.bundle.get("rbm.wheels.hotkey.unset") : key.toString();
+    }
+
+    private WheelProfile tappedWheelProfile(){
+        ensureWheelProfilesLoaded();
+        for(WheelProfile profile : wheelProfiles){
+            if(profile.key != null && profile.key != KeyCode.unset && Core.input.keyTap(profile.key)){
+                return profile;
+            }
+        }
+        return null;
+    }
+
+    private void showWheelKeyDialog(WheelProfile profile, Runnable changed){
+        if(profile == null) return;
+
+        Dialog dialog = new Dialog(Core.bundle.get("rbm.wheels.hotkey.press"));
+        dialog.cont.add("@rbm.wheels.hotkey.press.detail").pad(12f).wrap().width(360f);
+
+        dialog.addListener(new InputListener(){
+            @Override
+            public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button){
+                if(Core.app.isAndroid()) return false;
+                setKey(button);
+                return false;
+            }
+
+            @Override
+            public boolean keyDown(InputEvent event, KeyCode keycode){
+                if(keycode == KeyCode.escape || keycode == KeyCode.back){
+                    dialog.hide();
+                    return false;
+                }
+                setKey(keycode);
+                return false;
+            }
+
+            private void setKey(KeyCode key){
+                if(key == null) return;
+                profile.key = key;
+                warnWheelKeyConflict(profile, key);
+                if(changed != null) changed.run();
+                dialog.hide();
+            }
+        });
+
+        dialog.show();
+    }
+
+    private void warnWheelKeyConflict(WheelProfile profile, KeyCode key){
+        if(key == null || key == KeyCode.unset || ui == null) return;
+        if(isNativeBlockNumberKey(key)){
+            ui.showInfoFade(Core.bundle.format("rbm.wheels.hotkey.nativewarning", key.toString()));
+            return;
+        }
+        for(WheelProfile other : wheelProfiles){
+            if(other != profile && other.key == key){
+                ui.showInfoFade(Core.bundle.format("rbm.wheels.hotkey.duplicate", other.displayName()));
+                return;
+            }
+        }
+    }
+
+    private boolean isNativeBlockNumberKey(KeyCode key){
+        return key == KeyCode.num1 || key == KeyCode.num2 || key == KeyCode.num3 || key == KeyCode.num4 || key == KeyCode.num5
+            || key == KeyCode.num6 || key == KeyCode.num7 || key == KeyCode.num8 || key == KeyCode.num9 || key == KeyCode.num0;
+    }
+
+    private static class WheelProfile{
+        int id;
+        String name;
+        KeyCode key = KeyCode.unset;
+        final String[] slots = new String[maxSlots];
+
+        WheelProfile(int id, String name){
+            this.id = id;
+            this.name = name == null ? "" : name;
+            for(int i = 0; i < maxSlots; i++){
+                slots[i] = "";
+            }
+        }
+
+        String displayName(){
+            String text = name == null ? "" : name.trim();
+            return text.isEmpty() ? "#" + id : text;
+        }
+
+        WheelProfile copy(int id, String name){
+            WheelProfile out = new WheelProfile(id, name);
+            out.key = KeyCode.unset;
+            for(int i = 0; i < maxSlots; i++){
+                out.slots[i] = slots[i] == null ? "" : slots[i];
+            }
+            return out;
+        }
+
+        Jval toJson(){
+            Jval root = Jval.newObject();
+            root.put("id", id);
+            root.put("name", displayName());
+            root.put("key", key == null ? KeyCode.unset.name() : key.name());
+            Jval arr = Jval.newArray();
+            for(int i = 0; i < maxSlots; i++){
+                arr.add(slots[i] == null ? "" : slots[i]);
+            }
+            root.put("slots", arr);
+            return root;
+        }
+
+        static WheelProfile fromPrefix(int id, String name, KeyCode key, String prefix, RadialBuildMenuMod mod){
+            WheelProfile profile = new WheelProfile(id, name);
+            profile.key = key == null ? KeyCode.unset : key;
+            for(int i = 0; i < maxSlots; i++){
+                profile.slots[i] = mod.slotName(prefix, i);
+            }
+            return profile;
+        }
+
+        static WheelProfile powerPreset(int id, String name){
+            WheelProfile profile = new WheelProfile(id, name);
+            String[] power = {
+                "power-node",
+                "power-node-large",
+                "battery",
+                "battery-large",
+                "combustion-generator",
+                "thermal-generator",
+                "steam-generator",
+                "solar-panel",
+                "large-solar-panel",
+                "differential-generator",
+                "rtg-generator",
+                "thorium-reactor",
+                "impact-reactor",
+                "beam-node",
+                "beam-tower",
+                "turbine-condenser"
+            };
+            for(int i = 0; i < maxSlots && i < power.length; i++){
+                profile.slots[i] = power[i];
+            }
+            return profile;
+        }
+
+        static WheelProfile fromJson(Jval value){
+            if(value == null || !value.isObject()) return null;
+            int id = Math.max(1, value.getInt("id", 1));
+            WheelProfile profile = new WheelProfile(id, value.getString("name", ""));
+            profile.key = parseKey(value.getString("key", KeyCode.unset.name()));
+
+            Jval slots = value.get("slots");
+            if(slots != null && slots.isArray()){
+                int count = Math.min(slots.asArray().size, maxSlots);
+                for(int i = 0; i < count; i++){
+                    Jval slot = slots.asArray().get(i);
+                    profile.slots[i] = slot == null || slot.isNull() ? "" : slot.asString().trim();
+                }
+            }
+            return profile;
+        }
+
+        private static KeyCode parseKey(String raw){
+            if(raw == null || raw.trim().isEmpty()) return KeyCode.unset;
+            try{
+                return KeyCode.valueOf(raw.trim());
+            }catch(Throwable ignored){
+                return KeyCode.unset;
+            }
+        }
     }
 
     void showAdvancedDialog(){
@@ -451,6 +911,33 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     return Core.bundle.get(g == 0 ? "rbm.slotgroup.a" : "rbm.slotgroup.b");
                 }).color(Pal.accent).padLeft(8f);
                 t.button("@rbm.setting.opencontrols", Styles.flatt, () -> ui.controls.show())
+                    .width(190f)
+                    .height(40f)
+                    .padLeft(10f);
+            }).width(prefWidth).padTop(6f);
+            table.row();
+        }
+    }
+
+    private class WheelProfilesButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final RadialBuildMenuMod mod;
+
+        public WheelProfilesButtonSetting(RadialBuildMenuMod mod){
+            super("rbm-wheel-profiles-open");
+            this.mod = mod;
+            title = Core.bundle.get("rbm.setting.wheels");
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            float prefWidth = prefWidth();
+            table.table(Tex.button, t -> {
+                t.left().margin(10f);
+
+                t.image(mindustry.gen.Icon.list).size(20f).padRight(8f);
+                t.add(title).left().growX().minWidth(0f).wrap();
+                t.label(() -> Core.bundle.format("rbm.wheels.count", mod.wheelProfiles().size)).color(Pal.accent).padLeft(8f);
+                t.button("@rbm.wheels.open", Styles.flatt, mod::showWheelProfilesDialog)
                     .width(190f)
                     .height(40f)
                     .padLeft(10f);
@@ -1264,8 +1751,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private String exportConfig(){
+        ensureWheelProfilesLoaded();
         Jval root = Jval.newObject();
-        root.put("schema", 4);
+        root.put("schema", 5);
 
         root.put("hudScale", Core.settings.getInt(keyHudScale, 100));
         root.put("hudAlpha", Core.settings.getInt(keyHudAlpha, 100));
@@ -1312,6 +1800,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         root.put("planetSlotsErekir", exportSlots(keyPlanetErekirSlotPrefix));
         root.put("planetSlotsSerpulo", exportSlots(keyPlanetSerpuloSlotPrefix));
         root.put("planetSlotsSun", exportSlots(keyPlanetSunSlotPrefix));
+        root.put("wheelProfiles", exportWheelProfiles());
 
         return root.toString(Jformat.plain);
     }
@@ -1375,6 +1864,13 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             if(root.has("planetSlotsErekir")) importSlots(root.get("planetSlotsErekir"), keyPlanetErekirSlotPrefix);
             if(root.has("planetSlotsSerpulo")) importSlots(root.get("planetSlotsSerpulo"), keyPlanetSerpuloSlotPrefix);
             if(root.has("planetSlotsSun")) importSlots(root.get("planetSlotsSun"), keyPlanetSunSlotPrefix);
+            if(root.has("wheelProfiles")){
+                importWheelProfilesValue(root.get("wheelProfiles"), true);
+            }else{
+                wheelProfilesLoaded = true;
+                addLegacyDefaultWheelProfiles();
+                saveWheelProfiles();
+            }
 
             return true;
         }catch(Throwable t){
@@ -1474,6 +1970,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         private int hovered = -1;
         private float nextHoverUpdate = 0f;
         private final Block[] slots = new Block[maxSlots];
+        private KeyCode activeKey;
+        private boolean activeRadialBind;
         private boolean outerActive;
         private final Color hudColor = new Color();
 
@@ -1576,7 +2074,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     centerY = getHeight() / 2f;
                 }
 
-                if(Core.settings.getBool(keyToggleSlotGroupsEnabled, false) && Core.input.keyTap(toggleSlotGroup)){
+                if(activeRadialBind && Core.settings.getBool(keyToggleSlotGroupsEnabled, false) && Core.input.keyTap(toggleSlotGroup)){
                     mod.toggleSlotGroupNow(true);
                     for(int i = 0; i < slots.length; i++){
                         slots[i] = mod.contextSlotBlock(i);
@@ -1587,10 +2085,10 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
                 updateHovered();
 
-                if(Core.input.keyRelease(radialMenu)){
+                if(activeRadialBind && Core.input.keyRelease(radialMenu) || !activeRadialBind && activeKey != null && Core.input.keyRelease(activeKey)){
                     commitSelection();
                     close();
-                }else if(!Core.input.keyDown(radialMenu)){
+                }else if(activeRadialBind && !Core.input.keyDown(radialMenu) || !activeRadialBind && (activeKey == null || !Core.input.keyDown(activeKey))){
                     // failsafe: if focus changed and no release is received
                     close();
                 }
@@ -1600,6 +2098,11 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 }
                 if(mobile) return;
                 syncPassivePreview();
+                WheelProfile profile = mod.tappedWheelProfile();
+                if(profile != null && canActivate()){
+                    begin(profile);
+                    return;
+                }
                 if(canActivate() && Core.input.keyTap(radialMenu)){
                     begin();
                 }
@@ -1807,6 +2310,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         private void begin(){
             active = true;
+            activeRadialBind = true;
+            activeKey = null;
             if(Core.settings.getBool(keyCenterScreen, false)){
                 centerX = getWidth() / 2f;
                 centerY = getHeight() / 2f;
@@ -1824,11 +2329,35 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             hovered = findHovered();
         }
 
+        private void begin(WheelProfile profile){
+            if(profile == null) return;
+            active = true;
+            activeRadialBind = false;
+            activeKey = profile.key;
+            if(Core.settings.getBool(keyCenterScreen, false)){
+                centerX = getWidth() / 2f;
+                centerY = getHeight() / 2f;
+            }else{
+                centerX = Core.input.mouseX();
+                centerY = Core.input.mouseY();
+            }
+
+            for(int i = 0; i < slots.length; i++){
+                slots[i] = mod.wheelSlotBlock(profile, i);
+            }
+
+            rebuildActiveSlotLists();
+
+            hovered = findHovered();
+        }
+
         private void beginMobile(){
             if(active) return;
             if(!canActivate()) return;
 
             active = true;
+            activeRadialBind = false;
+            activeKey = null;
             hovered = -1;
             centerX = getWidth() / 2f;
             centerY = getHeight() / 2f;
@@ -1841,6 +2370,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         private void close(){
             active = false;
+            activeRadialBind = false;
+            activeKey = null;
             hovered = -1;
         }
 

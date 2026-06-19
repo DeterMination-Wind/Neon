@@ -8,7 +8,6 @@ import powergridminimap.PowerGridMinimapModX;
 import radialbuildmenu.RadialBuildMenuModX;
 import serverplayerdatabase.ServerPlayerDataBaseModX;
 import stealthpath.StealthPathModX;
-import updatescheme.UpdateSchemeModX;
 
 public class BekToolsModX extends BekToolsMod {
     public BekToolsModX() {
@@ -20,8 +19,7 @@ public class BekToolsModX extends BekToolsMod {
             RadialBuildMenuModX::new,
             ServerPlayerDataBaseModX::new,
             BetterProjectorOverlayModX::new,
-            BetterHotKeyModX::new,
-            UpdateSchemeModX::new
+            BetterHotKeyModX::new
         );
     }
 }

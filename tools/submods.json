@@ -64,16 +64,6 @@
       "allowNoGit": true
     },
     {
-      "id": "hm",
-      "name": "hiddenMessage",
-      "localPath": "../hiddenMessage",
-      "javaPackageDir": "src/main/java/hiddenmessage",
-      "mainClassFile": "HiddenMessageMod.java",
-      "bundlesDir": "src/main/resources/bundles",
-      "injectBekHooks": false,
-      "allowNoGit": true
-    },
-    {
       "id": "spdb",
       "name": "ServerPlayerDataBase",
       "localPath": "../ServerPlayerDataBase",
@@ -102,16 +92,6 @@
       "mainClassFile": "BetterProjectorOverlayMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "injectBekHooks": false
-    },
-    {
-      "id": "us",
-      "name": "UpdateScheme",
-      "localPath": "../UpdateScheme",
-      "javaPackageDir": "src/main/java/updatescheme",
-      "mainClassFile": "UpdateSchemeMod.java",
-      "bundlesDir": "src/main/resources/bundles",
-      "injectBekHooks": false,
-      "allowNoGit": true
     },
     {
       "id": "wutb",

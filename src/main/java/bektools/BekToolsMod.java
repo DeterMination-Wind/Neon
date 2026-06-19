@@ -15,7 +15,6 @@ import betterlogisticsspeed.BetterLogisticsSpeedMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterscreenshot.features.BetterScreenShotFeature;
 import custommarker.features.CustomMarkerFeature;
-import hiddenmessage.HiddenMessageMod;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -27,7 +26,6 @@ import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
 import stealthpath.StealthPathMod;
-import updatescheme.UpdateSchemeMod;
 import whousesthisbuilding.WhoUsesThisBuildingMod;
 
 import static mindustry.Vars.ui;
@@ -45,8 +43,6 @@ public class BekToolsMod extends Mod{
     private final BetterLogisticsSpeedMod betterLogisticsSpeed;
     private final BetterHotKeyMod betterHotKey;
     private final ModUpdaterMod modUpdater;
-    private final HiddenMessageMod hiddenMessage;
-    private final UpdateSchemeMod updateScheme;
     private final WhoUsesThisBuildingMod whoUsesThisBuilding;
     private final PatchViewerMod patchViewer;
     private final PostHogUsageReporter postHogUsageReporter;
@@ -60,8 +56,7 @@ public class BekToolsMod extends Mod{
             RadialBuildMenuMod::new,
             ServerPlayerDataBaseMod::new,
             BetterProjectorOverlayMod::new,
-            BetterHotKeyMod::new,
-            UpdateSchemeMod::new
+            BetterHotKeyMod::new
         );
     }
 
@@ -73,8 +68,7 @@ public class BekToolsMod extends Mod{
         ModSupplier<RadialBuildMenuMod> radialBuildMenuSupplier,
         ModSupplier<ServerPlayerDataBaseMod> serverPlayerDataBaseSupplier,
         ModSupplier<BetterProjectorOverlayMod> betterProjectorOverlaySupplier,
-        ModSupplier<BetterHotKeyMod> betterHotKeySupplier,
-        ModSupplier<UpdateSchemeMod> updateSchemeSupplier
+        ModSupplier<BetterHotKeyMod> betterHotKeySupplier
     ){
         PowerGridMinimapMod.bekBundled = true;
         StealthPathMod.bekBundled = true;
@@ -86,8 +80,6 @@ public class BekToolsMod extends Mod{
         BetterLogisticsSpeedMod.bekBundled = true;
         BetterHotKeyMod.bekBundled = true;
         ModUpdaterMod.bekBundled = true;
-        HiddenMessageMod.bekBundled = true;
-        UpdateSchemeMod.bekBundled = true;
         WhoUsesThisBuildingMod.bekBundled = true;
         PatchViewerMod.bekBundled = true;
 
@@ -118,10 +110,6 @@ public class BekToolsMod extends Mod{
         betterHotKey.init();
         modUpdater = new ModUpdaterMod();
         modUpdater.init();
-        hiddenMessage = new HiddenMessageMod();
-        hiddenMessage.init();
-        updateScheme = updateSchemeSupplier.get();
-        updateScheme.init();
         whoUsesThisBuilding = new WhoUsesThisBuildingMod();
         whoUsesThisBuilding.init();
         patchViewer = new PatchViewerMod();
@@ -183,12 +171,8 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.bls", "Better Logistics Speed"), Icon.rightOpen, BetterLogisticsSpeedMod::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, betterHotKey::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.us", "UpdateScheme"), Icon.download, updateScheme::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, whoUsesThisBuilding::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, patchViewer::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.hm", "Hidden Message"), Icon.chat, st -> {
-                st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hm.none"));
-            });
             addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
             addGroup(table, Core.bundle.get("bektools.section.update", "Update"), Icon.refresh, st -> {
                 st.checkPref(GithubUpdateCheck.enabledKey(), true);

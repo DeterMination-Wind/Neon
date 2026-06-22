@@ -3,11 +3,11 @@ package bektools;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
-import arc.scene.Element;
-import arc.scene.event.ClickListener;
-import arc.scene.event.InputEvent;
+import arc.scene.event.Touchable;
+import arc.scene.ui.Button;
 import arc.scene.ui.Image;
 import arc.scene.ui.Label;
+import arc.scene.ui.layout.Collapser;
 import arc.scene.ui.layout.Table;
 import arc.scene.style.Drawable;
 import arc.util.CommandHandler;
@@ -217,60 +217,61 @@ public class BekToolsMod extends Mod{
             table.row();
             table.table(wrap -> {
                 wrap.center();
+                Table body = new Table();
+                body.center();
+                Collapser collapser = new Collapser(body, true);
+                collapser.setDuration(0.12f);
+                final boolean[] built = {false};
                 final Label[] arrow = new Label[1];
-                final Table[] body = new Table[1];
-                Runnable refresh = () -> {
-                    arrow[0].setText(expanded ? "v" : ">");
-                    body[0].clearChildren();
-                    if(!expanded) return;
 
+                Runnable buildBody = () -> {
+                    if(built[0]) return;
                     NestedSettingsTable nested = new NestedSettingsTable(indent);
                     builder.get(nested);
                     nested.finishBuild();
-                    body[0].add(nested).width(width).growX().center();
-                };
-                Runnable toggle = () -> {
-                    expanded = !expanded;
-                    refresh.run();
+                    body.clearChildren();
+                    body.add(nested).width(width).growX().center();
+                    built[0] = true;
                 };
 
-                wrap.table(header -> {
-                    header.background(VscodeSettingsStyle.headerBackground());
-                    header.margin(8f);
-                    header.left();
-                    addToggleClick(header, toggle);
-                    if(icon != null){
-                        Image ic = header.image(icon).size(20f).padRight(8f).get();
-                        ic.setScaling(Scaling.fit);
-                        ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
-                        addToggleClick(ic, toggle);
-                    }
-                    Label titleLabel = header.add(title).color(VscodeSettingsStyle.accentColor()).left().growX().minWidth(0f).wrap().get();
-                    addToggleClick(titleLabel, toggle);
-                    arrow[0] = new Label(">");
-                    arrow[0].setColor(VscodeSettingsStyle.accentColor());
-                    addToggleClick(arrow[0], toggle);
-                    header.add(arrow[0]).width(20f).padLeft(8f).right();
-                }).width(width).growX();
+                Runnable toggle = () -> {
+                    expanded = !expanded;
+                    arrow[0].setText(expanded ? "v" : ">");
+                    if(expanded) buildBody.run();
+                    collapser.setCollapsed(!expanded, true);
+                };
+
+                Button.ButtonStyle headerStyle = new Button.ButtonStyle(
+                    VscodeSettingsStyle.headerBackground(),
+                    VscodeSettingsStyle.cardAltBackground(),
+                    VscodeSettingsStyle.headerBackground()
+                );
+                headerStyle.over = VscodeSettingsStyle.cardBackground();
+                Button header = new Button(headerStyle);
+                header.touchable = Touchable.enabled;
+                header.margin(8f);
+                header.left();
+                header.clicked(toggle);
+                if(icon != null){
+                    Image ic = header.image(icon).size(20f).padRight(8f).get();
+                    ic.touchable = Touchable.disabled;
+                    ic.setScaling(Scaling.fit);
+                    ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
+                }
+                Label titleLabel = header.add(title).color(VscodeSettingsStyle.accentColor()).left().growX().minWidth(0f).wrap().get();
+                titleLabel.touchable = Touchable.disabled;
+                arrow[0] = new Label(">");
+                arrow[0].touchable = Touchable.disabled;
+                arrow[0].setColor(VscodeSettingsStyle.accentColor());
+                header.add(arrow[0]).width(20f).padLeft(8f).right();
+
+                wrap.add(header).width(width).growX();
                 wrap.row();
                 wrap.image(mindustry.gen.Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).width(width).padBottom(8f);
                 wrap.row();
-                body[0] = new Table();
-                body[0].center();
-                wrap.add(body[0]).width(width).center();
-                refresh.run();
+                wrap.add(collapser).width(width).center();
             }).width(width).padTop(12f).padBottom(2f).center();
             table.row();
-        }
-
-        private static void addToggleClick(Element element, Runnable toggle){
-            element.addListener(new ClickListener(){
-                @Override
-                public void clicked(InputEvent event, float x, float y){
-                    toggle.run();
-                    event.stop();
-                }
-            });
         }
     }
 

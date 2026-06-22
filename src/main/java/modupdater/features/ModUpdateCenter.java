@@ -88,7 +88,7 @@ public final class ModUpdateCenter{
     public static void applyDefaults(){
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyShowDialog, true);
-        Core.settings.defaults(keyUseMirror, true);
+        Core.settings.defaults(keyUseMirror, false);
         Core.settings.defaults(keyIntervalHours, 6);
     }
 
@@ -96,7 +96,7 @@ public final class ModUpdateCenter{
         applyDefaults();
         table.checkPref(keyEnabled, true);
         table.checkPref(keyShowDialog, true);
-        table.checkPref(keyUseMirror, true);
+        table.checkPref(keyUseMirror, false);
         table.sliderPref(keyIntervalHours, 6, 1, 48, 1, v -> (int)v + "h");
 
         table.pref(new ButtonSetting("mu-open-center", () -> showCenter(true)));
@@ -479,7 +479,7 @@ public final class ModUpdateCenter{
     }
 
     private static void runBatchUpdate(Seq<ModEntry> entries){
-        boolean useMirror = Core.settings.getBool(keyUseMirror, true);
+        boolean useMirror = Core.settings.getBool(keyUseMirror, false);
         Seq<BatchUpdateInstaller.UpdateTarget> targets = new Seq<BatchUpdateInstaller.UpdateTarget>();
         for(ModEntry e : entries){
             GithubReleaseClient.ReleaseInfo rel = e.selectedRelease();

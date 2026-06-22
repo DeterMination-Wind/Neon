@@ -162,13 +162,11 @@ public class ServerPlayerDataBaseMod extends Mod{
             Core.settings.defaults(keyRecordChat, false);
             Core.settings.defaults(keyAutoTrace, true);
             Core.settings.defaults(keyShowAutoTraceDialog, false);
-            if(!bekBundled) GithubUpdateCheck.applyDefaults();
 
             initStorage();
             loadLocalData();
             initEmbedding();
             registerSettings();
-            if(!bekBundled) GithubUpdateCheck.checkOnce();
             installTraceInterceptor();
 
             nextAttachAttempt = 0f;
@@ -929,12 +927,6 @@ public class ServerPlayerDataBaseMod extends Mod{
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开调试窗口", Icon.zoom, this::showStandaloneDebugDialog));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("查找疑似小号（同IP）", Icon.players, this::showSameIpAltDialog));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
-
-            if(!bekBundled){
-                table.pref(new SpdbSettingsWidgets.HeaderSetting("更新", Icon.refresh));
-                table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
-                table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
-            }
         
     }
 

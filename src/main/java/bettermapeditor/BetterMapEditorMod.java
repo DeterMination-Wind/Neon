@@ -20,15 +20,10 @@ public class BetterMapEditorMod extends Mod {
         Events.on(EventType.ClientLoadEvent.class, e -> {
             if (bekBundled) return;
 
-            GithubUpdateCheck.applyDefaults();
-            GithubUpdateCheck.checkOnce();
-
             if (settingsAdded || ui == null || ui.settings == null) return;
             settingsAdded = true;
 
             ui.settings.addCategory("@settings.bettermapeditor", Icon.map, table -> {
-                table.checkPref(GithubUpdateCheck.enabledKey(), true);
-                table.checkPref(GithubUpdateCheck.showDialogKey(), true);
             });
         });
     }

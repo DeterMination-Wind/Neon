@@ -22,7 +22,6 @@ import arc.util.Interval;
 import arc.util.Tmp;
 import bektools.profiler.NeonProfiler;
 import betterminimap.BetterMiniMapMod;
-import betterminimap.GithubUpdateCheck;
 import mindustry.game.EventType;
 import mindustry.game.Team;
 import mindustry.gen.Building;
@@ -161,10 +160,6 @@ public class BetterMiniMapFeature {
         table.sliderPref(keyBuildingScale, 120, 10, 1000, 5, i -> i + "%");
         table.sliderPref(keyIconAlpha, 90, 10, 100, 5, i -> i + "%");
         table.sliderPref(keyIconBgAlpha, 35, 0, 100, 5, i -> i + "%");
-        if (!BetterMiniMapMod.bekBundled) {
-            table.checkPref(GithubUpdateCheck.enabledKey(), true);
-            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
-        }
 
         table.pref(new SettingsMenuDialog.SettingsTable.Setting("mmplus-units-filter") {
             @Override

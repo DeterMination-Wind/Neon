@@ -1,10 +1,10 @@
 {
-  name: "bek-tools"
+  name: "Neon-dev"
   displayName: "Neon / 氖"
   author: "DeterMination (BEK)"
   repo: "DeterMination-Wind/Neon"
-  description: "A bundled toolkit with 14 client modules, now including WhoUsesThisBuilding and PatchViewer in Neon unified settings. / 辅助模组十四合一，现并入 WhoUsesThisBuilding 与 PatchViewer 并统一到 Neon 设置入口。"
-  version: "8.3.0"
+  description: "A bundled toolkit with 15 client modules, now including WhoUsesThisBuilding, PatchViewer, and PinyinSearchSupport in Neon unified settings. / 辅助模组十五合一，现并入 WhoUsesThisBuilding、PatchViewer 与 PinyinSearchSupport 并统一到 Neon 设置入口。"
+  version: "0.0.0"
   minGameVersion: 154
   hidden: true
   java: true

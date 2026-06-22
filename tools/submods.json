@@ -112,6 +112,14 @@
       "mainClassFile": "PatchViewerMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "sourceBundlesDir": "assets/bundles"
+    },
+    {
+      "id": "pss",
+      "name": "PinyinSearchSupport",
+      "localPath": "../PinyinSearchSupport-repo",
+      "javaPackageDir": "src/main/java/pinyinsearchsupport",
+      "mainClassFile": "PinyinSearchSupportMod.java",
+      "bundlesDir": "src/main/resources/bundles"
     }
   ]
 }

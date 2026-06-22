@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-05-01T05:58:19Z",
+  "generatedAtUtc": "2026-06-22T11:24:25Z",
   "mods": {
     "pgmm": {
       "head": "47c5d468812cae5ca7569db181c739735f80ba74",
@@ -47,8 +47,12 @@
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\WhoUsesThisBuilding"
     },
     "pv": {
-      "head": "65dd2cc09b3824357573347a8040e5e718479063",
+      "head": "93abacfbdc100cd732d24953e26a85c4d0c7c2e2",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\PatchViewer"
+    },
+    "pss": {
+      "head": "49810d56aafe73ff9aeff75a34565ff9fb88c2cd",
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\PinyinSearchSupport-repo"
     }
   }
 }

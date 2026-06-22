@@ -2,9 +2,16 @@ package bektools;
 
 import arc.Core;
 import arc.Events;
+import arc.func.Cons;
+import arc.scene.ui.Image;
+import arc.scene.ui.Label;
+import arc.scene.ui.layout.Table;
+import arc.scene.style.Drawable;
 import arc.util.CommandHandler;
 import arc.util.Log;
+import arc.util.Scaling;
 import bektools.profiler.NeonProfilerFeature;
+import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -22,6 +29,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 import modupdater.ModUpdaterMod;
 import bektools.ui.RbmStyle;
 import patchviewer.PatchViewerMod;
+import pinyinsearchsupport.PinyinSearchSupportMod;
 import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
@@ -45,6 +53,7 @@ public class BekToolsMod extends Mod{
     private final ModUpdaterMod modUpdater;
     private final WhoUsesThisBuildingMod whoUsesThisBuilding;
     private final PatchViewerMod patchViewer;
+    private final PinyinSearchSupportMod pinyinSearchSupport;
     private final PostHogUsageReporter postHogUsageReporter;
 
     public BekToolsMod(){
@@ -82,6 +91,7 @@ public class BekToolsMod extends Mod{
         ModUpdaterMod.bekBundled = true;
         WhoUsesThisBuildingMod.bekBundled = true;
         PatchViewerMod.bekBundled = true;
+        PinyinSearchSupportMod.bekBundled = true;
 
         BetterScreenShotFeature.configureOverlayUi(overlayUi);
         CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
@@ -114,6 +124,8 @@ public class BekToolsMod extends Mod{
         whoUsesThisBuilding.init();
         patchViewer = new PatchViewerMod();
         patchViewer.init();
+        pinyinSearchSupport = new PinyinSearchSupportMod();
+        pinyinSearchSupport.init();
         postHogUsageReporter = new PostHogUsageReporter(getClass());
         CustomMarkerFeature.init();
         BetterScreenShotFeature.init();
@@ -173,6 +185,7 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, whoUsesThisBuilding::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, patchViewer::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, pinyinSearchSupport::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
             addGroup(table, Core.bundle.get("bektools.section.update", "Update"), Icon.refresh, st -> {
                 st.checkPref(GithubUpdateCheck.enabledKey(), true);
@@ -181,33 +194,71 @@ public class BekToolsMod extends Mod{
         });
     }
 
-    private static void addGroup(SettingsMenuDialog.SettingsTable table, String title, arc.scene.style.Drawable icon, arc.func.Cons<SettingsMenuDialog.SettingsTable> builder){
-        table.pref(new RbmStyle.HeaderSetting(title, icon));
-        table.pref(new GroupSetting(24f, builder));
+    private static void addGroup(SettingsMenuDialog.SettingsTable table, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){
+        table.pref(new CollapsibleGroupSetting(title, icon, 24f, builder));
         table.pref(new RbmStyle.SpacerSetting(4f));
     }
 
-    private static class GroupSetting extends SettingsMenuDialog.SettingsTable.Setting{
+    private static class CollapsibleGroupSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final String title;
+        private final Drawable icon;
         private final float indent;
-        private final arc.func.Cons<SettingsMenuDialog.SettingsTable> builder;
+        private final Cons<SettingsMenuDialog.SettingsTable> builder;
+        private boolean expanded;
 
-        public GroupSetting(float indent, arc.func.Cons<SettingsMenuDialog.SettingsTable> builder){
+        public CollapsibleGroupSetting(String title, Drawable icon, float indent, Cons<SettingsMenuDialog.SettingsTable> builder){
             super("bektools-group");
+            this.title = title;
+            this.icon = icon;
             this.indent = indent;
             this.builder = builder;
         }
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            NestedSettingsTable nested = new NestedSettingsTable(indent);
-            builder.get(nested);
-            nested.finishBuild();
-
+            float width = RbmStyle.prefWidth();
             table.row();
             table.table(wrap -> {
                 wrap.center();
-                wrap.add(nested).width(RbmStyle.prefWidth());
-            }).growX().center();
+                final Label[] arrow = new Label[1];
+                final Table[] body = new Table[1];
+                Runnable refresh = () -> {
+                    arrow[0].setText(expanded ? "v" : ">");
+                    body[0].clearChildren();
+                    if(!expanded) return;
+
+                    NestedSettingsTable nested = new NestedSettingsTable(indent);
+                    builder.get(nested);
+                    nested.finishBuild();
+                    body[0].add(nested).width(width).growX().center();
+                };
+
+                wrap.table(header -> {
+                    header.background(VscodeSettingsStyle.headerBackground());
+                    header.margin(8f);
+                    header.left();
+                    header.clicked(() -> {
+                        expanded = !expanded;
+                        refresh.run();
+                    });
+                    if(icon != null){
+                        Image ic = header.image(icon).size(20f).padRight(8f).get();
+                        ic.setScaling(Scaling.fit);
+                        ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
+                    }
+                    header.add(title).color(VscodeSettingsStyle.accentColor()).left().growX().minWidth(0f).wrap();
+                    arrow[0] = new Label(">");
+                    arrow[0].setColor(VscodeSettingsStyle.accentColor());
+                    header.add(arrow[0]).width(20f).padLeft(8f).right();
+                }).width(width).growX();
+                wrap.row();
+                wrap.image(mindustry.gen.Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).width(width).padBottom(8f);
+                wrap.row();
+                body[0] = new Table();
+                body[0].center();
+                wrap.add(body[0]).width(width).center();
+                refresh.run();
+            }).width(width).padTop(12f).padBottom(2f).center();
             table.row();
         }
     }

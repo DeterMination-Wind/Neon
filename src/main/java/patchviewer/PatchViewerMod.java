@@ -235,8 +235,15 @@ public class PatchViewerMod extends Mod{
 
         Seq<UnlockableContent> all = collectAllContents();
         for(UnlockableContent content : all){
-            ContentSnapshot before = baselineSnapshots.get(content);
-            ContentSnapshot after = snapshot(content);
+            ContentSnapshot before;
+            ContentSnapshot after;
+            try{
+                before = baselineSnapshots.get(content);
+                after = snapshot(content);
+            }catch(Throwable t){
+                Log.debug("[PatchViewer] Failed to snapshot @: @", content.name, Strings.getSimpleMessage(t));
+                continue;
+            }
             if(after != null) afterSnapshots.put(content, after);
             if(before == null || after == null) continue;
 

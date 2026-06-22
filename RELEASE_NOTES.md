@@ -1,5 +1,21 @@
 # Neon / 氖 — Release Notes
 
+## Local dev
+
+### 中文
+
+- 并入 `PinyinSearchSupport`，Neon 本地开发包变为 15 合 1。
+- `PatchViewer` 同步到本地独立仓库 HEAD，并补上异常 datapatch 快照保护。
+- Neon 设置页改为各模块独立折叠分组，打开设置分类时默认全部折叠。
+
+### English
+
+- Bundled `PinyinSearchSupport`; the local Neon dev build is now 15-in-1.
+- Synced `PatchViewer` with the local standalone repository HEAD and added malformed datapatch snapshot protection.
+- Changed the Neon settings page to independently collapsible module groups, collapsed by default whenever the category opens.
+
+---
+
 ## v8.3.0
 
 ### 中文

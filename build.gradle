@@ -3,7 +3,7 @@ plugins{
 }
 
 group = "bektools"
-version = "8.3.0"
+version = "0.0.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_11
@@ -35,6 +35,7 @@ dependencies{
     }
 
     implementation "de.kherud:llama:4.1.0"
+    implementation "com.belerweb:pinyin4j:2.5.1"
     runtimeOnly "org.xerial:sqlite-jdbc:3.46.1.3"
 }
 
@@ -164,6 +165,7 @@ tasks.register("d8InputJar", Jar){
     archiveFileName = "${project.name}-d8-input.jar"
     destinationDirectory = layout.buildDirectory.dir("d8-input")
     from(sourceSets.main.output)
+    from({ configurations.runtimeClasspath.findAll{ it.name.contains("pinyin4j") }.collect{ zipTree(it) } })
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 

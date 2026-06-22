@@ -7,12 +7,14 @@
 - 并入 `PinyinSearchSupport`，Neon 本地开发包变为 15 合 1。
 - `PatchViewer` 同步到本地独立仓库 HEAD，并补上异常 datapatch 快照保护。
 - Neon 设置页改为各模块独立折叠分组，打开设置分类时默认全部折叠。
+- 移除 Neon 独立“更新”设置分组，`WhoUsesThisBuilding` 触发键迁移到原版控制设置，Profiler 增加设置页一键启停查看按钮，并补齐 Mod Updater 内置 repo 映射。
 
 ### English
 
 - Bundled `PinyinSearchSupport`; the local Neon dev build is now 15-in-1.
 - Synced `PatchViewer` with the local standalone repository HEAD and added malformed datapatch snapshot protection.
 - Changed the Neon settings page to independently collapsible module groups, collapsed by default whenever the category opens.
+- Removed Neon's standalone Update settings group, moved the `WhoUsesThisBuilding` trigger to vanilla Controls, added a one-click profiler toggle/view button, and filled Mod Updater built-in repo mappings.
 
 ---
 

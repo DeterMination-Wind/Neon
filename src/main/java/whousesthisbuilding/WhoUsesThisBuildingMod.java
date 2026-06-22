@@ -8,14 +8,12 @@ import arc.graphics.g2d.Fill;
 import arc.graphics.g2d.Font;
 import arc.graphics.g2d.GlyphLayout;
 import arc.graphics.g2d.Lines;
+import arc.input.KeyBind;
 import arc.input.KeyCode;
 import arc.math.geom.Point2;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.ui.layout.Scl;
-import arc.scene.ui.Label;
-import arc.scene.ui.TextButton;
-import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import arc.util.Align;
@@ -30,15 +28,12 @@ import mindustry.gen.Icon;
 import mindustry.graphics.Drawf;
 import mindustry.graphics.Pal;
 import mindustry.mod.Mod;
-import mindustry.ui.Styles;
 import mindustry.ui.Fonts;
-import mindustry.ui.dialogs.BaseDialog;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.blocks.logic.LogicBlock;
 import mindustry.world.blocks.logic.LogicBlock.LogicBuild;
 import mindustry.world.blocks.logic.LogicBlock.LogicLink;
 
-import java.util.Locale;
 import java.util.Objects;
 
 import static mindustry.Vars.player;
@@ -53,16 +48,16 @@ public class WhoUsesThisBuildingMod extends Mod{
 
 
     private static final String keyEnabled = "wutb-enabled";
-    private static final String keyHotkey = "wutb-hotkey";
     private static final String keyFontScale = "wutb-font-scale";
-    private static final String defaultHotkey = "altleft";
+    private static final String keybindTrigger = "wutb_trigger";
     private static final long rescanIntervalMs = 180L;
+    private static boolean keybindsRegistered;
+    private static KeyBind triggerKeybind;
 
     private final ObjectMap<Integer, LogicReferenceAnalyzer.ProcessorAnalysis> analysisCache = new ObjectMap<>();
     private final Seq<ProcessorMatch> matches = new Seq<>();
 
     private boolean enabled = true;
-    private KeyCode hotkey = KeyCode.altLeft;
     private Building currentTarget;
     private boolean overlayActive;
     private long lastScanAt;
@@ -70,8 +65,8 @@ public class WhoUsesThisBuildingMod extends Mod{
 
     public WhoUsesThisBuildingMod(){
         Core.settings.defaults(keyEnabled, true);
-        Core.settings.defaults(keyHotkey, defaultHotkey);
         Core.settings.defaults(keyFontScale, 100);
+        registerKeybinds();
         refreshSettings();
 
         Events.on(EventType.ClientLoadEvent.class, event -> {
@@ -96,8 +91,13 @@ public class WhoUsesThisBuildingMod extends Mod{
                 clearOverlay();
             }
         });
-        table.pref(new HotkeySetting(keyHotkey, defaultHotkey));
         table.sliderPref(keyFontScale, 100, 50, 300, 5, value -> value + "%");
+    }
+
+    private static void registerKeybinds(){
+        if(keybindsRegistered) return;
+        keybindsRegistered = true;
+        triggerKeybind = KeyBind.add(keybindTrigger, KeyCode.altLeft, "whousesthisbuilding");
     }
 
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
@@ -315,19 +315,12 @@ public class WhoUsesThisBuildingMod extends Mod{
 
     private void refreshSettings(){
         enabled = Core.settings.getBool(keyEnabled, true);
-        hotkey = parseKeyCode(Core.settings.getString(keyHotkey, defaultHotkey));
         fontScale = Math.max(0.5f, Core.settings.getInt(keyFontScale, 100) / 100f);
-        if(!isCaptureKeyCandidate(hotkey)){
-            hotkey = KeyCode.altLeft;
-        }
     }
 
     private boolean isHotkeyPressed(){
-        if(hotkey == null) return false;
-        if(hotkey == KeyCode.altLeft || hotkey == KeyCode.altRight){
-            return Core.input.keyDown(KeyCode.altLeft) || Core.input.keyDown(KeyCode.altRight);
-        }
-        return Core.input.keyDown(hotkey);
+        if(triggerKeybind == null) registerKeybinds();
+        return triggerKeybind != null && Core.input.keyDown(triggerKeybind);
     }
 
     private LabelPlacement chooseLabelPlacement(Building build, String text, float scale, Seq<LabelPlacement> occupied, Seq<RectArea> obstacles){
@@ -544,105 +537,6 @@ public class WhoUsesThisBuildingMod extends Mod{
         Pools.free(layout);
     }
 
-    private void showHotkeyCaptureDialog(String settingName){
-        BaseDialog dialog = new BaseDialog(Core.bundle.get("wutb.hotkey.capture.title"));
-        dialog.addCloseButton();
-
-        dialog.cont.add(Core.bundle.get("wutb.hotkey.capture.hint")).pad(8f).row();
-        Label preview = dialog.cont.add(displayKeyName(Core.settings.getString(settingName, defaultHotkey)))
-        .style(Styles.outlineLabel).pad(8f).get();
-        dialog.cont.row();
-
-        dialog.update(() -> {
-            if(Core.input.keyTap(KeyCode.escape)){
-                dialog.hide();
-                return;
-            }
-
-            for(KeyCode code : KeyCode.all){
-                if(!isCaptureKeyCandidate(code)) continue;
-                if(!Core.input.keyTap(code)) continue;
-
-                Core.settings.put(settingName, normalizeStoredKeyName(code));
-                hotkey = code;
-                preview.setText(displayKeyName(normalizeStoredKeyName(code)));
-                dialog.hide();
-                return;
-            }
-        });
-
-        dialog.show();
-    }
-
-    private static boolean isCaptureKeyCandidate(KeyCode code){
-        if(code == null || code == KeyCode.unset) return false;
-        String n = code.name();
-        if(n == null) return false;
-        if(n.equalsIgnoreCase("anykey") || n.equalsIgnoreCase("unknown")) return false;
-        String low = n.toLowerCase(Locale.ROOT);
-        return !low.startsWith("mouse");
-    }
-
-    private static String normalizeStoredKeyName(KeyCode code){
-        return code.name().toLowerCase(Locale.ROOT);
-    }
-
-    private static String displayKeyName(String stored){
-        if(stored == null || stored.isEmpty()){
-            return Core.bundle.get("wutb.hotkey.unset");
-        }
-        String s = stored.trim().toLowerCase(Locale.ROOT);
-
-        if(s.startsWith("num") && s.length() == 4 && Character.isDigit(s.charAt(3))){
-            return String.valueOf(s.charAt(3));
-        }
-        if(s.equals("num0")) return "0";
-        if(s.equals("backtick") || s.equals("grave")) return "`";
-        if(s.equals("minus")) return "-";
-        if(s.equals("equals")) return "=";
-        if(s.equals("comma")) return ",";
-        if(s.equals("period")) return ".";
-        if(s.equals("space")) return "SPACE";
-
-        return s.toUpperCase(Locale.ROOT);
-    }
-
-    private static KeyCode parseKeyCode(String raw){
-        if(raw == null) return null;
-        String normalized = raw.trim();
-        if(normalized.isEmpty()) return null;
-
-        normalized = normalized.replace('-', '_').replace(' ', '_');
-
-        if(normalized.length() == 1 && Character.isDigit(normalized.charAt(0))){
-            try{
-                return KeyCode.valueOf("num" + normalized);
-            }catch(Throwable ignored){
-            }
-        }
-
-        try{
-            return KeyCode.valueOf(normalized);
-        }catch(Throwable ignored){
-        }
-
-        try{
-            return KeyCode.valueOf(normalized.toLowerCase(Locale.ROOT));
-        }catch(Throwable ignored){
-        }
-
-        try{
-            return KeyCode.valueOf(normalized.toUpperCase(Locale.ROOT));
-        }catch(Throwable ignored){
-        }
-
-        for(KeyCode code : KeyCode.all){
-            if(code == null) continue;
-            if(code.name().equalsIgnoreCase(normalized)) return code;
-        }
-        return null;
-    }
-
     private static final class ProcessorMatch{
         final LogicBuild processor;
         final String text;
@@ -699,27 +593,4 @@ public class WhoUsesThisBuildingMod extends Mod{
         }
     }
 
-    private class HotkeySetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final String defaultValue;
-
-        HotkeySetting(String name, String defaultValue){
-            super(name);
-            this.defaultValue = defaultValue;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            Table row = new Table();
-            row.left();
-            row.defaults().pad(3f);
-            row.add(title).left().growX().wrap();
-
-            TextButton capture = row.button("", Styles.defaultt, () -> showHotkeyCaptureDialog(name))
-            .minWidth(180f).pad(8f).get();
-            capture.update(() -> capture.setText(displayKeyName(Core.settings.getString(name, defaultValue))));
-
-            addDesc(table.add(row).left().growX().padTop(4f).get());
-            table.row();
-        }
-    }
 }

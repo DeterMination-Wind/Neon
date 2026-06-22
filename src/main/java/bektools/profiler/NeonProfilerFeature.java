@@ -376,6 +376,24 @@ public final class NeonProfilerFeature{
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table){
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-toggle") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t){
+                TextButton button = t.button("", () -> {
+                    boolean enable = !NeonProfiler.isEnabled();
+                    setEnabled(enable);
+                    if(enable){
+                        openPanel();
+                    }
+                }).growX().margin(14f).pad(6f).get();
+                button.update(() -> button.setText(
+                    NeonProfiler.isEnabled()
+                        ? Core.bundle.get("neon.profiler.action.off", "Disable")
+                        : Core.bundle.get("neon.profiler.action.on", "Enable")
+                ));
+                t.row();
+            }
+        });
         table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-enabled") {
             @Override
             public void add(SettingsMenuDialog.SettingsTable t){

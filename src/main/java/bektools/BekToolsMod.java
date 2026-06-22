@@ -3,6 +3,9 @@ package bektools;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
+import arc.scene.Element;
+import arc.scene.event.ClickListener;
+import arc.scene.event.InputEvent;
 import arc.scene.ui.Image;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Table;
@@ -132,9 +135,7 @@ public class BekToolsMod extends Mod{
 
         Events.on(ClientLoadEvent.class, e -> {
             postHogUsageReporter.onClientLoad();
-            GithubUpdateCheck.applyDefaults();
             registerSettings();
-            GithubUpdateCheck.checkOnce();
         });
     }
 
@@ -187,10 +188,6 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, patchViewer::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, pinyinSearchSupport::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.update", "Update"), Icon.refresh, st -> {
-                st.checkPref(GithubUpdateCheck.enabledKey(), true);
-                st.checkPref(GithubUpdateCheck.showDialogKey(), true);
-            });
         });
     }
 
@@ -232,23 +229,27 @@ public class BekToolsMod extends Mod{
                     nested.finishBuild();
                     body[0].add(nested).width(width).growX().center();
                 };
+                Runnable toggle = () -> {
+                    expanded = !expanded;
+                    refresh.run();
+                };
 
                 wrap.table(header -> {
                     header.background(VscodeSettingsStyle.headerBackground());
                     header.margin(8f);
                     header.left();
-                    header.clicked(() -> {
-                        expanded = !expanded;
-                        refresh.run();
-                    });
+                    addToggleClick(header, toggle);
                     if(icon != null){
                         Image ic = header.image(icon).size(20f).padRight(8f).get();
                         ic.setScaling(Scaling.fit);
                         ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
+                        addToggleClick(ic, toggle);
                     }
-                    header.add(title).color(VscodeSettingsStyle.accentColor()).left().growX().minWidth(0f).wrap();
+                    Label titleLabel = header.add(title).color(VscodeSettingsStyle.accentColor()).left().growX().minWidth(0f).wrap().get();
+                    addToggleClick(titleLabel, toggle);
                     arrow[0] = new Label(">");
                     arrow[0].setColor(VscodeSettingsStyle.accentColor());
+                    addToggleClick(arrow[0], toggle);
                     header.add(arrow[0]).width(20f).padLeft(8f).right();
                 }).width(width).growX();
                 wrap.row();
@@ -260,6 +261,16 @@ public class BekToolsMod extends Mod{
                 refresh.run();
             }).width(width).padTop(12f).padBottom(2f).center();
             table.row();
+        }
+
+        private static void addToggleClick(Element element, Runnable toggle){
+            element.addListener(new ClickListener(){
+                @Override
+                public void clicked(InputEvent event, float x, float y){
+                    toggle.run();
+                    event.stop();
+                }
+            });
         }
     }
 

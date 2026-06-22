@@ -18,8 +18,7 @@ import arc.util.Align;
 import arc.util.Interval;
 import arc.util.Time;
 import arc.util.pooling.Pools;
-import bektools.profiler.NeonProfiler;
-import betterprojectoroverlay.BetterProjectorOverlayMod;
+import betterprojectoroverlay.GithubUpdateCheck;
 import mdtxcompat.MarkerBridge;
 import mindustry.content.Blocks;
 import mindustry.game.EventType;
@@ -171,6 +170,8 @@ public class BetterProjectorOverlayFeature {
         table.sliderPref(keyScanInterval, 8, 1, 30, 1, i -> i + "s");
         table.sliderPref(keyPreviewTextScale, 125, 60, 260, 5, i -> i + "%");
         table.sliderPref(keyPreviewTextAlpha, 100, 20, 100, 5, i -> i + "%");
+        table.checkPref(GithubUpdateCheck.enabledKey(), true);
+        table.checkPref(GithubUpdateCheck.showDialogKey(), true);
 
         refreshSettings();
     }
@@ -186,7 +187,6 @@ public class BetterProjectorOverlayFeature {
     }
 
     private static void updatePlacementPreview() {
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BPO", "Compute", "updatePlacementPreview", NeonProfiler.threadMain)){
         if (!enabled || !previewEnabled) {
             preview.reset();
             resetPreviewCache();
@@ -230,11 +230,9 @@ public class BetterProjectorOverlayFeature {
         nextPreviewComputeAt = Time.time + previewRefreshTicks;
 
         computePlacementPreview(tx, ty, (OverdriveProjector) block);
-        }
     }
 
     private static void drawPlacementPredictionWorld() {
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BPO", "Draw", "drawPlacementPrediction", NeonProfiler.threadMain)){
         PlacementPreview p = preview;
         if (!p.active) return;
 
@@ -248,7 +246,6 @@ public class BetterProjectorOverlayFeature {
         Lines.circle(p.worldX, p.worldY, p.range);
         drawPlacementTextWorld(p, mainColor);
         Draw.reset();
-        }
     }
 
     private static void drawPlacementTextWorld(PlacementPreview p, Color color) {
@@ -291,7 +288,6 @@ public class BetterProjectorOverlayFeature {
     }
 
     private static PlacementPreview computePlacementPreview(int tx, int ty, OverdriveProjector projector) {
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BPO", "Compute", "computePlacementPreview", NeonProfiler.threadMain)){
         preview.reset();
 
         if (world == null || world.width() <= 0 || world.height() <= 0) return preview;
@@ -348,7 +344,6 @@ public class BetterProjectorOverlayFeature {
         preview.positive = preview.balance >= 0f;
 
         return preview;
-        }
     }
 
     private static void resetPreviewCache() {
@@ -375,7 +370,6 @@ public class BetterProjectorOverlayFeature {
     }
 
     private static void scanAndMarkConflicts() {
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("BPO", "Scan", "scanAndMarkConflicts", NeonProfiler.threadMain)){
         if (!enabled || !markerEnabled) return;
         if (state == null || !state.isGame() || world == null || world.isGenerating() || player == null) return;
 
@@ -411,7 +405,6 @@ public class BetterProjectorOverlayFeature {
             if (announcedPositions.add(pos)) {
                 sendChatAlert(tileX, tileY);
             }
-        }
         }
     }
 

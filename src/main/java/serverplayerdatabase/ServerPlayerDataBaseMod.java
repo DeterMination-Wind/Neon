@@ -24,7 +24,6 @@ import arc.util.Time;
 import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonValue;
-import bektools.profiler.NeonProfiler;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
@@ -162,11 +161,13 @@ public class ServerPlayerDataBaseMod extends Mod{
             Core.settings.defaults(keyRecordChat, false);
             Core.settings.defaults(keyAutoTrace, true);
             Core.settings.defaults(keyShowAutoTraceDialog, false);
+            GithubUpdateCheck.applyDefaults();
 
             initStorage();
             loadLocalData();
             initEmbedding();
             registerSettings();
+            GithubUpdateCheck.checkOnce();
             installTraceInterceptor();
 
             nextAttachAttempt = 0f;
@@ -252,7 +253,6 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void update(){
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("SPDB", "Update", "update", NeonProfiler.threadMain)){
         if(Vars.headless) return;
 
         releaseOverlayFocusIfPointerOutside();
@@ -280,7 +280,6 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(embeddingIndex != null && Time.millis() - lastEmbeddingFlushAt >= embeddingFlushIntervalMs){
             lastEmbeddingFlushAt = Time.millis();
             embeddingIndex.flushIfDirty();
-        }
         }
     }
 
@@ -365,7 +364,6 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void collectPlayers(){
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "Event", "collectPlayers", NeonProfiler.threadMain)){
         long now = Time.millis();
 
         for(Player p : Groups.player){
@@ -389,7 +387,6 @@ public class ServerPlayerDataBaseMod extends Mod{
             if(canAutoTraceIps()){
                 requestTraceIfNeeded(p, now);
             }
-        }
         }
     }
 
@@ -438,13 +435,11 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void installTraceInterceptor(){
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "UI", "installTraceInterceptor", NeonProfiler.threadMain)){
         if(Vars.ui == null || Vars.ui.traces == null) return;
         if(Vars.ui.traces instanceof TraceInterceptorDialog) return;
 
         originalTraceDialog = Vars.ui.traces;
         Vars.ui.traces = new TraceInterceptorDialog();
-        }
     }
 
     private class TraceInterceptorDialog extends TraceDialog{
@@ -872,7 +867,6 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void saveDirty(boolean force){
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "IO", "saveDirty", NeonProfiler.threadMain)){
         if(dataDir == null) return;
 
         dataDir.mkdirs();
@@ -897,7 +891,6 @@ public class ServerPlayerDataBaseMod extends Mod{
                 Log.err("SPDB: failed to save chat database.", t);
             }
         }
-        }
     }
 
     private void registerSettings(){
@@ -910,7 +903,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         Core.settings.defaults(keyAutoTrace, true);
         Core.settings.defaults(keyShowAutoTraceDialog, false);
 
-        Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
+        if(!bekBundled) Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
@@ -927,6 +920,10 @@ public class ServerPlayerDataBaseMod extends Mod{
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开调试窗口", Icon.zoom, this::showStandaloneDebugDialog));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("查找疑似小号（同IP）", Icon.players, this::showSameIpAltDialog));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
+
+            table.pref(new SpdbSettingsWidgets.HeaderSetting("更新", Icon.refresh));
+            table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
+            table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
         
     }
 

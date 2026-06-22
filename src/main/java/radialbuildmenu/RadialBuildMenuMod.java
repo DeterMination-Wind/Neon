@@ -36,6 +36,7 @@ import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.WorldLoadEvent;
+import mindustry.game.Team;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.Tex;
@@ -72,6 +73,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     private static final int slotsPerRing = 8;
     private static final int maxSlots = 16;
     private static final int maxWheelProfiles = 32;
+    private static final int maxRuleSlotGroups = 64;
 
     private static final String planetErekir = "erekir";
     private static final String planetSerpulo = "serpulo";
@@ -95,6 +97,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     private static final String keyShowEmptySlots = "rbm-show-empty-slots";
     private static final String keyWheelProfiles = "rbm-wheel-profiles";
     private static final String keyWheelNextId = "rbm-wheel-next-id";
+    private static final String keyActiveWheelProfileId = "rbm-wheel-active-id";
+    private static final String keyRuleSlotGroups = "rbm-rule-slot-groups";
+    private static final String keyRuleSlotGroupNextId = "rbm-rule-slot-group-next-id";
 
     static final String keyToggleSlotGroupsEnabled = "rbm-toggle-slot-groups-enabled";
     private static final String keyToggleSlotGroupState = "rbm-toggle-slot-groups-state";
@@ -146,6 +151,10 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     private OverlayUiBridge.OverlayWindowHandle xMobileToggleWindow;
     private final Seq<WheelProfile> wheelProfiles = new Seq<>();
     private boolean wheelProfilesLoaded;
+    private final Seq<RuleSlotGroup> ruleSlotGroups = new Seq<>();
+    private boolean ruleSlotGroupsLoaded;
+    private RuleSlotGroup activeRuleSlotGroup;
+    private float ruleSlotGroupLastEval = -9999f;
 
     private boolean condAfterLatched;
     private boolean condInitActive;
@@ -170,6 +179,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             registerSettings();
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensureMobileToggleAttached);
+            GithubUpdateCheck.checkOnce();
         });
 
         Events.on(WorldLoadEvent.class, e -> {
@@ -185,6 +195,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private void ensureDefaults(){
+        GithubUpdateCheck.applyDefaults();
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyHudScale, 100);
         Core.settings.defaults(keyHudAlpha, 100);
@@ -203,6 +214,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyShowEmptySlots, false);
         Core.settings.defaults(keyWheelProfiles, "");
         Core.settings.defaults(keyWheelNextId, 1);
+        Core.settings.defaults(keyActiveWheelProfileId, 0);
+        Core.settings.defaults(keyRuleSlotGroups, "");
+        Core.settings.defaults(keyRuleSlotGroupNextId, 1);
 
         Core.settings.defaults(keyToggleSlotGroupsEnabled, false);
         Core.settings.defaults(keyToggleSlotGroupState, 0);
@@ -240,6 +254,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         Core.settings.defaults(keyPlanetSerpuloEnabled, true);
         Core.settings.defaults(keyPlanetSunEnabled, true);
         ensureWheelProfilesLoaded();
+        ensureRuleSlotGroupsLoaded();
     }
 
     private void registerSettings(){
@@ -247,20 +262,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         if(bekBundled) return;
 
 
-        ui.settings.addCategory("@rbm.category", this::bekBuildSettings);
+        if(!bekBundled) ui.settings.addCategory("@rbm.category", this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-            boolean toggleEnabled = Core.settings.getBool(keyToggleSlotGroupsEnabled, false);
             ensureWheelProfilesLoaded();
+            ensureRuleSlotGroupsLoaded();
 
             table.checkPref(keyEnabled, true);
             table.pref(new HotkeySetting());
-            table.pref(new WheelProfilesButtonSetting(RadialBuildMenuMod.this));
-
-            table.checkPref(keyToggleSlotGroupsEnabled, false);
-            table.pref(new ToggleSlotGroupHotkeySetting());
-            table.pref(new SlotGroupsButtonSetting(RadialBuildMenuMod.this));
 
             table.sliderPref(keyHudScale, 100, 50, 200, 5, v -> v + "%");
             table.sliderPref(keyHudAlpha, 100, 0, 100, 5, v -> v + "%");
@@ -272,16 +282,17 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             table.checkPref(keyCenterScreen, false);
             table.checkPref(keyShowEmptySlots, false);
             table.checkPref(keyProMode, false);
-            table.pref(new AdvancedButtonSetting(RadialBuildMenuMod.this));
+            table.pref(new WheelProfilesButtonSetting(RadialBuildMenuMod.this));
 
-            if(!toggleEnabled){
-                for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keySlotPrefix, "rbm.setting.slot"));
+            for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keySlotPrefix, "rbm.setting.slot"));
 
-                table.pref(new TimeMinutesSetting());
-                for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keyTimeSlotPrefix, "rbm.setting.timeslot"));
-            }
+            table.pref(new TimeMinutesSetting());
+            for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keyTimeSlotPrefix, "rbm.setting.timeslot"));
 
             table.pref(new IoSetting());
+
+            table.checkPref(GithubUpdateCheck.enabledKey(), true);
+            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
         
     }
 
@@ -376,6 +387,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                         return;
                     }
                     ui.showConfirm("@confirm", "@rbm.wheels.delete.confirm", () -> {
+                        if(Core.settings.getInt(keyActiveWheelProfileId, 0) == profile.id){
+                            setActiveWheelProfile(null);
+                        }
                         wheelProfiles.remove(profile, true);
                         saveWheelProfiles();
                         selected[0] = wheelProfiles.isEmpty() ? null : wheelProfiles.first();
@@ -542,6 +556,21 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     private void saveWheelProfiles(){
         normalizeNextWheelId();
         Core.settings.put(keyWheelProfiles, exportWheelProfiles().toString(Jformat.plain));
+    }
+
+    private void setActiveWheelProfile(WheelProfile profile){
+        Core.settings.put(keyActiveWheelProfileId, profile == null ? 0 : profile.id);
+    }
+
+    private WheelProfile activeWheelProfile(){
+        ensureWheelProfilesLoaded();
+        int id = Core.settings.getInt(keyActiveWheelProfileId, 0);
+        if(id <= 0) return null;
+        for(WheelProfile profile : wheelProfiles){
+            if(profile.id == id) return profile;
+        }
+        Core.settings.put(keyActiveWheelProfileId, 0);
+        return null;
     }
 
     private Jval exportWheelProfiles(){
@@ -756,53 +785,471 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         }
     }
 
+    void showRuleSlotGroupsDialog(){
+        ensureRuleSlotGroupsLoaded();
+
+        BaseDialog dialog = new BaseDialog("@rbm.rulegroups.title");
+        dialog.addCloseButton();
+
+        final RuleSlotGroup[] selected = {ruleSlotGroups.isEmpty() ? null : ruleSlotGroups.first()};
+        Table left = new Table();
+        Table right = new Table();
+
+        Runnable[] rebuildRight = new Runnable[1];
+        Runnable[] rebuildLeft = new Runnable[1];
+
+        rebuildRight[0] = () -> {
+            right.clearChildren();
+            right.top().left();
+
+            RuleSlotGroup group = selected[0];
+            if(group == null){
+                right.add("@rbm.rulegroups.none").pad(20f);
+                return;
+            }
+
+            right.table(Tex.button, header -> {
+                header.left().margin(10f);
+                header.add("@rbm.rulegroups.name").width(110f).left();
+                TextField name = new TextField(group.name);
+                name.setMessageText(Core.bundle.get("rbm.rulegroups.name.placeholder"));
+                name.changed(() -> {
+                    group.name = normalizeRuleSlotGroupName(name.getText(), group.id);
+                    saveRuleSlotGroups();
+                    rebuildLeft[0].run();
+                });
+                header.add(name).growX().minWidth(0f);
+            }).growX().padBottom(6f);
+            right.row();
+
+            right.table(Tex.button, cond -> {
+                cond.top().left().margin(10f);
+                cond.add("@rbm.rulegroups.condition").left().padBottom(4f);
+                cond.row();
+                TextArea expr = new TextArea(group.condition);
+                expr.setMessageText(Core.bundle.get("rbm.rulegroups.condition.placeholder"));
+                expr.changed(() -> {
+                    group.condition = expr.getText() == null ? "" : expr.getText();
+                    saveRuleSlotGroups();
+                    rebuildLeft[0].run();
+                });
+                cond.add(expr).growX().minHeight(70f).padBottom(6f);
+                cond.row();
+                cond.add("@rbm.rulegroups.condition.help").left().growX().wrap().minWidth(0f);
+            }).growX().padBottom(6f);
+            right.row();
+
+            right.table(actions -> {
+                actions.left();
+                TextButton up = actions.button("@rbm.rulegroups.up", Styles.flatt, () -> {
+                    int index = ruleSlotGroups.indexOf(group, true);
+                    if(index > 0){
+                        ruleSlotGroups.swap(index, index - 1);
+                        saveRuleSlotGroups();
+                        rebuildLeft[0].run();
+                    }
+                }).height(40f).minWidth(100f).get();
+                up.update(() -> up.setDisabled(ruleSlotGroups.indexOf(group, true) <= 0));
+
+                TextButton down = actions.button("@rbm.rulegroups.down", Styles.flatt, () -> {
+                    int index = ruleSlotGroups.indexOf(group, true);
+                    if(index >= 0 && index < ruleSlotGroups.size - 1){
+                        ruleSlotGroups.swap(index, index + 1);
+                        saveRuleSlotGroups();
+                        rebuildLeft[0].run();
+                    }
+                }).height(40f).minWidth(100f).padLeft(8f).get();
+                down.update(() -> {
+                    int index = ruleSlotGroups.indexOf(group, true);
+                    down.setDisabled(index < 0 || index >= ruleSlotGroups.size - 1);
+                });
+
+                actions.button("@rbm.rulegroups.copy", Styles.flatt, () -> {
+                    RuleSlotGroup copy = copyRuleSlotGroup(group);
+                    if(copy != null){
+                        selected[0] = copy;
+                        rebuildLeft[0].run();
+                        rebuildRight[0].run();
+                    }
+                }).height(40f).minWidth(100f).padLeft(8f);
+
+                actions.button("@rbm.rulegroups.delete", Styles.flatt, () -> {
+                    ui.showConfirm("@confirm", "@rbm.rulegroups.delete.confirm", () -> {
+                        ruleSlotGroups.remove(group, true);
+                        saveRuleSlotGroups();
+                        selected[0] = ruleSlotGroups.isEmpty() ? null : ruleSlotGroups.first();
+                        rebuildLeft[0].run();
+                        rebuildRight[0].run();
+                    });
+                }).height(40f).minWidth(100f).padLeft(8f);
+            }).growX().padBottom(8f);
+            right.row();
+
+            right.add("@rbm.rulegroups.slots").color(Pal.accent).left().padTop(4f).padBottom(4f);
+            right.row();
+
+            for(int i = 0; i < maxSlots; i++){
+                final int slot = i;
+                right.table(Tex.button, row -> {
+                    row.left().margin(8f);
+                    row.add(Core.bundle.format("rbm.setting.slot", slot + 1)).width(105f).left();
+
+                    row.table(info -> {
+                        info.left();
+                        Image icon = info.image(Tex.clear).size(32f).padRight(8f).get();
+                        icon.setScaling(Scaling.fit);
+                        info.labelWrap(() -> {
+                            Block block = ruleSlotGroupBlock(group, slot);
+                            return block == null ? Core.bundle.get("rbm.setting.none") : block.localizedName;
+                        }).left().growX().fillX().minWidth(0f);
+
+                        final Block[] last = {null};
+                        info.update(() -> {
+                            Block block = ruleSlotGroupBlock(group, slot);
+                            if(block == last[0]) return;
+                            last[0] = block;
+                            icon.setDrawable(block == null ? Tex.clear : new TextureRegionDrawable(block.uiIcon));
+                        });
+                    }).left().growX().minWidth(0f);
+
+                    row.button("@rbm.setting.set", Styles.flatt, () -> showBlockSelectDialog(block -> {
+                        group.slots[slot] = block == null ? "" : block.name;
+                        saveRuleSlotGroups();
+                    })).width(110f).height(40f).padLeft(8f);
+                }).growX().padTop(3f);
+                right.row();
+            }
+        };
+
+        rebuildLeft[0] = () -> {
+            left.clearChildren();
+            left.top().left();
+
+            for(RuleSlotGroup group : ruleSlotGroups){
+                Table row = left.table(Tex.button, b -> {
+                    b.left().margin(8f);
+                    b.table(labels -> {
+                        labels.left();
+                        labels.add(group.displayName()).growX().left().minWidth(0f).wrap();
+                        labels.row();
+                        labels.labelWrap(() -> {
+                            String cond = group.condition == null ? "" : group.condition.trim();
+                            return cond.isEmpty() ? Core.bundle.get("rbm.rulegroups.condition.empty") : cond;
+                        }).color(Color.gray).growX().left().minWidth(0f);
+                    }).growX().minWidth(0f);
+                }).growX().height(58f).padBottom(3f).get();
+                row.clicked(() -> {
+                    selected[0] = group;
+                    rebuildLeft[0].run();
+                    rebuildRight[0].run();
+                });
+                row.update(() -> row.color.set(selected[0] == group ? Pal.accent : Color.white));
+                left.row();
+            }
+
+            left.button("@rbm.rulegroups.add", Styles.flatt, () -> {
+                RuleSlotGroup created = addRuleSlotGroup();
+                selected[0] = created;
+                rebuildLeft[0].run();
+                rebuildRight[0].run();
+            }).growX().height(44f).disabled(b -> ruleSlotGroups.size >= maxRuleSlotGroups).padTop(6f);
+        };
+
+        rebuildLeft[0].run();
+        rebuildRight[0].run();
+
+        ScrollPane leftPane = new ScrollPane(left);
+        leftPane.setFadeScrollBars(false);
+        leftPane.setScrollingDisabled(true, false);
+        ScrollPane rightPane = new ScrollPane(right);
+        rightPane.setFadeScrollBars(false);
+        rightPane.setScrollingDisabled(true, false);
+
+        dialog.cont.table(root -> {
+            root.add(leftPane).width(280f).growY().minHeight(430f).padRight(8f);
+            root.add(rightPane).width(Math.max(520f, prefWidth() - 300f)).growY().minHeight(430f);
+        }).grow();
+
+        dialog.show();
+    }
+
+    private Seq<RuleSlotGroup> ruleSlotGroups(){
+        ensureRuleSlotGroupsLoaded();
+        return ruleSlotGroups;
+    }
+
+    private void ensureRuleSlotGroupsLoaded(){
+        if(ruleSlotGroupsLoaded) return;
+        ruleSlotGroupsLoaded = true;
+        ruleSlotGroups.clear();
+
+        String raw = Core.settings.getString(keyRuleSlotGroups, "");
+        if(raw != null && !raw.trim().isEmpty()){
+            try{
+                importRuleSlotGroupsValue(Jval.read(raw), false);
+            }catch(Throwable ignored){
+                ruleSlotGroups.clear();
+            }
+        }else{
+            addLegacyRuleSlotGroups();
+            saveRuleSlotGroups();
+        }
+    }
+
+    private int nextRuleSlotGroupId(){
+        int next = Math.max(1, Core.settings.getInt(keyRuleSlotGroupNextId, 1));
+        Core.settings.put(keyRuleSlotGroupNextId, next + 1);
+        return next;
+    }
+
+    private void normalizeNextRuleSlotGroupId(){
+        int next = 1;
+        for(RuleSlotGroup group : ruleSlotGroups){
+            next = Math.max(next, group.id + 1);
+        }
+        Core.settings.put(keyRuleSlotGroupNextId, next);
+    }
+
+    private RuleSlotGroup addRuleSlotGroup(){
+        ensureRuleSlotGroupsLoaded();
+        if(ruleSlotGroups.size >= maxRuleSlotGroups){
+            ui.showInfoFade("@rbm.rulegroups.max");
+            return ruleSlotGroups.isEmpty() ? null : ruleSlotGroups.peek();
+        }
+        RuleSlotGroup group = new RuleSlotGroup(nextRuleSlotGroupId(), Core.bundle.format("rbm.rulegroups.new", ruleSlotGroups.size + 1));
+        ruleSlotGroups.add(group);
+        saveRuleSlotGroups();
+        return group;
+    }
+
+    private RuleSlotGroup copyRuleSlotGroup(RuleSlotGroup src){
+        ensureRuleSlotGroupsLoaded();
+        if(src == null) return null;
+        if(ruleSlotGroups.size >= maxRuleSlotGroups){
+            ui.showInfoFade("@rbm.rulegroups.max");
+            return null;
+        }
+        RuleSlotGroup copy = src.copy(nextRuleSlotGroupId(), Core.bundle.format("rbm.rulegroups.copy.name", src.displayName()));
+        int index = ruleSlotGroups.indexOf(src, true);
+        if(index >= 0 && index < ruleSlotGroups.size - 1){
+            ruleSlotGroups.insert(index + 1, copy);
+        }else{
+            ruleSlotGroups.add(copy);
+        }
+        saveRuleSlotGroups();
+        return copy;
+    }
+
+    private void saveRuleSlotGroups(){
+        normalizeNextRuleSlotGroupId();
+        activeRuleSlotGroup = null;
+        ruleSlotGroupLastEval = -9999f;
+        Core.settings.put(keyRuleSlotGroups, exportRuleSlotGroups().toString(Jformat.plain));
+    }
+
+    private Jval exportRuleSlotGroups(){
+        Jval arr = Jval.newArray();
+        for(RuleSlotGroup group : ruleSlotGroups){
+            arr.add(group.toJson());
+        }
+        return arr;
+    }
+
+    private void importRuleSlotGroupsValue(Jval value, boolean save){
+        ruleSlotGroups.clear();
+        if(value != null && value.isArray()){
+            for(Jval child : value.asArray()){
+                if(ruleSlotGroups.size >= maxRuleSlotGroups) break;
+                RuleSlotGroup group = RuleSlotGroup.fromJson(child);
+                if(group != null) ruleSlotGroups.add(group);
+            }
+        }
+
+        normalizeNextRuleSlotGroupId();
+        activeRuleSlotGroup = null;
+        ruleSlotGroupLastEval = -9999f;
+        if(save) saveRuleSlotGroups();
+    }
+
+    private void addLegacyRuleSlotGroups(){
+        ruleSlotGroups.clear();
+
+        if(Core.settings.getBool(keyCondAfterEnabled, false)){
+            addLegacyRuleSlotGroup(
+                Core.bundle.get("rbm.rulegroups.legacy.cond.after"),
+                Core.settings.getString(keyCondAfterExpr, ""),
+                keyCondAfterSlotPrefix
+            );
+        }
+        if(Core.settings.getBool(keyCondEnabled, false)){
+            addLegacyRuleSlotGroup(
+                Core.bundle.get("rbm.rulegroups.legacy.cond.initial"),
+                Core.settings.getString(keyCondInitialExpr, ""),
+                keyCondInitialSlotPrefix
+            );
+        }
+
+        int minutes = Core.settings.getInt(keyTimeMinutes, 0);
+        if(minutes > 0){
+            String timeExpr = "@second >= " + (minutes * 60);
+            addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.time.erekir"), timeExpr + " && planet == " + planetErekir, keyTimeErekirSlotPrefix);
+            addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.time.serpulo"), timeExpr + " && planet == " + planetSerpulo, keyTimeSerpuloSlotPrefix);
+            addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.time.sun"), timeExpr + " && planet == " + planetSun, keyTimeSunSlotPrefix);
+            addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.time"), timeExpr, keyTimeSlotPrefix);
+        }
+
+        addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.planet.erekir"), "planet == " + planetErekir, keyPlanetErekirSlotPrefix);
+        addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.planet.serpulo"), "planet == " + planetSerpulo, keyPlanetSerpuloSlotPrefix);
+        addLegacyRuleSlotGroup(Core.bundle.get("rbm.rulegroups.legacy.planet.sun"), "planet == " + planetSun, keyPlanetSunSlotPrefix);
+    }
+
+    private void addLegacyRuleSlotGroup(String name, String condition, String prefix){
+        if(ruleSlotGroups.size >= maxRuleSlotGroups) return;
+        String expr = condition == null ? "" : condition.trim();
+        if(expr.isEmpty() || !hasAnySlot(prefix)) return;
+        ruleSlotGroups.add(RuleSlotGroup.fromPrefix(nextRuleSlotGroupId(), name, expr, prefix, this));
+    }
+
+    private boolean hasAnySlot(String prefix){
+        for(int i = 0; i < maxSlots; i++){
+            String value = Core.settings.getString(prefix + i, "");
+            if(value != null && !value.trim().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    private String normalizeRuleSlotGroupName(String value, int id){
+        String name = value == null ? "" : value.trim();
+        if(name.isEmpty()) return Core.bundle.format("rbm.rulegroups.fallback", id);
+        return name;
+    }
+
+    private Block ruleSlotGroupBlock(RuleSlotGroup group, int slot){
+        if(group == null || slot < 0 || slot >= maxSlots) return null;
+        String name = group.slots[slot];
+        if(name == null) return null;
+        name = name.trim();
+        return name.isEmpty() ? null : content.block(name);
+    }
+
+    private RuleSlotGroup activeRuleSlotGroup(){
+        if(!Core.settings.getBool(keyProMode, false)) return null;
+        ensureRuleSlotGroupsLoaded();
+        if(ruleSlotGroups.isEmpty()) return null;
+        if(!state.isGame()){
+            activeRuleSlotGroup = null;
+            return null;
+        }
+
+        if(Time.time - ruleSlotGroupLastEval < condEvalIntervalFrames){
+            return activeRuleSlotGroup;
+        }
+        ruleSlotGroupLastEval = Time.time;
+        activeRuleSlotGroup = null;
+
+        for(RuleSlotGroup group : ruleSlotGroups){
+            if(evalRuleSlotGroup(group)){
+                activeRuleSlotGroup = group;
+                break;
+            }
+        }
+        return activeRuleSlotGroup;
+    }
+
+    private boolean evalRuleSlotGroup(RuleSlotGroup group){
+        if(group == null) return false;
+        String src = group.condition == null ? "" : group.condition.trim();
+        if(src.isEmpty()) return false;
+
+        try{
+            if(!src.equals(group.conditionSrc)){
+                group.conditionSrc = src;
+                group.conditionExpr = ConditionParser.parse(src);
+            }
+            return group.conditionExpr != null && group.conditionExpr.eval(this) != 0f;
+        }catch(Throwable ignored){
+            group.conditionExpr = null;
+            return false;
+        }
+    }
+
+    private static class RuleSlotGroup{
+        int id;
+        String name;
+        String condition = "";
+        final String[] slots = new String[maxSlots];
+        String conditionSrc;
+        Expr conditionExpr;
+
+        RuleSlotGroup(int id, String name){
+            this.id = id;
+            this.name = name == null ? "" : name;
+            for(int i = 0; i < maxSlots; i++){
+                slots[i] = "";
+            }
+        }
+
+        String displayName(){
+            String text = name == null ? "" : name.trim();
+            return text.isEmpty() ? "#" + id : text;
+        }
+
+        RuleSlotGroup copy(int id, String name){
+            RuleSlotGroup out = new RuleSlotGroup(id, name);
+            out.condition = condition == null ? "" : condition;
+            for(int i = 0; i < maxSlots; i++){
+                out.slots[i] = slots[i] == null ? "" : slots[i];
+            }
+            return out;
+        }
+
+        Jval toJson(){
+            Jval root = Jval.newObject();
+            root.put("id", id);
+            root.put("name", displayName());
+            root.put("condition", condition == null ? "" : condition);
+            Jval arr = Jval.newArray();
+            for(int i = 0; i < maxSlots; i++){
+                arr.add(slots[i] == null ? "" : slots[i]);
+            }
+            root.put("slots", arr);
+            return root;
+        }
+
+        static RuleSlotGroup fromPrefix(int id, String name, String condition, String prefix, RadialBuildMenuMod mod){
+            RuleSlotGroup group = new RuleSlotGroup(id, name);
+            group.condition = condition == null ? "" : condition;
+            for(int i = 0; i < maxSlots; i++){
+                group.slots[i] = mod.slotName(prefix, i);
+            }
+            return group;
+        }
+
+        static RuleSlotGroup fromJson(Jval value){
+            if(value == null || !value.isObject()) return null;
+            int id = Math.max(1, value.getInt("id", 1));
+            RuleSlotGroup group = new RuleSlotGroup(id, value.getString("name", ""));
+            group.condition = value.getString("condition", "");
+
+            Jval slots = value.get("slots");
+            if(slots != null && slots.isArray()){
+                int count = Math.min(slots.asArray().size, maxSlots);
+                for(int i = 0; i < count; i++){
+                    Jval slot = slots.asArray().get(i);
+                    group.slots[i] = slot == null || slot.isNull() ? "" : slot.asString().trim();
+                }
+            }
+            return group;
+        }
+    }
+
     void showAdvancedDialog(){
         BaseDialog dialog = new BaseDialog("@rbm.advanced.title");
         dialog.addCloseButton();
 
         SettingsMenuDialog.SettingsTable adv = new SettingsMenuDialog.SettingsTable();
 
-        adv.pref(new CollapsiblePlanetSetting(
-            Core.bundle.get("rbm.advanced.planet.erekir"),
-            mindustry.gen.Icon.modeAttack,
-            "rbm-adv-erekir-open",
-            t -> {
-                t.checkPref(keyPlanetErekirEnabled, true);
-                t.pref(new SubHeaderSetting("@rbm.advanced.initial"));
-                for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyPlanetErekirSlotPrefix, "rbm.setting.slot"));
-                t.pref(new SubHeaderSetting("@rbm.advanced.time"));
-                for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyTimeErekirSlotPrefix, "rbm.setting.timeslot"));
-            },
-            this::readHudColor
-        ));
-
-        adv.pref(new CollapsiblePlanetSetting(
-            Core.bundle.get("rbm.advanced.planet.serpulo"),
-            mindustry.gen.Icon.modeAttack,
-            "rbm-adv-serpulo-open",
-            t -> {
-                t.checkPref(keyPlanetSerpuloEnabled, true);
-                t.pref(new SubHeaderSetting("@rbm.advanced.initial"));
-                for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyPlanetSerpuloSlotPrefix, "rbm.setting.slot"));
-                t.pref(new SubHeaderSetting("@rbm.advanced.time"));
-                for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyTimeSerpuloSlotPrefix, "rbm.setting.timeslot"));
-            },
-            this::readHudColor
-        ));
-
-        adv.pref(new CollapsiblePlanetSetting(
-            Core.bundle.get("rbm.advanced.planet.sun"),
-            mindustry.gen.Icon.modeAttack,
-            "rbm-adv-sun-open",
-            t -> {
-                t.checkPref(keyPlanetSunEnabled, true);
-                t.pref(new SubHeaderSetting("@rbm.advanced.initial"));
-                for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyPlanetSunSlotPrefix, "rbm.setting.slot"));
-                t.pref(new SubHeaderSetting("@rbm.advanced.time"));
-                for(int i = 0; i < maxSlots; i++) t.pref(new SlotSetting(i, keyTimeSunSlotPrefix, "rbm.setting.timeslot"));
-            },
-            this::readHudColor
-        ));
+        adv.pref(new RuleSlotGroupsButtonSetting(this));
 
         adv.sliderPref(keyIconScale, 100, 50, 200, 5, v -> v + "%");
         adv.sliderPref(keyBackStrength, 22, 0, 60, 2, v -> v + "%");
@@ -813,8 +1260,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         adv.sliderPref(keyDeadzoneScale, 35, 0, 100, 5, v -> v + "%");
         adv.sliderPref(keyHoverPadding, 12, 0, 30, 1, v -> v + "px");
         adv.sliderPref(keyHoverUpdateFrames, 0, 0, 10, 1, v -> v == 0 ? Core.bundle.get("rbm.advanced.everyframe") : v + "f");
-
-        adv.pref(new ConditionalSwitchSetting(this));
 
         ScrollPane pane = new ScrollPane(adv);
         pane.setFadeScrollBars(false);
@@ -832,6 +1277,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         condInitActive = false;
         condAfterActive = false;
         condLastEval = -9999f;
+        activeRuleSlotGroup = null;
+        ruleSlotGroupLastEval = -9999f;
     }
 
     private class HeaderSetting extends SettingsMenuDialog.SettingsTable.Setting{
@@ -933,6 +1380,39 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 t.add(title).left().growX().minWidth(0f).wrap();
                 t.label(() -> Core.bundle.format("rbm.wheels.count", mod.wheelProfiles().size)).color(Pal.accent).padLeft(8f);
                 t.button("@rbm.wheels.open", Styles.flatt, mod::showWheelProfilesDialog)
+                    .width(150f)
+                    .height(40f)
+                    .padLeft(10f);
+                TextButton advanced = t.button("@setting.rbm-advanced.name", Styles.flatt, mod::showAdvancedDialog)
+                    .width(150f)
+                    .height(40f)
+                    .padLeft(8f)
+                    .get();
+                advanced.update(() -> advanced.setDisabled(!Core.settings.getBool(keyProMode, false)));
+            }).width(prefWidth).padTop(6f);
+            table.row();
+        }
+    }
+
+    private class RuleSlotGroupsButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final RadialBuildMenuMod mod;
+
+        public RuleSlotGroupsButtonSetting(RadialBuildMenuMod mod){
+            super("rbm-rule-slot-groups-open");
+            this.mod = mod;
+            title = Core.bundle.get("rbm.rulegroups.setting");
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            float prefWidth = prefWidth();
+            table.table(Tex.button, t -> {
+                t.left().margin(10f);
+
+                t.image(mindustry.gen.Icon.logic).size(20f).padRight(8f);
+                t.add(title).left().growX().minWidth(0f).wrap();
+                t.label(() -> Core.bundle.format("rbm.rulegroups.count", mod.ruleSlotGroups().size)).color(Pal.accent).padLeft(8f);
+                t.button("@rbm.rulegroups.open", Styles.flatt, mod::showRuleSlotGroupsDialog)
                     .width(190f)
                     .height(40f)
                     .padLeft(10f);
@@ -1476,46 +1956,14 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private Block contextSlotBlock(int slot){
-        // Slot-group toggle mode: ignore all other rule systems and only use the two configured groups.
-        if(Core.settings.getBool(keyToggleSlotGroupsEnabled, false)){
-            int group = Mathf.clamp(Core.settings.getInt(keyToggleSlotGroupState, 0), 0, 1);
-            return slotBlock(group == 0 ? keyToggleSlotGroupASlotPrefix : keyToggleSlotGroupBSlotPrefix, slot);
+        RuleSlotGroup group = activeRuleSlotGroup();
+        if(group != null){
+            return ruleSlotGroupBlock(group, slot);
         }
-
-        boolean pro = Core.settings.getBool(keyProMode, false);
-
-        if(pro){
-            updateConditionalState();
-
-            if(condAfterActive){
-                Block b = slotBlock(keyCondAfterSlotPrefix, slot);
-                if(b != null) return b;
-            }else if(condInitActive){
-                Block b = slotBlock(keyCondInitialSlotPrefix, slot);
-                if(b != null) return b;
-            }
-        }
-
-        String planet = currentPlanetName();
 
         if(timeRuleActive()){
-            if(pro){
-                String tp = timePlanetPrefix(planet);
-                if(!tp.isEmpty()){
-                    Block b = slotBlock(tp, slot);
-                    if(b != null) return b;
-                }
-            }
             Block time = slotBlock(keyTimeSlotPrefix, slot);
             if(time != null) return time;
-        }else{
-            if(pro){
-                String pp = planetPrefix(planet);
-                if(!pp.isEmpty()){
-                    Block b = slotBlock(pp, slot);
-                    if(b != null) return b;
-                }
-            }
         }
 
         return slotBlock(keySlotPrefix, slot);
@@ -1608,42 +2056,125 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         if(name == null) return 0f;
         String n = name.trim().toLowerCase(Locale.ROOT);
         if(n.isEmpty()) return 0f;
+        if(n.startsWith("@")) n = n.substring(1);
+
+        if("true".equals(n)) return 1f;
+        if("false".equals(n)) return 0f;
 
         if("second".equals(n)){
             return (float)(state.tick / 60.0);
         }
 
-        if("unitcount".equals(n)){
-            int count = 0;
-            for(Unit u : Groups.unit){
-                if(u != null && u.team == player.team()){
-                    count++;
-                }
+        if("planet".equals(n)){
+            return symbolValue(currentPlanetName());
+        }
+
+        if("thisteam".equals(n)){
+            return player == null || player.team() == null ? 0f : symbolValue(player.team().name);
+        }
+
+        int dot = n.indexOf('.');
+        if(dot > 0 && dot < n.length() - 1){
+            Team team = resolveTeam(n.substring(0, dot));
+            if(team != null){
+                return teamValue(team, n.substring(dot + 1));
             }
-            return count;
+        }
+
+        if("unitcount".equals(n)){
+            return countUnits(player == null ? null : player.team(), null);
         }
 
         if(n.endsWith("count") && n.length() > 5){
             String unitName = n.substring(0, n.length() - 5);
             UnitType type = content.unit(unitName);
             if(type != null){
-                int count = 0;
-                for(Unit u : Groups.unit){
-                    if(u != null && u.team == player.team() && u.type == type){
-                        count++;
-                    }
-                }
-                return count;
+                return countUnits(player == null ? null : player.team(), type);
             }
         }
 
         Item item = content.item(n);
         if(item != null){
             // Uses the "main core" item module; fast + stable.
-            return player.team().items().get(item);
+            return player == null || player.team() == null ? 0f : player.team().items().get(item);
+        }
+
+        Team team = resolveTeam(n);
+        if(team != null){
+            return symbolValue(team.name);
+        }
+
+        return symbolValue(n);
+    }
+
+    private float teamValue(Team team, String member){
+        if(team == null || member == null) return 0f;
+        String n = member.trim().toLowerCase(Locale.ROOT);
+        if(n.isEmpty()) return 0f;
+
+        if("unitcount".equals(n)){
+            return countUnits(team, null);
+        }
+
+        Item item = content.item(n);
+        if(item != null){
+            return team.items().get(item);
+        }
+
+        UnitType type = content.unit(n);
+        if(type != null){
+            return countUnits(team, type);
+        }
+
+        if(n.endsWith("count") && n.length() > 5){
+            UnitType counted = content.unit(n.substring(0, n.length() - 5));
+            if(counted != null){
+                return countUnits(team, counted);
+            }
         }
 
         return 0f;
+    }
+
+    private int countUnits(Team team, UnitType type){
+        if(team == null) return 0;
+        int count = 0;
+        for(Unit u : Groups.unit){
+            if(u != null && u.team == team && (type == null || u.type == type)){
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private Team resolveTeam(String raw){
+        if(raw == null) return null;
+        String n = raw.trim().toLowerCase(Locale.ROOT);
+        if(n.isEmpty()) return null;
+        if("thisteam".equals(n) || "self".equals(n) || "own".equals(n)){
+            return player == null ? null : player.team();
+        }
+        for(Team team : Team.all){
+            if(team != null && team.name != null && team.name.equalsIgnoreCase(n)){
+                return team;
+            }
+        }
+        if(n.startsWith("team#")){
+            try{
+                int id = Integer.parseInt(n.substring(5));
+                return id >= 0 && id < Team.all.length ? Team.all[id] : null;
+            }catch(Throwable ignored){
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private float symbolValue(String raw){
+        if(raw == null) return 0f;
+        String n = raw.trim().toLowerCase(Locale.ROOT);
+        if(n.isEmpty()) return 0f;
+        return n.hashCode();
     }
 
     private static String defaultHudColorHex(){
@@ -1747,8 +2278,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
     private String exportConfig(){
         ensureWheelProfilesLoaded();
+        ensureRuleSlotGroupsLoaded();
         Jval root = Jval.newObject();
-        root.put("schema", 5);
+        root.put("schema", 6);
 
         root.put("hudScale", Core.settings.getInt(keyHudScale, 100));
         root.put("hudAlpha", Core.settings.getInt(keyHudAlpha, 100));
@@ -1780,6 +2312,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         root.put("condAfterExpr", Core.settings.getString(keyCondAfterExpr, ""));
         root.put("condInitialSlots", exportSlots(keyCondInitialSlotPrefix));
         root.put("condAfterSlots", exportSlots(keyCondAfterSlotPrefix));
+        root.put("activeWheelProfileId", Core.settings.getInt(keyActiveWheelProfileId, 0));
 
         root.put("toggleSlotGroupsEnabled", Core.settings.getBool(keyToggleSlotGroupsEnabled, false));
         root.put("toggleSlotGroupState", Mathf.clamp(Core.settings.getInt(keyToggleSlotGroupState, 0), 0, 1));
@@ -1796,6 +2329,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         root.put("planetSlotsSerpulo", exportSlots(keyPlanetSerpuloSlotPrefix));
         root.put("planetSlotsSun", exportSlots(keyPlanetSunSlotPrefix));
         root.put("wheelProfiles", exportWheelProfiles());
+        root.put("ruleSlotGroups", exportRuleSlotGroups());
 
         return root.toString(Jformat.plain);
     }
@@ -1844,6 +2378,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             if(root.has("condAfterExpr")) Core.settings.put(keyCondAfterExpr, root.getString("condAfterExpr", ""));
             if(root.has("condInitialSlots")) importSlots(root.get("condInitialSlots"), keyCondInitialSlotPrefix);
             if(root.has("condAfterSlots")) importSlots(root.get("condAfterSlots"), keyCondAfterSlotPrefix);
+            if(root.has("activeWheelProfileId")) Core.settings.put(keyActiveWheelProfileId, Math.max(0, root.getInt("activeWheelProfileId", 0)));
 
             if(root.has("toggleSlotGroupsEnabled")) Core.settings.put(keyToggleSlotGroupsEnabled, root.getBool("toggleSlotGroupsEnabled", false));
             if(root.has("toggleSlotGroupState")) Core.settings.put(keyToggleSlotGroupState, Mathf.clamp(root.getInt("toggleSlotGroupState", 0), 0, 1));
@@ -1865,6 +2400,14 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 wheelProfilesLoaded = true;
                 addLegacyDefaultWheelProfiles();
                 saveWheelProfiles();
+            }
+            if(root.has("ruleSlotGroups")){
+                ruleSlotGroupsLoaded = true;
+                importRuleSlotGroupsValue(root.get("ruleSlotGroups"), true);
+            }else{
+                ruleSlotGroupsLoaded = true;
+                addLegacyRuleSlotGroups();
+                saveRuleSlotGroups();
             }
 
             return true;
@@ -2069,15 +2612,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     centerY = getHeight() / 2f;
                 }
 
-                if(activeRadialBind && Core.settings.getBool(keyToggleSlotGroupsEnabled, false) && Core.input.keyTap(toggleSlotGroup)){
-                    mod.toggleSlotGroupNow(true);
-                    for(int i = 0; i < slots.length; i++){
-                        slots[i] = mod.contextSlotBlock(i);
-                    }
-                    rebuildActiveSlotLists();
-                    hovered = findHovered();
-                }
-
                 updateHovered();
 
                 if(activeRadialBind && Core.input.keyRelease(radialMenu) || !activeRadialBind && activeKey != null && Core.input.keyRelease(activeKey)){
@@ -2088,9 +2622,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     close();
                 }
             }else{
-                if(Core.settings.getBool(keyToggleSlotGroupsEnabled, false) && Core.input.keyTap(toggleSlotGroup)){
-                    mod.toggleSlotGroupNow(true);
-                }
                 if(mobile) return;
                 syncPassivePreview();
                 WheelProfile profile = mod.tappedWheelProfile();
@@ -2295,9 +2826,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 centerY = Core.input.mouseY();
             }
 
-            for(int i = 0; i < slots.length; i++){
-                slots[i] = mod.contextSlotBlock(i);
-            }
+            fillSlots(mod.activeWheelProfile());
 
             rebuildActiveSlotLists();
             hovered = -1;
@@ -2307,6 +2836,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             active = true;
             activeRadialBind = true;
             activeKey = null;
+            mod.setActiveWheelProfile(null);
             if(Core.settings.getBool(keyCenterScreen, false)){
                 centerX = getWidth() / 2f;
                 centerY = getHeight() / 2f;
@@ -2315,9 +2845,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 centerY = Core.input.mouseY();
             }
 
-            for(int i = 0; i < slots.length; i++){
-                slots[i] = mod.contextSlotBlock(i);
-            }
+            fillSlots(null);
 
             rebuildActiveSlotLists();
 
@@ -2329,6 +2857,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             active = true;
             activeRadialBind = false;
             activeKey = profile.key;
+            mod.setActiveWheelProfile(profile);
             if(Core.settings.getBool(keyCenterScreen, false)){
                 centerX = getWidth() / 2f;
                 centerY = getHeight() / 2f;
@@ -2337,9 +2866,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                 centerY = Core.input.mouseY();
             }
 
-            for(int i = 0; i < slots.length; i++){
-                slots[i] = mod.wheelSlotBlock(profile, i);
-            }
+            fillSlots(profile);
 
             rebuildActiveSlotLists();
 
@@ -2357,10 +2884,14 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             centerX = getWidth() / 2f;
             centerY = getHeight() / 2f;
 
-            for(int i = 0; i < slots.length; i++){
-                slots[i] = mod.contextSlotBlock(i);
-            }
+            fillSlots(null);
             rebuildActiveSlotLists();
+        }
+
+        private void fillSlots(WheelProfile profile){
+            for(int i = 0; i < slots.length; i++){
+                slots[i] = profile == null ? mod.contextSlotBlock(i) : mod.wheelSlotBlock(profile, i);
+            }
         }
 
         private void close(){

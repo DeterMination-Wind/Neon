@@ -5,7 +5,6 @@ import arc.struct.IntMap;
 import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.Time;
-import bektools.profiler.NeonProfiler;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -119,7 +118,6 @@ public final class EmbeddingIndex implements AutoCloseable{
     public void rebuildAsync(){
         if(!available) return;
         executor.execute(() -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "Async", "embeddingRebuild", NeonProfiler.threadAsync)){
             try{
                 rebuildAll();
             }catch(Throwable t){
@@ -129,7 +127,6 @@ public final class EmbeddingIndex implements AutoCloseable{
                 status = failureReason;
                 Log.err("SPDB: failed rebuilding embedding index.", t);
             }
-            }
         });
     }
 
@@ -137,7 +134,6 @@ public final class EmbeddingIndex implements AutoCloseable{
         if(!available || entryId <= 0 || entry == null || entry.message == null || entry.message.trim().isEmpty()) return;
 
         executor.execute(() -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "Async", "embeddingAddEntry", NeonProfiler.threadAsync)){
             try{
                 float[] vector = engine.embed(entry.message);
                 synchronized(vectors){
@@ -153,12 +149,10 @@ public final class EmbeddingIndex implements AutoCloseable{
             }catch(Throwable t){
                 Log.err("SPDB: failed adding embedding for chat entry @.", entryId, t);
             }
-            }
         });
     }
 
     public Seq<SearchResult> search(String query, int limit){
-        try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "Async", "embeddingSearch", NeonProfiler.threadAsync)){
         Seq<SearchResult> out = new Seq<>();
         if(!available || !ready) return out;
 
@@ -195,16 +189,13 @@ public final class EmbeddingIndex implements AutoCloseable{
             out.add(hit);
         }
         return out;
-        }
     }
 
     public void flushIfDirty(){
         if(!available || !dirty) return;
         executor.execute(() -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("SPDB", "Async", "embeddingFlush", NeonProfiler.threadAsync)){
             dirty = false;
             lastPersistAt = Time.millis();
-            }
         });
     }
 

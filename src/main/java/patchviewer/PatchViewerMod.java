@@ -60,8 +60,6 @@ import mindustry.world.meta.StatValue;
 import mindustry.world.meta.StatValues;
 import mindustry.world.meta.Stats;
 
-import bektools.profiler.NeonProfiler;
-
 import java.lang.reflect.Field;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -70,6 +68,7 @@ import java.util.regex.Pattern;
 public class PatchViewerMod extends Mod{
     /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
+
 
     private static final float minContentWidth = 500f;
     private static final float maxMeasuredContentWidth = 1400f;
@@ -129,9 +128,7 @@ public class PatchViewerMod extends Mod{
     public PatchViewerMod(){
         setupDefaults();
         Events.on(EventType.ClientLoadEvent.class, event -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PV", "UI", "installDialogHook", NeonProfiler.threadMain)){
-                installDialogHook();
-            }
+            installDialogHook();
             refreshSettingsBackupStorage();
             registerKeybinds();
             tryInitPlacementReflection();
@@ -158,8 +155,9 @@ public class PatchViewerMod extends Mod{
             if(settingsAdded) return;
             settingsAdded = true;
             if(Vars.ui == null || Vars.ui.settings == null) return;
-            if(bekBundled) return;
-            Vars.ui.settings.addCategory("@settings.patchviewer", Icon.settingsSmall, this::bekBuildSettings);
+        if(bekBundled) return;
+
+            if(!bekBundled) Vars.ui.settings.addCategory("@settings.patchviewer", Icon.settingsSmall, this::bekBuildSettings);
         });
     }
 
@@ -2708,55 +2706,16 @@ public class PatchViewerMod extends Mod{
     private void buildSettings(SettingsMenuDialog.SettingsTable table){
         table.defaults().growX().pad(4f).left();
 
-        table.table(row -> {
-            row.left();
-            CheckBox box = new CheckBox(bundle("patchviewer.settings.enabled", "Enable PatchViewer"));
-            box.setChecked(isPatchViewerEnabled());
-            box.changed(() -> Core.settings.put(keyEnabled, box.isChecked()));
-            row.add(box).left();
-        }).growX().fillX();
-        table.row();
-
-        table.table(row -> {
-            row.left().defaults().left();
-            row.add(bundle("patchviewer.settings.quick-mode", "Quick display mode")).width(210f).wrap().padRight(8f);
-            CheckBox cursor = new CheckBox(modeLabel(quickModeHud));
-            CheckBox buildInfo = new CheckBox(modeLabel(quickModeBuildInfo));
-            boolean[] updating = {false};
-            Runnable refresh = () -> {
-                updating[0] = true;
-                String mode = readQuickDisplayMode();
-                cursor.setChecked(quickModeHud.equals(mode));
-                buildInfo.setChecked(quickModeBuildInfo.equals(mode));
-                updating[0] = false;
-            };
-            cursor.changed(() -> {
-                if(updating[0]) return;
-                Core.settings.put(keyQuickDisplayMode, cursor.isChecked() ? quickModeHud : quickModeBuildInfo);
-                refresh.run();
-            });
-            buildInfo.changed(() -> {
-                if(updating[0]) return;
-                Core.settings.put(keyQuickDisplayMode, buildInfo.isChecked() ? quickModeBuildInfo : quickModeHud);
-                refresh.run();
-            });
-            refresh.run();
-            row.add(cursor).padRight(18f);
-            row.add(buildInfo);
-        }).growX().fillX();
-        table.row();
-
-        table.sliderPref(keyQuickHudOpacity, 70, 20, 100, 1, value -> bundle("patchviewer.settings.hud-opacity", "HUD opacity") + ": " + value + "%");
-        table.sliderPref(keyQuickHudWidth, 420, 100, 900, 10, value -> bundle("patchviewer.settings.hud-width", "HUD width") + ": " + value + "px");
-        addColorSettingRow(table, "patchviewer.settings.hud-background", "HUD background color", keyQuickHudBackgroundColor, defaultQuickHudBackgroundColor);
-
-        table.add("[lightgray]" + bundle("patchviewer.settings.color-hint", "Colors support named values like gold and hex values like #ffd700 or ffd700.") + "[]").left().wrap().growX();
-        table.row();
-
-        addColorSettingRow(table, "patchviewer.settings.removed", "Removed entry color", keyRemovedColor, defaultRemovedColor);
-        addColorSettingRow(table, "patchviewer.settings.modified-old", "Modified entry color (before)", keyModifiedOldColor, defaultModifiedOldColor);
-        addColorSettingRow(table, "patchviewer.settings.modified-new", "Modified entry color (after)", keyModifiedNewColor, defaultModifiedNewColor);
-        addColorSettingRow(table, "patchviewer.settings.added", "Added entry color", keyAddedColor, defaultAddedColor);
+        table.checkPref(keyEnabled, true);
+        table.pref(new QuickDisplayModeSetting());
+        table.sliderPref(keyQuickHudOpacity, 70, 20, 100, 1, value -> value + "%");
+        table.sliderPref(keyQuickHudWidth, 420, 100, 900, 10, value -> value + "px");
+        addColorSetting(table, "patchviewer.settings.hud-background", "HUD background color", keyQuickHudBackgroundColor, defaultQuickHudBackgroundColor);
+        table.pref(new MessageSetting("patchviewer-color-hint", "patchviewer.settings.color-hint", "Colors support named values like gold and hex values like #ffd700 or ffd700."));
+        addColorSetting(table, "patchviewer.settings.removed", "Removed entry color", keyRemovedColor, defaultRemovedColor);
+        addColorSetting(table, "patchviewer.settings.modified-old", "Modified entry color (before)", keyModifiedOldColor, defaultModifiedOldColor);
+        addColorSetting(table, "patchviewer.settings.modified-new", "Modified entry color (after)", keyModifiedNewColor, defaultModifiedNewColor);
+        addColorSetting(table, "patchviewer.settings.added", "Added entry color", keyAddedColor, defaultAddedColor);
     }
 
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
@@ -2764,46 +2723,141 @@ public class PatchViewerMod extends Mod{
         buildSettings(table);
     }
 
-    private void addColorSettingRow(SettingsMenuDialog.SettingsTable table, String titleKey, String titleFallback, String key, String defaultValue){
-        table.table(row -> {
-            row.left().defaults().left();
 
-            row.add(bundle(titleKey, titleFallback)).width(210f).wrap().padRight(8f);
+    private void addColorSetting(SettingsMenuDialog.SettingsTable table, String titleKey, String titleFallback, String key, String defaultValue){
+        table.pref(new ColorSetting(key, titleKey, titleFallback, defaultValue));
+    }
 
-            TextField field = new TextField(readColorSetting(key, defaultValue));
-            field.setMessageText(defaultValue);
-            row.add(field).minWidth(180f).growX().maxWidth(280f);
+    private String settingTitle(String key, String fallbackKey, String fallback){
+        String defaultTitle = bundle(fallbackKey, fallback);
+        return Core.bundle == null ? defaultTitle : Core.bundle.get("setting." + key + ".name", defaultTitle);
+    }
 
-            Image preview = new Image(Tex.whiteui);
-            preview.setColor(readColorValue(key, defaultValue));
-            row.add(preview).size(26f).padLeft(8f).padRight(8f);
+    private class QuickDisplayModeSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        QuickDisplayModeSetting(){
+            super(keyQuickDisplayMode);
+            title = settingTitle(name, "patchviewer.settings.quick-mode", "Quick display mode");
+        }
 
-            Label sample = new Label("");
-            sample.setColor(Color.white);
-            row.add(sample).minWidth(64f).left();
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            Cell<Table> cell = table.table(row -> {
+                row.left().defaults().left();
+                row.add(title).width(210f).wrap().padRight(8f);
 
-            Runnable refresh = () -> {
-                String normalized = normalizeColorSpec(field.getText());
-                if(normalized != null){
-                    Core.settings.put(key, normalized);
-                    preview.setColor(parseColorSpec(normalized, readColorValue(key, defaultValue)));
-                    sample.setText(colorTag(normalized) + bundle("patchviewer.settings.preview", "Preview") + "[]");
-                }else{
-                    preview.setColor(readColorValue(key, defaultValue));
-                    sample.setText("[lightgray]" + bundle("patchviewer.settings.invalid", "Invalid") + "[]");
-                }
-            };
+                CheckBox cursor = new CheckBox(modeLabel(quickModeHud));
+                CheckBox buildInfo = new CheckBox(modeLabel(quickModeBuildInfo));
+                boolean[] updating = {false};
+                Runnable refresh = () -> {
+                    updating[0] = true;
+                    String mode = readQuickDisplayMode();
+                    cursor.setChecked(quickModeHud.equals(mode));
+                    buildInfo.setChecked(quickModeBuildInfo.equals(mode));
+                    updating[0] = false;
+                };
 
-            field.changed(refresh);
-            refresh.run();
+                cursor.changed(() -> {
+                    if(updating[0]) return;
+                    Core.settings.put(name, cursor.isChecked() ? quickModeHud : quickModeBuildInfo);
+                    refresh.run();
+                });
+                buildInfo.changed(() -> {
+                    if(updating[0]) return;
+                    Core.settings.put(name, buildInfo.isChecked() ? quickModeBuildInfo : quickModeHud);
+                    refresh.run();
+                });
 
-            row.button(bundle("patchviewer.settings.reset", "Reset"), Styles.flatt, () -> {
-                field.setText(defaultValue);
-                Core.settings.put(key, readColorSetting(key, defaultValue));
                 refresh.run();
-            }).height(42f).padLeft(8f);
-        }).growX().fillX();
-        table.row();
+                row.add(cursor).padRight(18f);
+                row.add(buildInfo);
+            }).growX().fillX();
+
+            addDesc(cell.get());
+            table.row();
+        }
+    }
+
+    private class MessageSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final String messageKey;
+        private final String messageFallback;
+
+        MessageSetting(String name, String messageKey, String messageFallback){
+            super(name);
+            title = null;
+            this.messageKey = messageKey;
+            this.messageFallback = messageFallback;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            table.add("[lightgray]" + bundle(messageKey, messageFallback) + "[]").left().wrap().growX();
+            table.row();
+        }
+    }
+
+    private class ColorSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final String defaultValue;
+
+        ColorSetting(String name, String titleKey, String titleFallback, String defaultValue){
+            super(name);
+            title = settingTitle(name, titleKey, titleFallback);
+            this.defaultValue = defaultValue;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            Cell<Table> cell = table.table(row -> {
+                row.left().defaults().left();
+
+                row.add(title).width(210f).wrap().padRight(8f);
+
+                TextField field = new TextField(readColorSetting(name, defaultValue));
+                field.setMessageText(defaultValue);
+                row.add(field).minWidth(180f).growX().maxWidth(280f);
+
+                Image preview = new Image(Tex.whiteui);
+                preview.setColor(readColorValue(name, defaultValue));
+                row.add(preview).size(26f).padLeft(8f).padRight(8f);
+
+                Label sample = new Label("");
+                sample.setColor(Color.white);
+                row.add(sample).minWidth(64f).left();
+
+                boolean[] updating = {false};
+                Runnable refresh = () -> {
+                    String normalized = normalizeColorSpec(field.getText());
+                    if(normalized != null){
+                        if(!updating[0]){
+                            Core.settings.put(name, normalized);
+                        }
+                        preview.setColor(parseColorSpec(normalized, readColorValue(name, defaultValue)));
+                        sample.setText(colorTag(normalized) + bundle("patchviewer.settings.preview", "Preview") + "[]");
+                    }else{
+                        preview.setColor(readColorValue(name, defaultValue));
+                        sample.setText("[lightgray]" + bundle("patchviewer.settings.invalid", "Invalid") + "[]");
+                    }
+                };
+
+                field.changed(() -> {
+                    if(updating[0]) return;
+                    refresh.run();
+                });
+                updating[0] = true;
+                refresh.run();
+                updating[0] = false;
+
+                row.button(bundle("patchviewer.settings.reset", "Reset"), Styles.flatt, () -> {
+                    Core.settings.remove(name);
+                    updating[0] = true;
+                    field.setText(readColorSetting(name, defaultValue));
+                    refresh.run();
+                    updating[0] = false;
+                }).height(42f).padLeft(8f);
+            }).growX().fillX();
+
+            addDesc(cell.get());
+            table.row();
+        }
     }
 
     private String bundle(String key, String fallback){

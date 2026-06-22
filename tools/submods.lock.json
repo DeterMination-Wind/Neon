@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "generatedAtUtc": "2026-06-22T11:24:25Z",
+  "generatedAtUtc": "2026-06-22T15:40:40Z",
   "mods": {
     "pgmm": {
-      "head": "47c5d468812cae5ca7569db181c739735f80ba74",
+      "head": "78b2ab22476d2c73581c18aded0f10779b131060",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Power-Grid-Minimap-repo-clone"
     },
     "sp": {
@@ -19,7 +19,7 @@
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\betterMiniMap"
     },
     "spdb": {
-      "head": "1237fe0aeb03f467b8b21e8cb024b270debed20b",
+      "head": "6f5dcce59374cf9249c350ef87292d1aeaedb523",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\ServerPlayerDataBase"
     },
     "bme": {
@@ -39,7 +39,7 @@
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\betterHotKey"
     },
     "mu": {
-      "head": "nogit-7431034969493fb6fd1b192b41a64341528d7af1",
+      "head": "nogit-24d798870967275ab795b006b7be474b895e0366",
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\modUpdater"
     },
     "wutb": {

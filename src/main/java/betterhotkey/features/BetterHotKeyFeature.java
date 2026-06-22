@@ -25,7 +25,6 @@ import arc.struct.Seq;
 import arc.util.Strings;
 import arc.util.Time;
 import arc.util.Align;
-import bektools.profiler.NeonProfiler;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.content.Blocks;
@@ -475,7 +474,6 @@ public class BetterHotKeyFeature {
     }
 
     private static void updateCustomHotkeys() {
-        try(NeonProfiler.Scope scope = NeonProfiler.timeDetail("BHK", "Update", "updateCustomHotkeys", NeonProfiler.threadMain)){
         if (state == null || !state.isGame() || player == null || control == null || control.input == null) {
             pendingFirst = null;
             return;
@@ -522,7 +520,6 @@ public class BetterHotKeyFeature {
             }
             return;
         }
-        }
     }
 
     private static void queueSelectBlock(Block block) {
@@ -534,7 +531,6 @@ public class BetterHotKeyFeature {
     }
 
     private static void remapTerrainNumberHotkeysAfterVanilla() {
-        try(NeonProfiler.Scope scope = NeonProfiler.timeDetail("BHK", "Update", "remapTerrainNumbers", NeonProfiler.threadMain)){
         if (state == null || !state.isGame() || player == null || control == null || control.input == null) return;
         if (ui == null || ui.hudfrag == null || !ui.hudfrag.shown) return;
         if (ui.chatfrag != null && ui.chatfrag.shown()) return;
@@ -599,11 +595,9 @@ public class BetterHotKeyFeature {
             deferredRemapBlock = remapped;
         } catch (Throwable ignored) {
         }
-        }
     }
 
     private static void updateBuildMenuOverlay() {
-        try(NeonProfiler.Scope scope = NeonProfiler.timeDetail("BHK", "UI", "updateBuildMenuOverlay", NeonProfiler.threadMain)){
         if (ui == null || ui.hudfrag == null || ui.hudfrag.blockfrag == null) return;
         if (state == null || !state.isGame()) return;
 
@@ -709,7 +703,6 @@ public class BetterHotKeyFeature {
 
             bhkOverlay.visible = hostedByOverlayUI;
         } catch (Throwable ignored) {
-        }
         }
     }
 
@@ -1504,7 +1497,6 @@ public class BetterHotKeyFeature {
     }
 
     private static void updateBuildMenuHotkeyBadges() {
-        try(NeonProfiler.Scope scope = NeonProfiler.timeDetail("BHK", "UI", "updateHotkeyBadges", NeonProfiler.threadMain)){
         if (ui == null || ui.hudfrag == null || ui.hudfrag.blockfrag == null) return;
         if (state == null || !state.isGame()) return;
 
@@ -1543,7 +1535,6 @@ public class BetterHotKeyFeature {
                 badge.visible = true;
             }
         } catch (Throwable ignored) {
-        }
         }
     }
 

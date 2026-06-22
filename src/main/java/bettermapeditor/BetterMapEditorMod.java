@@ -9,8 +9,6 @@ import mindustry.mod.Mod;
 import static mindustry.Vars.ui;
 
 public class BetterMapEditorMod extends Mod {
-    public static boolean bekBundled = false;
-
     private static boolean settingsAdded;
 
     @Override
@@ -18,12 +16,15 @@ public class BetterMapEditorMod extends Mod {
         DraggableMirrorAxisFeature.init();
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
-            if (bekBundled) return;
+            GithubUpdateCheck.applyDefaults();
+            GithubUpdateCheck.checkOnce();
 
             if (settingsAdded || ui == null || ui.settings == null) return;
             settingsAdded = true;
 
             ui.settings.addCategory("@settings.bettermapeditor", Icon.map, table -> {
+                table.checkPref(GithubUpdateCheck.enabledKey(), true);
+                table.checkPref(GithubUpdateCheck.showDialogKey(), true);
             });
         });
     }

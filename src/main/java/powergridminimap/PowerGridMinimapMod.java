@@ -45,7 +45,6 @@ import arc.util.Strings;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
-import bektools.profiler.NeonProfiler;
 import mindustry.content.Blocks;
 import mindustry.core.UI;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -196,6 +195,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Core.settings.defaults(keyPowerTableBgAlpha, 70);
             Core.settings.defaults(keyUpdateWaitTenths, 10);
             Core.settings.defaults(keyIgnoreAreaTiles, 0);
+            GithubUpdateCheck.applyDefaults();
 
             registerSettings();
             refreshMarkerColor();
@@ -206,6 +206,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Time.runTask(10f, this::installConsoleApi);
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensurePowerTableAttached);
+            GithubUpdateCheck.checkOnce();
         });
 
         Events.on(WorldLoadEvent.class, e -> {
@@ -224,7 +225,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         Events.on(ConfigEvent.class, e -> cache.invalidateAll());
 
         Events.run(Trigger.update, () -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PGMM", "Update", "update", NeonProfiler.threadMain)){
             if(!Core.settings.getBool(keyEnabled, true)) return;
 
             //the HUD may be rebuilt; keep trying to attach.
@@ -253,22 +253,13 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
             splitWatcher.update();
             rescueAdvisor.update();
-            }
         });
 
         //draw rescue hints directly in the main game view.
-        Events.run(Trigger.draw, () -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PGMM", "Draw", "worldRescue", NeonProfiler.threadMain)){
-                drawWorldRescueOverlay();
-            }
-        });
+        Events.run(Trigger.draw, this::drawWorldRescueOverlay);
 
         //draw on top of the full-screen minimap (opened via M).
-        Events.run(Trigger.uiDrawEnd, () -> {
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("PGMM", "UI", "fullMinimap", NeonProfiler.threadMain)){
-                drawFullMinimapOverlay();
-            }
-        });
+        Events.run(Trigger.uiDrawEnd, this::drawFullMinimapOverlay);
     }
 
     private void installConsoleApi(){
@@ -299,7 +290,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             if(player != null) player.sendMessage("[accent]PGMM rescan requested.");
         });
 
-        handler.<Player>register("pgmm-mi2", "[on/off/refresh]", "MI2 minimap overlay control (refresh = re-detect + reattach).", (args, player) -> {
+        handler.<Player>register("pgmm-mi2", "[on/off/refresh]", "MI2U minimap overlay control (refresh = re-detect + reattach).", (args, player) -> {
             String mode = args.length == 0 ? "refresh" : args[0].toLowerCase();
 
             switch(mode){
@@ -318,7 +309,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
 
             refreshMi2Overlay("refresh".equals(mode));
-            if(player != null) player.sendMessage("[accent]PGMM MI2 overlay: " + mode + "[]");
+            if(player != null) player.sendMessage("[accent]PGMM MI2U overlay: " + mode + "[]");
         });
     }
 
@@ -339,9 +330,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             return "PGMM console API:\n" +
                 "  pgmm.restart()     - restart PGMM (clear cache + reattach overlays)\n" +
                 "  pgmm.rescan()      - rescan grids immediately (ignore update delay)\n" +
-                "  pgmm.mi2Refresh()  - re-detect MI2 + reattach overlay (if enabled)\n" +
-                "  pgmm.mi2On()       - enable MI2 overlay + refresh\n" +
-                "  pgmm.mi2Off()      - disable MI2 overlay + detach";
+                "  pgmm.mi2Refresh()  - re-detect MI2U + reattach overlay (if enabled)\n" +
+                "  pgmm.mi2On()       - enable MI2U overlay + refresh\n" +
+                "  pgmm.mi2Off()      - disable MI2U overlay + detach";
         }
 
         public String restart(){
@@ -356,19 +347,19 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
         public String mi2Refresh(){
             mod.refreshMi2Overlay(true);
-            return "PGMM MI2 overlay refresh requested.";
+            return "PGMM MI2U overlay refresh requested.";
         }
 
         public String mi2On(){
             Core.settings.put(keyDrawOnMi2Minimap, true);
             mod.refreshMi2Overlay(true);
-            return "PGMM MI2 overlay enabled.";
+            return "PGMM MI2U overlay enabled.";
         }
 
         public String mi2Off(){
             Core.settings.put(keyDrawOnMi2Minimap, false);
             mod.refreshMi2Overlay(false);
-            return "PGMM MI2 overlay disabled.";
+            return "PGMM MI2U overlay disabled.";
         }
     }
 
@@ -430,9 +421,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         cache.updateFullOverlay();
     }
 
-    /** Re-detects MI2 and reattaches the MI2 overlay (if enabled). */
+    /** Re-detects MI2U and reattaches the MI2U overlay (if enabled). */
     public void refreshMi2Overlay(boolean forceRedetect){
-        Log.info("PGMM: MI2 overlay refresh requested (forceRedetect=@).", forceRedetect);
+        Log.info("PGMM: MI2U overlay refresh requested (forceRedetect=@).", forceRedetect);
         if(forceRedetect){
             mi2.tryInit();
         }
@@ -498,6 +489,10 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.performance", "Performance"), Icon.wrenchSmall));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyUpdateWaitTenths, 10, 0, 50, 1, Icon.refreshSmall, v -> Strings.autoFixed(v / 10f, 1) + "s", null));
+
+            table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.update", "Update"), Icon.refreshSmall));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
     }
 
 
@@ -1016,43 +1011,47 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
     /** Optional integration with MI2-Utilities-Java minimap window. Uses reflection so missing MI2 won't crash. */
     private static class Mi2MinimapIntegration{
+        private static final String minimapClassName = "mi2u.ui.MinimapMindow";
+
         private boolean available = false;
 
-        private ClassLoader mi2Loader;
         private java.lang.reflect.Field minimapField;
         private java.lang.reflect.Field rectField;
+        private java.lang.reflect.Field zoomField;
+        private java.lang.reflect.Field baseSizeField;
         private java.lang.reflect.Method setRectMethod;
         private float nextInitAttempt = 0f;
 
         void tryInit(){
             try{
                 available = false;
-                //MI2 is a mod -> loaded in a separate classloader; find its loader and load classes through it.
-                Class<?> mm = null;
-                if(mindustry.Vars.mods != null){
-                    for(Mods.LoadedMod mod : mindustry.Vars.mods.list()){
-                        if(mod == null || mod.loader == null) continue;
-                        try{
-                            mm = Class.forName("mi2u.ui.MinimapMindow", false, mod.loader);
-                            mi2Loader = mod.loader;
-                            break;
-                        }catch(Throwable ignored){
-                        }
-                    }
-                }
+                minimapField = null;
+                rectField = null;
+                zoomField = null;
+                baseSizeField = null;
+                setRectMethod = null;
+
+                // MI2U is a separate Java mod, so resolve its classes through each loaded mod classloader.
+                Class<?> mm = findMi2UClass();
                 if(mm == null){
-                    throw new ClassNotFoundException("mi2u.ui.MinimapMindow");
+                    throw new ClassNotFoundException(minimapClassName);
                 }
-                minimapField = mm.getField("m"); // public static Minimap2 m
+
+                minimapField = findField(mm, "m"); // public static Minimap2 m
+                if(minimapField == null) throw new NoSuchFieldException("m");
                 Object minimap = minimapField.get(null);
-                if(minimap == null) throw new IllegalStateException("MI2 minimap not initialized");
+                if(!(minimap instanceof Element)) throw new IllegalStateException("MI2U minimap not initialized");
 
                 Class<?> minimapType = minimap.getClass();
-                rectField = minimapType.getField("rect"); // public Rect rect
-                setRectMethod = minimapType.getMethod("setRect");
+                rectField = findField(minimapType, "rect"); // public Rect rect
+                if(rectField == null) throw new NoSuchFieldException("rect");
+                zoomField = findField(minimapType, "zoom"); // public float zoom
+                baseSizeField = findField(minimapType, "baseSize"); // private static final float baseSize
+                setRectMethod = findNoArgMethod(minimapType, "setRect");
+                if(setRectMethod == null) throw new NoSuchMethodException("setRect");
 
                 available = true;
-                Log.info("PGMM: MI2 minimap detected; overlay integration enabled.");
+                Log.info("PGMM: MI2U minimap detected; overlay integration enabled.");
             }catch(Throwable ignored){
                 available = false;
             }
@@ -1068,7 +1067,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 return;
             }
 
-            //MI2 can load later, and its minimap window can rebuild. Keep retrying initialization.
+            //MI2U can load later, and its minimap window can rebuild. Keep retrying initialization.
             if(!available){
                 if(Time.time >= nextInitAttempt){
                     nextInitAttempt = Time.time + 60f * 2f;
@@ -1079,45 +1078,42 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             if(Core.scene == null) return;
 
             try{
-                Object minimapObj = minimapField == null ? null : minimapField.get(null);
-                if(!(minimapObj instanceof Element)) return;
-                Element minimap = (Element)minimapObj;
-                if(minimap.getScene() == null) return;
-
-                //MI2's mindow can rebuild/replace its internal tables frequently, causing children to be dropped.
-                //We attach as a sibling of the minimap element and keep retrying periodically.
-                Element existing = null;
-                try{
-                    existing = Core.scene.find(mi2OverlayName);
-                }catch(Throwable ignored){
+                Element minimap = currentMinimap();
+                if(minimap == null){
+                    detachIfPresent();
+                    available = false;
+                    nextInitAttempt = Time.time + 60f * 2f;
+                    return;
                 }
+                if(minimap.getScene() == null || minimap.parent == null){
+                    detachIfPresent();
+                    return;
+                }
+
+                // MI2U can rebuild its window content when settings change; keep the overlay bound to the current Minimap2 element.
+                Mi2Overlay existing = findOverlay();
                 if(existing != null){
-                    //If base minimap element changed, replace overlay; otherwise keep it.
-                    if(existing instanceof Mi2Overlay){
-                        Mi2Overlay mo = (Mi2Overlay)existing;
-                        if(mo.base != minimap || mo.parent != minimap.parent){
-                            mo.remove();
-                            existing = null;
-                        }
-                    }else{
-                        existing.remove();
-                        existing = null;
+                    if(existing.isAttachedTo(minimap)){
+                        existing.updateAccessors(rectField, zoomField, baseSizeField, setRectMethod);
+                        existing.syncBoundsToBase();
+                        existing.toFront();
+                        return;
                     }
+                    existing.remove();
                 }
-                if(existing != null) return;
-                if(minimap.parent == null) return;
 
-                Mi2Overlay overlay = new Mi2Overlay(minimap, cache, markerColor, alert, rescueAlert, rescueColor, rectField, setRectMethod);
+                Mi2Overlay overlay = new Mi2Overlay(minimap, cache, markerColor, alert, rescueAlert, rescueColor, rectField, zoomField, baseSizeField, setRectMethod);
                 overlay.name = mi2OverlayName;
                 //important: must have non-zero bounds BEFORE parent culling, otherwise draw() may never run.
                 overlay.setBounds(minimap.x, minimap.y, Math.max(1f, minimap.getWidth()), Math.max(1f, minimap.getHeight()));
                 overlay.update(overlay::syncBoundsToBase);
                 overlay.touchable = Touchable.disabled;
                 minimap.parent.addChild(overlay);
+                overlay.syncBoundsToBase();
                 overlay.toFront();
-                Log.info("PGMM: MI2 overlay attached to minimap parent (@).", minimap.parent.getClass().getName());
+                Log.info("PGMM: MI2U overlay attached to MI2U minimap parent.");
             }catch(Throwable t){
-                Log.err("PGMM: MI2 minimap attach failed; will retry.", t);
+                Log.err("PGMM: MI2U minimap attach failed; will retry.", t);
                 //don't permanently disable; allow retry on next attempt
                 nextInitAttempt = Time.time + 60f * 2f;
                 available = false;
@@ -1127,14 +1123,83 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         private void detachIfPresent(){
             try{
                 if(Core.scene == null) return;
-                Element existing = null;
-                try{
-                    existing = Core.scene.find(mi2OverlayName);
-                }catch(Throwable ignored){
-                }
+                Element existing = findOverlayElement();
                 if(existing != null) existing.remove();
             }catch(Throwable ignored){
             }
+        }
+
+        private Class<?> findMi2UClass(){
+            if(mindustry.Vars.mods != null){
+                for(Mods.LoadedMod mod : mindustry.Vars.mods.list()){
+                    if(mod == null || mod.loader == null) continue;
+                    try{
+                        return Class.forName(minimapClassName, false, mod.loader);
+                    }catch(Throwable ignored){
+                    }
+                }
+            }
+
+            // Fallback only works in non-mod-isolated test environments.
+            try{
+                return Class.forName(minimapClassName);
+            }catch(Throwable ignored){
+                return null;
+            }
+        }
+
+        private Element currentMinimap(){
+            try{
+                Object minimapObj = minimapField == null ? null : minimapField.get(null);
+                return minimapObj instanceof Element ? (Element)minimapObj : null;
+            }catch(Throwable ignored){
+                return null;
+            }
+        }
+
+        private Mi2Overlay findOverlay(){
+            Element existing = findOverlayElement();
+            if(existing instanceof Mi2Overlay){
+                return (Mi2Overlay)existing;
+            }
+            if(existing != null){
+                existing.remove();
+            }
+            return null;
+        }
+
+        private Element findOverlayElement(){
+            try{
+                return Core.scene == null ? null : Core.scene.find(mi2OverlayName);
+            }catch(Throwable ignored){
+                return null;
+            }
+        }
+
+        private static java.lang.reflect.Field findField(Class<?> type, String name){
+            for(Class<?> cur = type; cur != null; cur = cur.getSuperclass()){
+                try{
+                    java.lang.reflect.Field field = cur.getDeclaredField(name);
+                    field.setAccessible(true);
+                    return field;
+                }catch(Throwable ignored){
+                }
+            }
+            return null;
+        }
+
+        private static java.lang.reflect.Method findNoArgMethod(Class<?> type, String name){
+            for(Class<?> cur = type; cur != null; cur = cur.getSuperclass()){
+                try{
+                    java.lang.reflect.Method method = cur.getDeclaredMethod(name);
+                    if(method.getParameterTypes().length == 0){
+                        method.setAccessible(true);
+                        return method;
+                    }
+                }catch(Throwable ignored){
+                }
+            }
+            return null;
         }
     }
 
@@ -1146,33 +1211,66 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         private final RescueAlert rescueAlert;
         private final Color rescueColor;
 
-        private final java.lang.reflect.Field rectField;
-        private final java.lang.reflect.Method setRectMethod;
+        private java.lang.reflect.Field rectField;
+        private java.lang.reflect.Field zoomField;
+        private java.lang.reflect.Field baseSizeField;
+        private java.lang.reflect.Method setRectMethod;
 
+        private final Rect mapArea = new Rect();
         private final Rect viewRect = new Rect();
         private boolean loggedDraw = false;
         private boolean loggedClipFail = false;
 
-        Mi2Overlay(Element base, PowerGridCache cache, Color markerColor, SplitAlert alert, RescueAlert rescueAlert, Color rescueColor, java.lang.reflect.Field rectField, java.lang.reflect.Method setRectMethod){
+        Mi2Overlay(Element base, PowerGridCache cache, Color markerColor, SplitAlert alert, RescueAlert rescueAlert, Color rescueColor, java.lang.reflect.Field rectField, java.lang.reflect.Field zoomField, java.lang.reflect.Field baseSizeField, java.lang.reflect.Method setRectMethod){
             this.base = base;
             this.cache = cache;
             this.markerColor = markerColor;
             this.alert = alert;
             this.rescueAlert = rescueAlert;
             this.rescueColor = rescueColor;
+            updateAccessors(rectField, zoomField, baseSizeField, setRectMethod);
+        }
+
+        boolean isAttachedTo(Element minimap){
+            return base == minimap && minimap != null && minimap.parent != null && parent == minimap.parent;
+        }
+
+        void updateAccessors(java.lang.reflect.Field rectField, java.lang.reflect.Field zoomField, java.lang.reflect.Field baseSizeField, java.lang.reflect.Method setRectMethod){
             this.rectField = rectField;
+            this.zoomField = zoomField;
+            this.baseSizeField = baseSizeField;
             this.setRectMethod = setRectMethod;
         }
 
         void syncBoundsToBase(){
             if(base == null || parent == null) return;
+            if(base.parent != parent) return;
+            if(!updateMapArea()) return;
+
+            setBounds(mapArea.x, mapArea.y, mapArea.width, mapArea.height);
+        }
+
+        private boolean updateMapArea(){
+            if(base == null) return false;
             float bw = base.getWidth(), bh = base.getHeight();
             if(bw <= 0.001f || bh <= 0.001f){
                 bw = Math.max(bw, base.getPrefWidth());
                 bh = Math.max(bh, base.getPrefHeight());
             }
-            if(bw <= 0.001f || bh <= 0.001f) return;
-            setBounds(base.x, base.y, bw, bh);
+            if(bw <= 0.001f || bh <= 0.001f) return false;
+
+            float areaX = base.x, areaY = base.y, areaW = bw, areaH = bh;
+            float epsilon = Math.max(1f, Math.min(bw, bh) * 0.02f);
+            if(bh > bw + epsilon){
+                areaH = bw;
+                areaY = base.y + bh - areaH;
+            }else if(bw > bh + epsilon){
+                areaW = bh;
+            }
+
+            if(areaW <= 0.001f || areaH <= 0.001f) return false;
+            mapArea.set(areaX, areaY, areaW, areaH);
+            return true;
         }
 
         @Override
@@ -1182,15 +1280,20 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             if(renderer == null || renderer.minimap == null || renderer.minimap.getRegion() == null) return;
             if(world == null || !state.isGame() || world.isGenerating()) return;
             if(base == null || base.getScene() == null) return;
-            if(base.parent == null) return;
+            if(base.parent == null || base.parent != parent) return;
 
             syncBoundsToBase();
             if(width <= 0.001f || height <= 0.001f) return;
 
             if(!loggedDraw){
                 loggedDraw = true;
-                Log.info("PGMM: MI2 overlay draw() active (name=@, base=@).", name, base.getClass().getName());
+                Log.info("PGMM: MI2U overlay draw() active (name=@, base=@).", name, base.getClass().getName());
             }
+
+            if(!updateViewRect(width, height)){
+                return;
+            }
+            if(viewRect.width <= 0.001f || viewRect.height <= 0.001f) return;
 
             cache.updateBasic();
 
@@ -1204,18 +1307,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             if(!clipBegin()){
                 if(!loggedClipFail){
                     loggedClipFail = true;
-                    Log.info("PGMM: MI2 overlay clipBegin failed (x=@ y=@ w=@ h=@, baseW=@ baseH=@).",
+                    Log.info("PGMM: MI2U overlay clipBegin failed (x=@ y=@ w=@ h=@, baseW=@ baseH=@).",
                         x, y, width, height, base.getWidth(), base.getHeight());
                 }
                 return;
             }
-
-            Rect r = getMi2Rect();
-            if(r == null){
-                clipEnd();
-                return;
-            }
-            viewRect.set(r);
 
             float scaleX = width / viewRect.width;
             float scaleY = height / viewRect.height;
@@ -1281,9 +1377,10 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             boolean ints = font.usesIntegerPositions();
             font.setUseIntegerPositions(false);
 
-            //In the old (world-space) draw, scale was applied by Draw.trans(); here we fold it into the font scale.
+            //Keep MI2U text readable when the minimap is zoomed out; only grow it with the map scale.
             float baseFontScale = (1f / 1.25f) / Math.max(0.0001f, Scl.scl(1f));
-            font.getData().setScale(baseFontScale * invScalePow * markerScale * scale);
+            float screenScale = Math.max(scale, 1f);
+            font.getData().setScale(baseFontScale * invScalePow * markerScale * screenScale);
 
             Color textColor = Tmp.c2.set(markerColor);
             textColor.a *= parentAlpha;
@@ -1302,7 +1399,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 float sx = x + (info.x - viewRect.x) * (width / viewRect.width);
                 float sy = y + (info.y - viewRect.y) * (height / viewRect.height);
 
-                float margin = 3f * invScalePow * markerScale * scale;
+                float margin = 3f * invScalePow * markerScale * screenScale;
 
                 Draw.color(0f, 0f, 0f, 0.35f * parentAlpha);
                 Fill.rect(sx, sy, layout.width + margin * 2f, layout.height + margin * 2f);
@@ -1319,6 +1416,19 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Pools.free(layout);
         }
 
+        private boolean updateViewRect(float drawW, float drawH){
+            Rect measured = getMi2Rect();
+            if(measured != null){
+                viewRect.set(measured);
+            }
+
+            if(measured == null || shouldRecomputeViewRect(measured, drawW, drawH)){
+                return recomputeViewRect(drawW, drawH, measured);
+            }
+
+            return true;
+        }
+
         private Rect getMi2Rect(){
             try{
                 if(setRectMethod != null){
@@ -1328,6 +1438,45 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 return r instanceof Rect ? (Rect)r : null;
             }catch(Throwable ignored){
                 return null;
+            }
+        }
+
+        private boolean shouldRecomputeViewRect(Rect measured, float drawW, float drawH){
+            if(measured == null || measured.width <= 0.001f || measured.height <= 0.001f) return true;
+            if(drawW <= 0.001f || drawH <= 0.001f) return false;
+
+            float measuredAspect = measured.height / measured.width;
+            float drawAspect = drawH / drawW;
+            return Math.abs(measuredAspect - drawAspect) > 0.015f;
+        }
+
+        private boolean recomputeViewRect(float drawW, float drawH, Rect measured){
+            if(drawW <= 0.001f || drawH <= 0.001f) return false;
+
+            float baseSize = getNumberField(baseSizeField, base, 16f);
+            float zoom = getNumberField(zoomField, base, -1f);
+            float sz = zoom > 0.0001f ? baseSize * zoom : -1f;
+            if(sz <= 0.0001f && measured != null && measured.width > 0.001f){
+                sz = measured.width / (2f * tilesize);
+            }
+            if(sz <= 0.0001f) return measured != null;
+
+            float szh = sz * drawH / drawW;
+            float cx = Core.camera.position.x / tilesize;
+            float cy = Core.camera.position.y / tilesize;
+            cx = (2f * sz) <= world.width() ? Mathf.clamp(cx, sz, world.width() - sz) : world.width() / 2f;
+            cy = (2f * szh) <= world.height() ? Mathf.clamp(cy, szh, world.height() - szh) : world.height() / 2f;
+            viewRect.set((cx - sz) * tilesize, (cy - szh) * tilesize, sz * 2f * tilesize, szh * 2f * tilesize);
+            return true;
+        }
+
+        private float getNumberField(java.lang.reflect.Field field, Object instance, float fallback){
+            try{
+                if(field == null) return fallback;
+                Object value = field.get(instance);
+                return value instanceof Number ? ((Number)value).floatValue() : fallback;
+            }catch(Throwable ignored){
+                return fallback;
             }
         }
 
@@ -1520,7 +1669,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         public void updateBasic(){
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("PGMM", "Scan", "updateBasic", NeonProfiler.threadMain)){
             if(!state.isGame() || world == null || world.isGenerating() || player == null){
                 clear();
                 return;
@@ -1587,7 +1735,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
                 //For sparse laser-linked grids, render one balance marker per contiguous "chunk" of buildings.
                 addClusterMarkers(info);
-            }
             }
         }
 
@@ -1869,7 +2016,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         public void updateFullOverlay(){
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("PGMM", "Compute", "updateFullOverlay", NeonProfiler.threadMain)){
             if(!state.isGame() || world == null || world.isGenerating() || player == null){
                 clear();
                 return;
@@ -1896,7 +2042,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             lastWorldH = world.height();
 
             rebuildFullOverlay(claimDistance, gridAlpha);
-            }
         }
 
         public Texture getFullOverlayTexture(){
@@ -1922,7 +2067,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         private void rebuildFullOverlay(int claimDistance, int gridAlphaInt){
-            try(NeonProfiler.Scope ignored = NeonProfiler.timeDetail("PGMM", "Compute", "rebuildFullOverlay", NeonProfiler.threadMain)){
             //basic graph list required
             updateBasic();
 
@@ -2186,7 +2330,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
 
             fullOverlayTexture.draw(fullOverlayPixmap);
-            }
         }
 
         private void ensureOverlayScratch(int tileCount){

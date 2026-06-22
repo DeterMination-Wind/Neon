@@ -2,9 +2,9 @@ package modupdater.features;
 
 import arc.Core;
 import arc.func.Cons;
-import arc.util.Http;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
+import arc.util.Http;
 import arc.util.Strings;
 import arc.util.serialization.Jval;
 import mindustry.mod.Mods;
@@ -21,24 +21,14 @@ public final class RepoResolver{
 
     static{
         builtinMap.put("bek-tools", "DeterMination-Wind/Neon");
-        builtinMap.put("neon", "DeterMination-Wind/Neon");
-        builtinMap.put("neon-dev", "DeterMination-Wind/Neon");
         builtinMap.put("betterminimap", "DeterMination-Wind/betterMiniMap");
         builtinMap.put("betterhotkey", "DeterMination-Wind/betterHotKey");
-        builtinMap.put("betterlogisticsspeed", "DeterMination-Wind/betterLogisticsSpeed");
-        builtinMap.put("powergrid-minimap", "DeterMination-Wind/Power-Grid-Minimap-");
+        builtinMap.put("powergrid-minimap", "DeterMination-Wind/Power-Grid-Minimap");
         builtinMap.put("stealth-path", "DeterMination-Wind/StealthPath");
         builtinMap.put("radial-build-menu", "DeterMination-Wind/Radial-Build-Menu-hud-");
-        builtinMap.put("radial-build-menu-dev", "DeterMination-Wind/Radial-Build-Menu-hud-");
         builtinMap.put("betterprojectoroverlay", "DeterMination-Wind/BetterProjectorOverlay");
         builtinMap.put("bettermapeditor", "DeterMination-Wind/BetterMapEditor");
-        builtinMap.put("server-player-database", "Wind-DeterMination-backup/ServerPlayerDataBase");
-        builtinMap.put("custommarker", "Wind-DeterMination-backup/customMarker");
-        builtinMap.put("betterscreenshot", "DeterMination-Wind/BetterScreenShot");
-        builtinMap.put("betterscreenshot-dev", "DeterMination-Wind/BetterScreenShot");
-        builtinMap.put("whousesthisbuilding", "DeterMination-Wind/WhoUsesThisBuilding");
-        builtinMap.put("patchviewer", "DeterMination-Wind/PatchViewer");
-        builtinMap.put("pinyin-search-support", "DeterMination-Wind/PinyinSearchSupport");
+        builtinMap.put("server-player-database", "DeterMination-Wind/ServerPlayerDataBase");
         builtinMap.put("updatescheme", "DeterMination-Wind/UpdateScheme");
     }
 

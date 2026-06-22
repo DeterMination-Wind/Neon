@@ -15,6 +15,7 @@ public class PinyinSearchSupportMod extends Mod{
     /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
 
+
     public static final String keyEnabled   = "pss-enabled";
     public static final String keyFuzzy     = "pss-fuzzy";
     public static final String keyInitials  = "pss-initials";
@@ -29,25 +30,33 @@ public class PinyinSearchSupportMod extends Mod{
         Events.on(ClientLoadEvent.class, e -> {
             if(headless) return;
 
+            GithubUpdateCheck.applyDefaults();
             registerSettings();
 
             dispatcher.scan();
             Timer.schedule(dispatcher::scan, 0.25f, 0.5f);
+
+            GithubUpdateCheck.checkOnce();
         });
     }
 
     private void registerSettings(){
         if(ui == null || ui.settings == null) return;
         if(bekBundled) return;
-        ui.settings.addCategory("@pss.category", Icon.zoom, this::bekBuildSettings);
-    }
 
+        if(!bekBundled) ui.settings.addCategory("@pss.category", Icon.zoom, this::bekBuildSettings);
+    }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-        table.checkPref(keyEnabled, true);
-        table.checkPref(keyFuzzy, true);
-        table.checkPref(keyInitials, true);
-        table.checkPref(keyHeteronym, true);
-        table.sliderPref(keyDelayMs, defaultDelayMs, 0, 1500, 10, value -> value + " ms");
+            SettingsMenuDialog.SettingsTable st = (SettingsMenuDialog.SettingsTable)table;
+            st.checkPref(keyEnabled, true);
+            st.checkPref(keyFuzzy, true);
+            st.checkPref(keyInitials, true);
+            st.checkPref(keyHeteronym, true);
+            st.sliderPref(keyDelayMs, defaultDelayMs, 0, 1500, 10, value -> value + " ms");
+            st.checkPref(GithubUpdateCheck.enabledKey(), true);
+            st.checkPref(GithubUpdateCheck.showDialogKey(), true);
+        
     }
+
 }

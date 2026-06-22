@@ -122,10 +122,16 @@ final class ConditionParser{
             i++;
             String name = readIdent();
             if(name.isEmpty()) throw new IllegalArgumentException("Empty variable name at " + i);
+            return new VarExpr("@" + name);
+        }
+
+        if(isIdentStart(peek())){
+            String name = readIdent();
+            if(name.isEmpty()) throw new IllegalArgumentException("Empty variable name at " + i);
             return new VarExpr(name);
         }
 
-        if(isDigit(peek()) || peek() == '.'){
+        if(isDigit(peek()) || peek() == '.' && isDigit(peekNext())){
             String num = readNumber();
             try{
                 return new NumExpr(Float.parseFloat(num));
@@ -144,7 +150,7 @@ final class ConditionParser{
             boolean ok = (c >= 'a' && c <= 'z')
                 || (c >= 'A' && c <= 'Z')
                 || (c >= '0' && c <= '9')
-                || c == '_' || c == '-';
+                || c == '_' || c == '-' || c == '.';
             if(!ok) break;
             i++;
         }
@@ -197,7 +203,7 @@ final class ConditionParser{
         return (c >= 'a' && c <= 'z')
             || (c >= 'A' && c <= 'Z')
             || (c >= '0' && c <= '9')
-            || c == '_' || c == '-';
+            || c == '_' || c == '-' || c == '.';
     }
 
     private void skipWs(){
@@ -212,8 +218,18 @@ final class ConditionParser{
         return eof() ? '\0' : s.charAt(i);
     }
 
+    private char peekNext(){
+        return i + 1 >= s.length() ? '\0' : s.charAt(i + 1);
+    }
+
     private boolean eof(){
         return i >= s.length();
+    }
+
+    private boolean isIdentStart(char c){
+        return (c >= 'a' && c <= 'z')
+            || (c >= 'A' && c <= 'Z')
+            || c == '_' || c == '-';
     }
 
     private boolean isDigit(char c){
@@ -289,4 +305,3 @@ final class CmpExpr implements Expr{
         return out ? 1f : 0f;
     }
 }
-

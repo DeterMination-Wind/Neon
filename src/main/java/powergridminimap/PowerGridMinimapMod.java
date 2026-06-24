@@ -195,7 +195,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Core.settings.defaults(keyPowerTableBgAlpha, 70);
             Core.settings.defaults(keyUpdateWaitTenths, 10);
             Core.settings.defaults(keyIgnoreAreaTiles, 0);
-            GithubUpdateCheck.applyDefaults();
+            if(!bekBundled) GithubUpdateCheck.applyDefaults();
 
             registerSettings();
             refreshMarkerColor();
@@ -206,7 +206,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Time.runTask(10f, this::installConsoleApi);
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensurePowerTableAttached);
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
         });
 
         Events.on(WorldLoadEvent.class, e -> {
@@ -491,8 +491,8 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyUpdateWaitTenths, 10, 0, 50, 1, Icon.refreshSmall, v -> Strings.autoFixed(v / 10f, 1) + "s", null));
 
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.update", "Update"), Icon.refreshSmall));
-            table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
-            table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+            if(!bekBundled) table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
+            if(!bekBundled) table.pref(new PgmmSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
     }
 
 

@@ -4,6 +4,7 @@
       "id": "pgmm",
       "name": "Power Grid Minimap",
       "localPath": "../Power-Grid-Minimap-repo-clone",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/powergridminimap",
       "mainClassFile": "PowerGridMinimapMod.java",
       "bundlesDir": "src/main/resources/bundles"
@@ -12,6 +13,7 @@
       "id": "sp",
       "name": "StealthPath",
       "localPath": "../StealthPath",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/stealthpath",
       "mainClassFile": "StealthPathMod.java",
       "bundlesDir": "src/main/resources/bundles"
@@ -20,6 +22,7 @@
       "id": "rbm",
       "name": "Radial Build Menu",
       "localPath": "../Radial-Build-Menu-hud-",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/radialbuildmenu",
       "mainClassFile": "RadialBuildMenuMod.java",
       "bundlesDir": "src/main/resources/bundles"
@@ -28,6 +31,7 @@
       "id": "bmm",
       "name": "betterMiniMap",
       "localPath": "../betterMiniMap",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/betterminimap",
       "mainClassFile": "BetterMiniMapMod.java",
       "bundlesDir": "src/main/resources/bundles",
@@ -37,6 +41,7 @@
       "id": "bls",
       "name": "betterLogisticsSpeed",
       "localPath": "../betterLogisticsSpeed",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/betterlogisticsspeed",
       "mainClassFile": "BetterLogisticsSpeedMod.java",
       "bundlesDir": "src/main/resources/bundles",
@@ -47,6 +52,7 @@
       "id": "bhk",
       "name": "betterHotKey",
       "localPath": "../betterHotKey",
+      "trackUpstream": false,
       "javaPackageDir": "src/main/java/betterhotkey",
       "mainClassFile": "BetterHotKeyMod.java",
       "bundlesDir": "src/main/resources/bundles",
@@ -57,6 +63,7 @@
       "id": "mu",
       "name": "modUpdater",
       "localPath": "../modUpdater",
+      "trackUpstream": false,
       "javaPackageDir": "src/main/java/modupdater",
       "mainClassFile": "ModUpdaterMod.java",
       "bundlesDir": "src/main/resources/bundles",
@@ -67,6 +74,7 @@
       "id": "spdb",
       "name": "ServerPlayerDataBase",
       "localPath": "../ServerPlayerDataBase",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/serverplayerdatabase",
       "mainClassFile": "ServerPlayerDataBaseMod.java",
       "bundlesDir": "src/main/resources/bundles",
@@ -76,6 +84,7 @@
       "id": "bme",
       "name": "betterMapEditor",
       "localPath": "../betterMapEditor",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/bettermapeditor",
       "extraJavaDirs": [
         "src/main/java/mindustry/maps/filters"
@@ -88,6 +97,7 @@
       "id": "bpo",
       "name": "BetterProjectorOverlay",
       "localPath": "../BetterProjectorOverlay",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/betterprojectoroverlay",
       "mainClassFile": "BetterProjectorOverlayMod.java",
       "bundlesDir": "src/main/resources/bundles",
@@ -97,6 +107,7 @@
       "id": "wutb",
       "name": "WhoUsesThisBuilding",
       "localPath": "../WhoUsesThisBuilding",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/whousesthisbuilding",
       "sourceJavaDir": "src/whousesthisbuilding",
       "mainClassFile": "WhoUsesThisBuildingMod.java",
@@ -107,6 +118,7 @@
       "id": "pv",
       "name": "PatchViewer",
       "localPath": "../PatchViewer",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/patchviewer",
       "sourceJavaDir": "src/patchviewer",
       "mainClassFile": "PatchViewerMod.java",
@@ -117,9 +129,56 @@
       "id": "pss",
       "name": "PinyinSearchSupport",
       "localPath": "../PinyinSearchSupport-repo",
+      "trackUpstream": true,
       "javaPackageDir": "src/main/java/pinyinsearchsupport",
       "mainClassFile": "PinyinSearchSupportMod.java",
       "bundlesDir": "src/main/resources/bundles"
+    },
+    {
+      "id": "fst",
+      "name": "ForeignServerTranslator",
+      "localPath": "../ForeignServerTranslator",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/foreignservertranslator",
+      "extraJavaDirs": [
+        "src/main/java/mindustry/ui/fragments"
+      ],
+      "mainClassFile": "ForeignServerTranslatorMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "extraResourceDirs": [
+        "src/main/resources/fst-bundles"
+      ],
+      "injectBekHooks": false
+    },
+    {
+      "id": "tw",
+      "name": "Tripwire",
+      "localPath": "../Tripwire",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/tripwire",
+      "mainClassFile": "TripwireMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "bpa",
+      "name": "BetterPolyAi",
+      "localPath": "../BetterPolyAi",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/betterpolyai",
+      "mainClassFile": "BetterPolyAiMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "ar",
+      "name": "AdvancedReplace",
+      "localPath": "../AdvancedReplace",
+      "trackUpstream": false,
+      "kotlinPackageDir": "src/main/kotlin/advancedreplace",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false,
+      "allowNoGit": true
     }
   ]
 }

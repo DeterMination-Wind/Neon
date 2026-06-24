@@ -30,13 +30,13 @@ public class PinyinSearchSupportMod extends Mod{
         Events.on(ClientLoadEvent.class, e -> {
             if(headless) return;
 
-            GithubUpdateCheck.applyDefaults();
+            if(!bekBundled) GithubUpdateCheck.applyDefaults();
             registerSettings();
 
             dispatcher.scan();
             Timer.schedule(dispatcher::scan, 0.25f, 0.5f);
 
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
         });
     }
 
@@ -54,8 +54,8 @@ public class PinyinSearchSupportMod extends Mod{
             st.checkPref(keyInitials, true);
             st.checkPref(keyHeteronym, true);
             st.sliderPref(keyDelayMs, defaultDelayMs, 0, 1500, 10, value -> value + " ms");
-            st.checkPref(GithubUpdateCheck.enabledKey(), true);
-            st.checkPref(GithubUpdateCheck.showDialogKey(), true);
+            if(!bekBundled) st.checkPref(GithubUpdateCheck.enabledKey(), true);
+            if(!bekBundled) st.checkPref(GithubUpdateCheck.showDialogKey(), true);
         
     }
 

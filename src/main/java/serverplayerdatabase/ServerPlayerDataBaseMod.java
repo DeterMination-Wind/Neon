@@ -4,6 +4,7 @@ import arc.Core;
 import arc.Events;
 import arc.files.Fi;
 import arc.func.Prov;
+import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
@@ -17,10 +18,13 @@ import arc.struct.ObjectSet;
 import arc.struct.OrderedSet;
 import arc.struct.Seq;
 import arc.util.CommandHandler;
+import arc.util.Http;
 import arc.util.Interval;
 import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
+import arc.util.Threads;
+import arc.util.io.Streams;
 import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonValue;
@@ -29,6 +33,7 @@ import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.ClientServerConnectEvent;
+import mindustry.game.EventType.DisposeEvent;
 import mindustry.game.EventType.PlayerChatEvent;
 import mindustry.game.EventType.ResetEvent;
 import mindustry.game.EventType.Trigger;
@@ -39,6 +44,7 @@ import mindustry.gen.Player;
 import mindustry.mod.Mod;
 import mindustry.net.Administration.TraceInfo;
 import mindustry.net.Packets.AdminAction;
+import mindustry.ui.Bar;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.ui.dialogs.BaseDialog;
@@ -46,6 +52,7 @@ import mindustry.ui.dialogs.TraceDialog;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -80,9 +87,14 @@ public class ServerPlayerDataBaseMod extends Mod{
     private static final String keyRecordChat = "spdb-record-chat";
     private static final String keyAutoTrace = "spdb-auto-trace";
     private static final String keyShowAutoTraceDialog = "spdb-show-auto-trace-dialog";
+    private static final String keySemanticSearchEnabled = "spdb-semantic-enabled";
     private static final String integrityAlgorithm = "sha256-spdb-v1";
-    private static final String embeddedModelResource = "models/bge-base-zh-v1.5-q8_0.gguf";
+    private static final String semanticSearchModelFileName = "bge-base-zh-v1.5-q8_0.gguf";
+    private static final String semanticSearchModelUrl = "https://hf-mirror.com/CompendiumLabs/bge-base-zh-v1.5-gguf/resolve/main/" + semanticSearchModelFileName;
+    private static final String semanticSearchRuntimeFileName = "llama-4.1.0.jar";
+    private static final String semanticSearchRuntimeUrl = "https://maven.aliyun.com/repository/central/de/kherud/llama/4.1.0/" + semanticSearchRuntimeFileName;
     private static final long embeddingFlushIntervalMs = 5L * 60L * 1000L;
+    private static final long semanticSearchShutdownTimeoutMs = 3000L;
 
     private static final int integrityValid = 0;
     private static final int integrityMissing = 1;
@@ -122,6 +134,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     private Fi chatsIndexFile;
     private Fi legacyChatsFile;
     private Fi semanticSearchModelFile;
+    private Fi semanticSearchRuntimeFile;
     private Fi semanticSearchNativeDir;
 
     private boolean playersDirty;
@@ -129,9 +142,25 @@ public class ServerPlayerDataBaseMod extends Mod{
     private String currentServer = "offline";
     private int playersFileIntegrityState = integrityMissing;
     private final Seq<String> playersIntegrityIssues = new Seq<>();
+    private final Object semanticSearchLock = new Object();
     private EmbeddingEngine embeddingEngine;
     private EmbeddingIndex embeddingIndex;
+    private EmbeddingEngine pendingEmbeddingEngine;
+    private EmbeddingIndex pendingEmbeddingIndex;
     private long lastEmbeddingFlushAt;
+    private int semanticSearchLifecycleToken;
+    private volatile boolean semanticSearchResourcesStarted;
+    private volatile boolean semanticSearchExitFallbackStarted;
+    private volatile boolean semanticSearchDisposing;
+    private volatile boolean semanticSearchDownloadInProgress;
+    private volatile boolean semanticSearchInitializing;
+    private volatile boolean semanticSearchPromptOpen;
+    private volatile float semanticSearchDownloadProgress = -1f;
+    private volatile float semanticSearchDownloadTotalMb;
+    private volatile String semanticSearchStatusOverride;
+    private volatile String semanticSearchPendingQuery;
+    private volatile int semanticSearchUiRevision;
+    private BaseDialog semanticSearchProgressDialog;
 
     private TraceDialog originalTraceDialog;
 
@@ -154,6 +183,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     protected ServerPlayerDataBaseMod(OverlayUiBridge overlayUi){
         overlayUI = overlayUi;
+        registerSemanticSearchShutdownHook();
         Events.on(ClientLoadEvent.class, e -> {
             if(Vars.headless) return;
 
@@ -161,13 +191,14 @@ public class ServerPlayerDataBaseMod extends Mod{
             Core.settings.defaults(keyRecordChat, false);
             Core.settings.defaults(keyAutoTrace, true);
             Core.settings.defaults(keyShowAutoTraceDialog, false);
-            GithubUpdateCheck.applyDefaults();
+            Core.settings.defaults(keySemanticSearchEnabled, false);
+            if(!bekBundled) GithubUpdateCheck.applyDefaults();
 
             initStorage();
             loadLocalData();
-            initEmbedding();
+            initializeSemanticSearchFromSettings();
             registerSettings();
-            GithubUpdateCheck.checkOnce();
+            if(!bekBundled) GithubUpdateCheck.checkOnce();
             installTraceInterceptor();
 
             nextAttachAttempt = 0f;
@@ -190,6 +221,8 @@ public class ServerPlayerDataBaseMod extends Mod{
             autoTraceUntil.clear();
             saveDirty(true);
         });
+
+        Events.on(DisposeEvent.class, e -> shutdownSemanticSearchResources(true));
 
         Events.on(PlayerChatEvent.class, e -> {
             if(Vars.headless || e == null || e.player == null || e.message == null) return;
@@ -227,14 +260,15 @@ public class ServerPlayerDataBaseMod extends Mod{
             int entryId = chatDb.add(uid, sender, message, currentServer, Time.millis());
             if(entryId > 0){
                 chatsDirty = true;
-                if(embeddingIndex != null){
+                EmbeddingIndex index = embeddingIndex;
+                if(index != null && !semanticSearchDisposing){
                     ChatEntry entry = new ChatEntry();
                     entry.uid = uid;
                     entry.senderName = sender;
                     entry.message = message;
                     entry.server = normalizeServer(currentServer);
                     entry.time = Time.millis();
-                    embeddingIndex.addEntryAsync(entryId, entry);
+                    index.addEntryAsync(entryId, entry);
                 }
             }
         });
@@ -277,9 +311,10 @@ public class ServerPlayerDataBaseMod extends Mod{
             pruneTracePending();
         }
 
-        if(embeddingIndex != null && Time.millis() - lastEmbeddingFlushAt >= embeddingFlushIntervalMs){
+        EmbeddingIndex index = embeddingIndex;
+        if(index != null && !semanticSearchDisposing && Time.millis() - lastEmbeddingFlushAt >= embeddingFlushIntervalMs){
             lastEmbeddingFlushAt = Time.millis();
-            embeddingIndex.flushIfDirty();
+            index.flushIfDirty();
         }
     }
 
@@ -752,57 +787,619 @@ public class ServerPlayerDataBaseMod extends Mod{
         chatsDir.mkdirs();
         chatsIndexFile = chatsDir.child("chat_index.json");
         legacyChatsFile = dataDir.child("chats.json");
-        semanticSearchModelFile = dataDir.child("models").child("bge-base-zh-v1.5-q8_0.gguf");
+        semanticSearchModelFile = dataDir.child("models").child(semanticSearchModelFileName);
+        semanticSearchRuntimeFile = dataDir.child("runtime").child(semanticSearchRuntimeFileName);
         semanticSearchNativeDir = dataDir.child("native").child("llama-4.1.0");
     }
 
-    private void initEmbedding(){
+    private boolean semanticSearchEnabled(){
+        return Core.settings != null && Core.settings.getBool(keySemanticSearchEnabled, false);
+    }
+
+    private void setSemanticSearchEnabled(boolean enabled){
+        if(Core.settings == null) return;
+        Core.settings.put(keySemanticSearchEnabled, enabled);
+    }
+
+    private void initializeSemanticSearchFromSettings(){
+        if(!semanticSearchEnabled()){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.disabled", "语义搜索未启用。打开语义搜索标签页或执行 /spdb-search 后会启用。");
+            return;
+        }
+
+        startSemanticSearchIfLocalComponentsReady();
+    }
+
+    private void startSemanticSearchIfLocalComponentsReady(){
+        if(!semanticSearchEnabled() || semanticSearchDisposing) return;
         if(isAndroidRuntime()){
-            Log.info("SPDB: semantic search disabled on Android runtime.");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.android", "当前运行环境为 Android，语义搜索不可用。");
+            bumpSemanticSearchUiRevision();
             return;
         }
-        if(chatsDbFile == null){
-            Log.warn("SPDB: semantic search skipped because chat database path is unavailable.");
+        if(chatsDbFile == null || semanticSearchModelFile == null || semanticSearchRuntimeFile == null){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            bumpSemanticSearchUiRevision();
             return;
         }
 
-        try{
-            Fi extractedModel = extractEmbeddedModel();
-            if(extractedModel == null || !extractedModel.exists()){
-                Log.warn("SPDB: semantic search model resource missing.");
-                return;
-            }
-
-            int threads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
-            embeddingEngine = EmbeddingEngine.load(extractedModel.file(), semanticSearchNativeDir == null ? null : semanticSearchNativeDir.file(), threads);
-            embeddingIndex = new EmbeddingIndex(embeddingEngine, chatDb);
-            embeddingIndex.initialize();
-            lastEmbeddingFlushAt = Time.millis();
-        }catch(Throwable t){
-            embeddingIndex = null;
-            if(embeddingEngine != null){
-                try{
-                    embeddingEngine.close();
-                }catch(Throwable ignored){
-                }
-                embeddingEngine = null;
-            }
-            Log.err("SPDB: semantic search initialization failed.", t);
+        semanticSearchStatusOverride = null;
+        if(semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() <= 0L){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.runtime-empty", "本地语义搜索运行库文件为空，请重新下载。");
+            bumpSemanticSearchUiRevision();
+            return;
+        }
+        if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() <= 0L){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.model-empty", "本地语义模型文件为空，请重新下载。");
+            bumpSemanticSearchUiRevision();
+            return;
+        }
+        if(semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() > 0L && semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L){
+            startSemanticSearchInitialization(false);
+        }else{
+            bumpSemanticSearchUiRevision();
         }
     }
 
-    private Fi extractEmbeddedModel() throws Exception{
-        if(semanticSearchModelFile == null) return null;
-        if(semanticSearchModelFile.parent() != null) semanticSearchModelFile.parent().mkdirs();
-        if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L) return semanticSearchModelFile;
-
-        InputStream input = getClass().getClassLoader().getResourceAsStream(embeddedModelResource);
-        if(input == null) return null;
-
-        try(InputStream in = input){
-            semanticSearchModelFile.write(in, false);
+    private void ensureSemanticSearchReady(String query){
+        rememberSemanticSearchQuery(query);
+        if(!semanticSearchEnabled()){
+            setSemanticSearchEnabled(true);
         }
-        return semanticSearchModelFile;
+
+        if(semanticSearchDisposing) return;
+        if(isAndroidRuntime()){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.android", "当前运行环境为 Android，语义搜索不可用。");
+            bumpSemanticSearchUiRevision();
+            return;
+        }
+        if(chatsDbFile == null){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            bumpSemanticSearchUiRevision();
+            return;
+        }
+        if(semanticSearchReady() || semanticSearchDownloadInProgress || semanticSearchInitializing || semanticSearchPromptOpen) return;
+        if(embeddingIndex != null) return;
+        if(semanticSearchModelFile == null || semanticSearchRuntimeFile == null){
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            bumpSemanticSearchUiRevision();
+            return;
+        }
+        if(semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() <= 0L){
+            cleanupSemanticSearchRuntimeFile();
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.runtime-empty", "本地语义搜索运行库文件为空，请重新下载。");
+        }
+        if(!semanticSearchRuntimeFile.exists() || semanticSearchRuntimeFile.length() <= 0L){
+            requestSemanticSearchDownload(true);
+            return;
+        }
+        if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() <= 0L){
+            cleanupSemanticSearchModelFile();
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.model-empty", "本地语义模型文件为空，请重新下载。");
+        }
+        if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L){
+            startSemanticSearchInitialization(false);
+            return;
+        }
+        requestSemanticSearchDownload(false);
+    }
+
+    private boolean semanticSearchReady(){
+        EmbeddingIndex index = embeddingIndex;
+        return !semanticSearchDisposing && index != null && index.isAvailable() && index.isReady();
+    }
+
+    private Seq<EmbeddingIndex.SearchResult> searchSemantic(String query, int limit){
+        EmbeddingIndex index = embeddingIndex;
+        return semanticSearchDisposing || index == null ? new Seq<>() : index.search(query, limit);
+    }
+
+    private String semanticSearchStatus(){
+        if(!semanticSearchEnabled()){
+            return bundle("spdb.semantic.status.disabled", "语义搜索未启用。打开语义搜索标签页或执行 /spdb-search 后会启用。");
+        }
+        if(semanticSearchDisposing){
+            return bundle("spdb.semantic.status.releasing", "正在释放语义搜索资源...");
+        }
+        if(isAndroidRuntime()){
+            return bundle("spdb.semantic.status.android", "当前运行环境为 Android，语义搜索不可用。");
+        }
+        if(chatsDbFile == null){
+            return bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+        }
+        if(semanticSearchDownloadInProgress){
+            if(semanticSearchDownloadTotalMb > 0f && semanticSearchDownloadProgress >= 0f){
+                float downloadedMb = semanticSearchDownloadProgress * semanticSearchDownloadTotalMb;
+                return bundleFormat(
+                    "spdb.semantic.progress.known",
+                    "已下载 @ / @ MB",
+                    Strings.autoFixed(downloadedMb, 2),
+                    Strings.autoFixed(semanticSearchDownloadTotalMb, 2)
+                ) + " (" + Math.round(semanticSearchDownloadProgress * 100f) + "%)";
+            }
+            return bundle("spdb.semantic.progress.unknown", "正在下载，暂时无法获取文件总大小。");
+        }
+        if(embeddingIndex != null){
+            String indexStatus = embeddingIndex.status();
+            if(indexStatus != null && !indexStatus.trim().isEmpty() && (!"未初始化".equals(indexStatus) || semanticSearchStatusOverride == null)){
+                return indexStatus;
+            }
+        }
+        if(semanticSearchStatusOverride != null && !semanticSearchStatusOverride.trim().isEmpty()){
+            return semanticSearchStatusOverride;
+        }
+        if(semanticSearchRuntimeFile != null && semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() <= 0L){
+            return bundle("spdb.semantic.status.runtime-empty", "本地语义搜索运行库文件为空，请重新下载。");
+        }
+        if(semanticSearchModelFile != null && semanticSearchModelFile.exists() && semanticSearchModelFile.length() <= 0L){
+            return bundle("spdb.semantic.status.model-empty", "本地语义模型文件为空，请重新下载。");
+        }
+        if(semanticSearchRuntimeFile == null || !semanticSearchRuntimeFile.exists() || semanticSearchRuntimeFile.length() <= 0L){
+            return bundle("spdb.semantic.status.runtime-missing", "语义搜索运行库未下载。首次打开语义搜索时确认下载后即可使用。");
+        }
+        if(semanticSearchModelFile != null && semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L){
+            return bundle("spdb.semantic.status.model-ready", "本地模型已就绪，正在等待初始化。");
+        }
+        return bundle("spdb.semantic.status.model-missing", "模型未下载。首次打开语义搜索时确认下载后即可使用。");
+    }
+
+    private void requestSemanticSearchDownload(boolean runtime){
+        Fi target = runtime ? semanticSearchRuntimeFile : semanticSearchModelFile;
+        if(!semanticSearchEnabled() || semanticSearchDisposing || Vars.ui == null || target == null) return;
+
+        semanticSearchPromptOpen = true;
+        semanticSearchStatusOverride = runtime
+            ? bundle("spdb.semantic.status.runtime-prompt-open", "正在等待你确认下载语义搜索运行库。")
+            : bundle("spdb.semantic.status.prompt-open", "正在等待你确认下载语义模型。");
+        bumpSemanticSearchUiRevision();
+
+        String prompt = (runtime
+            ? bundle("spdb.semantic.prompt.runtime-reason", "语义搜索需要先下载本地运行库后才能使用。")
+            : bundle("spdb.semantic.prompt.reason", "语义搜索需要先下载本地语义模型后才能使用。"))
+            + "\n" + (runtime
+            ? bundle("spdb.semantic.prompt.runtime-source", "下载来源：阿里云 Maven Central 镜像")
+            : bundle("spdb.semantic.prompt.source", "下载来源：hf-mirror"))
+            + "\n" + bundle("spdb.semantic.prompt.target", "保存位置：")
+            + "\n" + target.absolutePath()
+            + "\n\n" + bundle("spdb.semantic.prompt.cancel", "取消后语义搜索将保持不可用，稍后可再次打开重试。");
+
+        Vars.ui.showCustomConfirm("@confirm", prompt, "@ok", "@cancel", () -> {
+            if(semanticSearchDisposing || !semanticSearchEnabled()) return;
+            semanticSearchPromptOpen = false;
+            semanticSearchStatusOverride = runtime
+                ? bundle("spdb.semantic.status.runtime-download-start", "正在准备下载语义搜索运行库...")
+                : bundle("spdb.semantic.status.download-start", "正在准备下载语义模型...");
+            bumpSemanticSearchUiRevision();
+            startSemanticSearchFileDownload(runtime);
+        }, () -> {
+            if(semanticSearchDisposing || !semanticSearchEnabled()) return;
+            semanticSearchPromptOpen = false;
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.cancelled", "已取消语义模型下载，语义搜索暂不可用。");
+            bumpSemanticSearchUiRevision();
+        });
+    }
+
+    private void startSemanticSearchFileDownload(boolean runtime){
+        Fi target = runtime ? semanticSearchRuntimeFile : semanticSearchModelFile;
+        if(!semanticSearchEnabled() || semanticSearchDisposing || target == null || semanticSearchDownloadInProgress) return;
+
+        if(target.parent() != null) target.parent().mkdirs();
+        semanticSearchDownloadInProgress = true;
+        semanticSearchDownloadProgress = -1f;
+        semanticSearchDownloadTotalMb = 0f;
+        semanticSearchStatusOverride = runtime
+            ? bundle("spdb.semantic.status.runtime-downloading", "正在从阿里云 Maven Central 镜像下载语义搜索运行库...")
+            : bundle("spdb.semantic.status.downloading", "正在从 hf-mirror 下载语义模型...");
+        bumpSemanticSearchUiRevision();
+        Core.app.post(this::showSemanticSearchProgressDialog);
+
+        Http.get(runtime ? semanticSearchRuntimeUrl : semanticSearchModelUrl)
+            .timeout(60000)
+            .header("User-Agent", "Mindustry")
+            .error(err -> Core.app.post(() -> failSemanticSearchDownload(err, runtime)))
+            .submit(res -> {
+                long total = res.getContentLength();
+                semanticSearchDownloadTotalMb = total > 0L ? total / 1024f / 1024f : 0f;
+
+                try(InputStream in = res.getResultAsStream(); OutputStream out = target.write(false, 1024 * 1024)){
+                    if(in == null) throw new IllegalStateException("Download stream was empty.");
+
+                    byte[] buf = new byte[1024 * 1024];
+                    long read = 0L;
+                    int r;
+                    while((r = in.read(buf)) != -1){
+                        out.write(buf, 0, r);
+                        read += r;
+                        if(total > 0L){
+                            semanticSearchDownloadProgress = Math.min(1f, read / (float)total);
+                        }
+                    }
+                }catch(Throwable t){
+                    Core.app.post(() -> failSemanticSearchDownload(t, runtime));
+                    return;
+                }
+
+                Core.app.post(() -> {
+                    if(semanticSearchDisposing || !semanticSearchEnabled()){
+                        semanticSearchDownloadInProgress = false;
+                        semanticSearchDownloadProgress = -1f;
+                        semanticSearchDownloadTotalMb = 0f;
+                        hideSemanticSearchProgressDialog();
+                        return;
+                    }
+                    semanticSearchDownloadInProgress = false;
+                    semanticSearchDownloadProgress = 1f;
+                    hideSemanticSearchProgressDialog();
+                    semanticSearchStatusOverride = runtime
+                        ? bundle("spdb.semantic.status.runtime-download-complete", "运行库下载完成，正在检查语义模型...")
+                        : bundle("spdb.semantic.status.download-complete", "模型下载完成，正在初始化...");
+                    bumpSemanticSearchUiRevision();
+                    if(runtime){
+                        ensureSemanticSearchReady(semanticSearchPendingQuery);
+                    }else{
+                        startSemanticSearchInitialization(true);
+                    }
+                });
+            });
+    }
+
+    private void failSemanticSearchDownload(Throwable t, boolean runtime){
+        semanticSearchDownloadInProgress = false;
+        semanticSearchDownloadProgress = -1f;
+        semanticSearchDownloadTotalMb = 0f;
+        hideSemanticSearchProgressDialog();
+        if(semanticSearchDisposing || !semanticSearchEnabled()) return;
+        if(runtime){
+            cleanupSemanticSearchRuntimeFile();
+        }else{
+            cleanupSemanticSearchModelFile();
+        }
+        semanticSearchStatusOverride = bundleFormat(
+            runtime ? "spdb.semantic.status.runtime-download-failed" : "spdb.semantic.status.download-failed",
+            runtime ? "语义搜索运行库下载失败：@" : "语义模型下载失败：@",
+            semanticSearchErrorMessage(t)
+        );
+        bumpSemanticSearchUiRevision();
+        if(Vars.ui != null) Vars.ui.showException(semanticSearchStatusOverride, t);
+    }
+
+    private void startSemanticSearchInitialization(boolean deleteModelOnFailure){
+        final int lifecycleToken;
+        synchronized(semanticSearchLock){
+            if(!semanticSearchEnabled() || semanticSearchDisposing || semanticSearchInitializing || embeddingIndex != null || semanticSearchRuntimeFile == null || !semanticSearchRuntimeFile.exists() || semanticSearchRuntimeFile.length() <= 0L || semanticSearchModelFile == null || !semanticSearchModelFile.exists() || semanticSearchModelFile.length() <= 0L){
+                return;
+            }
+
+            semanticSearchInitializing = true;
+            semanticSearchResourcesStarted = true;
+            lifecycleToken = semanticSearchLifecycleToken;
+        }
+        semanticSearchStatusOverride = bundle("spdb.semantic.status.init-start", "正在初始化语义搜索模型...");
+        bumpSemanticSearchUiRevision();
+
+        Threads.daemon("spdb-semantic-init", () -> {
+            EmbeddingEngine newEngine = null;
+            EmbeddingIndex newIndex = null;
+            try{
+                if(semanticSearchDisposing || !semanticSearchEnabled()) return;
+                int threads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+                newEngine = EmbeddingEngine.load(semanticSearchModelFile.file(), semanticSearchRuntimeFile.file(), semanticSearchNativeDir == null ? null : semanticSearchNativeDir.file(), threads);
+                newIndex = new EmbeddingIndex(newEngine, chatDb);
+                synchronized(semanticSearchLock){
+                    if(semanticSearchDisposing || lifecycleToken != semanticSearchLifecycleToken || !semanticSearchEnabled()) return;
+                    pendingEmbeddingEngine = newEngine;
+                    pendingEmbeddingIndex = newIndex;
+                }
+                EmbeddingEngine readyEngine = newEngine;
+                EmbeddingIndex readyIndex = newIndex;
+                newEngine = null;
+                newIndex = null;
+                Core.app.post(() -> completeSemanticSearchInitialization(readyEngine, readyIndex, lifecycleToken));
+            }catch(Throwable t){
+                EmbeddingEngine failedEngine = newEngine;
+                EmbeddingIndex failedIndex = newIndex;
+                newEngine = null;
+                newIndex = null;
+                boolean stale;
+                synchronized(semanticSearchLock){
+                    stale = lifecycleToken != semanticSearchLifecycleToken || !semanticSearchEnabled();
+                }
+                if(semanticSearchDisposing || stale){
+                    clearStaleSemanticSearchInitialization(failedEngine, failedIndex, lifecycleToken);
+                    closeSemanticSearchPair(failedIndex, failedEngine);
+                    return;
+                }
+                Core.app.post(() -> failSemanticSearchInitialization(t, failedEngine, failedIndex, deleteModelOnFailure, lifecycleToken));
+            }finally{
+                if(newIndex != null || newEngine != null){
+                    synchronized(semanticSearchLock){
+                        if(pendingEmbeddingEngine == newEngine) pendingEmbeddingEngine = null;
+                        if(pendingEmbeddingIndex == newIndex) pendingEmbeddingIndex = null;
+                        if(lifecycleToken == semanticSearchLifecycleToken && (semanticSearchDisposing || !semanticSearchEnabled())) semanticSearchInitializing = false;
+                    }
+                    closeSemanticSearchPair(newIndex, newEngine);
+                }
+            }
+        });
+    }
+
+    private void completeSemanticSearchInitialization(EmbeddingEngine newEngine, EmbeddingIndex newIndex, int lifecycleToken){
+        EmbeddingEngine oldEngine;
+        EmbeddingIndex oldIndex;
+        boolean accepted;
+        synchronized(semanticSearchLock){
+            if(lifecycleToken == semanticSearchLifecycleToken) semanticSearchInitializing = false;
+            if(pendingEmbeddingEngine == newEngine) pendingEmbeddingEngine = null;
+            if(pendingEmbeddingIndex == newIndex) pendingEmbeddingIndex = null;
+            if(semanticSearchDisposing || lifecycleToken != semanticSearchLifecycleToken || !semanticSearchEnabled()){
+                oldEngine = null;
+                oldIndex = null;
+                accepted = false;
+            }else{
+                oldEngine = embeddingEngine;
+                oldIndex = embeddingIndex;
+                embeddingEngine = newEngine;
+                embeddingIndex = newIndex;
+                lastEmbeddingFlushAt = Time.millis();
+                accepted = true;
+            }
+        }
+
+        if(!accepted){
+            closeSemanticSearchPair(newIndex, newEngine);
+            return;
+        }
+
+        closeSemanticSearchPair(oldIndex, oldEngine);
+        semanticSearchStatusOverride = bundle("spdb.semantic.status.index-wait", "语义模型已加载，正在建立搜索索引...");
+        newIndex.initialize();
+        bumpSemanticSearchUiRevision();
+    }
+
+    private void failSemanticSearchInitialization(Throwable t, EmbeddingEngine failedEngine, EmbeddingIndex failedIndex, boolean deleteModelOnFailure, int lifecycleToken){
+        boolean stale;
+        synchronized(semanticSearchLock){
+            stale = lifecycleToken != semanticSearchLifecycleToken || !semanticSearchEnabled();
+            if(lifecycleToken == semanticSearchLifecycleToken) semanticSearchInitializing = false;
+            if(pendingEmbeddingEngine == failedEngine) pendingEmbeddingEngine = null;
+            if(pendingEmbeddingIndex == failedIndex) pendingEmbeddingIndex = null;
+        }
+        closeSemanticSearchPair(failedIndex, failedEngine);
+        if(semanticSearchDisposing || stale) return;
+        if(deleteModelOnFailure){
+            cleanupSemanticSearchModelFile();
+        }
+        semanticSearchStatusOverride = bundleFormat("spdb.semantic.status.init-failed", "语义搜索初始化失败：@", semanticSearchErrorMessage(t));
+        bumpSemanticSearchUiRevision();
+        Log.err("SPDB: semantic search initialization failed.", t);
+        if(Vars.ui != null) Vars.ui.showException(semanticSearchStatusOverride, t);
+    }
+
+    private void clearStaleSemanticSearchInitialization(EmbeddingEngine failedEngine, EmbeddingIndex failedIndex, int lifecycleToken){
+        synchronized(semanticSearchLock){
+            if(lifecycleToken == semanticSearchLifecycleToken) semanticSearchInitializing = false;
+            if(pendingEmbeddingEngine == failedEngine) pendingEmbeddingEngine = null;
+            if(pendingEmbeddingIndex == failedIndex) pendingEmbeddingIndex = null;
+        }
+    }
+
+    private void cleanupSemanticSearchModelFile(){
+        if(semanticSearchModelFile == null) return;
+        try{
+            semanticSearchModelFile.delete();
+        }catch(Throwable ignored){
+        }
+    }
+
+    private void cleanupSemanticSearchRuntimeFile(){
+        if(semanticSearchRuntimeFile == null) return;
+        try{
+            semanticSearchRuntimeFile.delete();
+        }catch(Throwable ignored){
+        }
+    }
+
+    private void registerSemanticSearchShutdownHook(){
+        try{
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdownSemanticSearchResources(false), "spdb-semantic-shutdown"));
+        }catch(IllegalStateException ignored){
+            shutdownSemanticSearchResources(false);
+        }catch(SecurityException e){
+            Log.err("SPDB: failed registering semantic search shutdown hook.", e);
+        }
+    }
+
+    private void disableSemanticSearchResources(){
+        releaseSemanticSearchResources(true, false);
+    }
+
+    private void shutdownSemanticSearchResources(boolean updateUi){
+        releaseSemanticSearchResources(updateUi, true);
+    }
+
+    private void releaseSemanticSearchResources(boolean updateUi, boolean terminal){
+        EmbeddingEngine activeEngine;
+        EmbeddingIndex activeIndex;
+        EmbeddingEngine pendingEngine;
+        EmbeddingIndex pendingIndex;
+        boolean hadSemanticResources;
+        int releaseToken;
+        synchronized(semanticSearchLock){
+            semanticSearchLifecycleToken++;
+            releaseToken = semanticSearchLifecycleToken;
+            hadSemanticResources = semanticSearchResourcesStarted
+                || semanticSearchInitializing
+                || embeddingEngine != null
+                || embeddingIndex != null
+                || pendingEmbeddingEngine != null
+                || pendingEmbeddingIndex != null;
+            semanticSearchDisposing = true;
+            semanticSearchInitializing = false;
+            semanticSearchDownloadInProgress = false;
+            semanticSearchPromptOpen = false;
+            semanticSearchDownloadProgress = -1f;
+            semanticSearchDownloadTotalMb = 0f;
+
+            activeEngine = embeddingEngine;
+            activeIndex = embeddingIndex;
+            pendingEngine = pendingEmbeddingEngine;
+            pendingIndex = pendingEmbeddingIndex;
+
+            embeddingEngine = null;
+            embeddingIndex = null;
+            pendingEmbeddingEngine = null;
+            pendingEmbeddingIndex = null;
+        }
+
+        if(terminal && hadSemanticResources){
+            startSemanticSearchExitFallback(releaseToken);
+        }
+
+        if(updateUi){
+            hideSemanticSearchProgressDialog();
+            bumpSemanticSearchUiRevision();
+        }
+
+        long deadlineNanos = System.nanoTime() + semanticSearchShutdownTimeoutMs * 1000000L;
+        closeSemanticSearchPair(pendingIndex, pendingEngine, deadlineNanos);
+        if(activeIndex != pendingIndex || activeEngine != pendingEngine){
+            closeSemanticSearchPair(activeIndex, activeEngine, deadlineNanos);
+        }
+
+        boolean shouldRestart = false;
+        synchronized(semanticSearchLock){
+            if(releaseToken == semanticSearchLifecycleToken){
+                if(!terminal){
+                    semanticSearchDisposing = false;
+                    if(!semanticSearchEnabled()){
+                        semanticSearchStatusOverride = bundle("spdb.semantic.status.disabled", "语义搜索未启用。打开语义搜索标签页或执行 /spdb-search 后会启用。");
+                    }else{
+                        semanticSearchStatusOverride = null;
+                        shouldRestart = true;
+                    }
+                }
+                semanticSearchExitFallbackStarted = false;
+            }
+        }
+        if(updateUi) bumpSemanticSearchUiRevision();
+        if(shouldRestart){
+            startSemanticSearchIfLocalComponentsReady();
+        }
+    }
+
+    private void closeSemanticSearchPair(EmbeddingIndex index, EmbeddingEngine engine){
+        closeSemanticSearchPair(index, engine, System.nanoTime() + semanticSearchShutdownTimeoutMs * 1000000L);
+    }
+
+    private void closeSemanticSearchPair(EmbeddingIndex index, EmbeddingEngine engine, long deadlineNanos){
+        if(index != null){
+            try{
+                index.close(remainingSemanticSearchShutdownMillis(deadlineNanos));
+            }catch(Throwable ignored){
+            }
+        }
+        if(engine != null){
+            try{
+                engine.close();
+            }catch(Throwable ignored){
+            }
+        }
+    }
+
+    private long remainingSemanticSearchShutdownMillis(long deadlineNanos){
+        long remaining = (deadlineNanos - System.nanoTime()) / 1000000L;
+        return Math.max(1L, remaining);
+    }
+
+    private void startSemanticSearchExitFallback(int releaseToken){
+        synchronized(semanticSearchLock){
+            if(semanticSearchExitFallbackStarted) return;
+            semanticSearchExitFallbackStarted = true;
+        }
+        Thread fallback = new Thread(() -> {
+            try{
+                Thread.sleep(semanticSearchShutdownTimeoutMs);
+            }catch(InterruptedException ignored){
+                Thread.currentThread().interrupt();
+                return;
+            }
+
+            boolean shouldExit;
+            synchronized(semanticSearchLock){
+                shouldExit = semanticSearchExitFallbackStarted
+                    && releaseToken == semanticSearchLifecycleToken
+                    && semanticSearchDisposing
+                    && semanticSearchResourcesStarted;
+            }
+            if(shouldExit){
+                Log.warn("SPDB: semantic search resources did not close within @ ms; forcing JVM exit.", semanticSearchShutdownTimeoutMs);
+                System.exit(0);
+            }
+        }, "spdb-semantic-exit-fallback");
+        fallback.setDaemon(true);
+        fallback.start();
+    }
+
+    private void showSemanticSearchProgressDialog(){
+        if(semanticSearchDisposing || Vars.ui == null) return;
+        if(semanticSearchProgressDialog != null){
+            semanticSearchProgressDialog.show();
+            return;
+        }
+
+        BaseDialog dialog = new BaseDialog(bundle("spdb.semantic.progress.title", "下载语义搜索组件"));
+        dialog.cont.margin(10f);
+        dialog.cont.add(bundle("spdb.semantic.progress.desc", "正在下载语义搜索组件，请稍候。"))
+            .width(460f)
+            .left()
+            .wrap()
+            .row();
+        dialog.cont.add(new Bar(this::semanticSearchStatus, () -> Color.valueOf("5ec7ff"), () ->
+            semanticSearchDownloadProgress < 0f ? 0f : semanticSearchDownloadProgress
+        )).width(460f).height(70f).padTop(8f);
+        dialog.setFillParent(false);
+        semanticSearchProgressDialog = dialog;
+        dialog.show();
+    }
+
+    private void hideSemanticSearchProgressDialog(){
+        if(semanticSearchProgressDialog == null) return;
+        semanticSearchProgressDialog.hide();
+        semanticSearchProgressDialog = null;
+    }
+
+    private void rememberSemanticSearchQuery(String query){
+        if(query == null || query.trim().isEmpty()) return;
+        semanticSearchPendingQuery = query.trim();
+    }
+
+    private String consumePendingSemanticSearchQueryIfReady(){
+        if(!semanticSearchReady()) return null;
+        String pending = semanticSearchPendingQuery;
+        if(pending == null || pending.trim().isEmpty()) return null;
+        semanticSearchPendingQuery = null;
+        return pending;
+    }
+
+    private void bumpSemanticSearchUiRevision(){
+        semanticSearchUiRevision++;
+    }
+
+    private String semanticSearchErrorMessage(Throwable t){
+        String message = Strings.getFinalMessage(t);
+        if(message == null || message.trim().isEmpty()){
+            return t == null ? "unknown" : t.getClass().getSimpleName();
+        }
+        return message.trim();
+    }
+
+    private static String bundle(String key, String fallback){
+        return Core.bundle == null ? fallback : Core.bundle.get(key, fallback);
+    }
+
+    private static String bundleFormat(String key, String fallback, Object... args){
+        String template = Core.bundle != null && Core.bundle.has(key) ? Core.bundle.get(key) : fallback;
+        return Strings.format(template, args);
     }
 
     private boolean isAndroidRuntime(){
@@ -902,6 +1499,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         Core.settings.defaults(keyRecordChat, false);
         Core.settings.defaults(keyAutoTrace, true);
         Core.settings.defaults(keyShowAutoTraceDialog, false);
+        Core.settings.defaults(keySemanticSearchEnabled, false);
 
         if(!bekBundled) Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
     }
@@ -915,6 +1513,15 @@ public class ServerPlayerDataBaseMod extends Mod{
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyAutoTrace, true, Icon.zoom, null));
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyShowAutoTraceDialog, false, Icon.eyeSmall, null));
 
+            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.semantic", "语义搜索"), Icon.zoom));
+            table.pref(new SpdbSettingsWidgets.IconCheckSetting(keySemanticSearchEnabled, false, Icon.zoom, enabled -> {
+                if(enabled){
+                    startSemanticSearchIfLocalComponentsReady();
+                }else{
+                    disableSemanticSearchResources();
+                }
+            }));
+
             table.pref(new SpdbSettingsWidgets.HeaderSetting("工具", Icon.wrench));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开查询窗口", Icon.list, this::showStandaloneQueryDialog));
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开调试窗口", Icon.zoom, this::showStandaloneDebugDialog));
@@ -922,8 +1529,8 @@ public class ServerPlayerDataBaseMod extends Mod{
             table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
 
             table.pref(new SpdbSettingsWidgets.HeaderSetting("更新", Icon.refresh));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
-            table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+            if(!bekBundled) table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
+            if(!bekBundled) table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
         
     }
 
@@ -1781,7 +2388,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 tabs.left().defaults().height(40f).pad(6f).growX();
                 tabs.button("玩家库", Icon.players, Styles.togglet, () -> activeTab = 0).checked(b -> activeTab == 0).growX();
                 tabs.button("聊天记录", Icon.chat, Styles.togglet, () -> activeTab = 1).checked(b -> activeTab == 1).growX();
-                tabs.button("语义搜索", Icon.zoom, Styles.togglet, () -> activeTab = 2).checked(b -> activeTab == 2).growX();
+                tabs.button("语义搜索", Icon.zoom, Styles.togglet, () -> openSemanticSearch(null)).checked(b -> activeTab == 2).growX();
             }).growX().padBottom(8f).row();
 
             playerTab.clear();
@@ -2044,7 +2651,27 @@ public class ServerPlayerDataBaseMod extends Mod{
                 public void showInfo(String message){
                     if(Vars.ui != null) Vars.ui.showInfoFade(message);
                 }
-            }, embeddingIndex);
+
+                @Override
+                public void ensureSemanticSearchReady(String query){
+                    ServerPlayerDataBaseMod.this.ensureSemanticSearchReady(query);
+                }
+
+                @Override
+                public boolean canRunSemanticSearch(){
+                    return semanticSearchReady();
+                }
+
+                @Override
+                public String semanticSearchStatus(){
+                    return ServerPlayerDataBaseMod.this.semanticSearchStatus();
+                }
+
+                @Override
+                public Seq<EmbeddingIndex.SearchResult> searchSemantic(String query, int limit){
+                    return ServerPlayerDataBaseMod.this.searchSemantic(query, limit);
+                }
+            });
             semanticTab.add(semanticContent.root).grow().minWidth(0f).minHeight(0f).row();
 
             root.stack(
@@ -2056,6 +2683,13 @@ public class ServerPlayerDataBaseMod extends Mod{
                     stack.getChildren().get(0).visible = activeTab == 0;
                     stack.getChildren().get(1).visible = activeTab == 1;
                     stack.getChildren().get(2).visible = activeTab == 2;
+                }
+                if(semanticContent == null) return;
+                semanticContent.tick();
+                String pending = consumePendingSemanticSearchQueryIfReady();
+                if(pending != null){
+                    semanticContent.setQueryText(pending);
+                    semanticContent.runSearch();
                 }
             }).grow().minWidth(0f).minHeight(0f).padBottom(compact ? 10f : 6f);
             root.row();
@@ -2682,8 +3316,11 @@ public class ServerPlayerDataBaseMod extends Mod{
         void openSemanticSearch(String query){
             activeTab = 2;
             if(semanticContent != null){
-                semanticContent.setQueryText(query);
-                if(query != null && !query.trim().isEmpty()){
+                if(query != null){
+                    semanticContent.setQueryText(query);
+                }
+                ensureSemanticSearchReady(query);
+                if(semanticSearchReady() && query != null && !query.trim().isEmpty()){
                     semanticContent.runSearch();
                 }else{
                     semanticContent.refreshStatus();

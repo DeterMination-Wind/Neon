@@ -64,3 +64,10 @@ Neon/
   并确保合并后的 `src/main/resources/bundles/bundle*.properties` 可用。
 
 命令操作请使用 PowerShell 7（`pwsh`）。
+
+## 子模组同步状态
+- `tools/update_submods.py --check` 以本地工作区为准检查子模组状态，不会放弃 `localPath` 工作流。
+- `sync=` 表示 `tools/submods.lock.json` 里上次正式同步进 Neon 的版本。
+- `workspace=` 表示当前本地子模组工作区版本，也是下次执行同步时真正会被拷入 Neon 的版本。
+- `upstream=` 只在本地仓库存在 git upstream 且启用 `trackUpstream` 时展示，用来补充说明远端状态。
+- `changed-since-lock` 说明本地子模组自上次 Neon 同步后已经变化；`dirty-workspace` 说明当前目录还有未提交改动。

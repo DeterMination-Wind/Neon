@@ -16,7 +16,9 @@ import java.util.Comparator;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +40,7 @@ public final class EmbeddingIndex implements AutoCloseable{
     private volatile boolean ready;
     private volatile boolean rebuilding;
     private volatile boolean dirty;
+    private volatile boolean closed;
     private volatile String status = "未初始化";
     private volatile String failureReason;
     private volatile int indexedEntries;
@@ -58,6 +61,7 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void initialize(){
+        if(closed) return;
         if(!chatDb.usesSqlite()){
             available = false;
             failureReason = "当前聊天后端不是 SQLite，语义搜索不可用。";
@@ -65,7 +69,7 @@ public final class EmbeddingIndex implements AutoCloseable{
             return;
         }
 
-        executor.execute(() -> {
+        execute(() -> {
             try{
                 loadOrRebuild();
             }catch(Throwable t){
@@ -116,8 +120,8 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void rebuildAsync(){
-        if(!available) return;
-        executor.execute(() -> {
+        if(closed || !available) return;
+        execute(() -> {
             try{
                 rebuildAll();
             }catch(Throwable t){
@@ -131,11 +135,13 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void addEntryAsync(int entryId, ServerPlayerDataBaseMod.ChatEntry entry){
-        if(!available || entryId <= 0 || entry == null || entry.message == null || entry.message.trim().isEmpty()) return;
+        if(closed || !available || entryId <= 0 || entry == null || entry.message == null || entry.message.trim().isEmpty()) return;
 
-        executor.execute(() -> {
+        execute(() -> {
             try{
+                if(closed) return;
                 float[] vector = engine.embed(entry.message);
+                if(closed) return;
                 synchronized(vectors){
                     boolean existed = vectors.get(entryId) != null;
                     vectors.put(entryId, new EntryVector(entryId, entry.copy(), vector));
@@ -154,7 +160,7 @@ public final class EmbeddingIndex implements AutoCloseable{
 
     public Seq<SearchResult> search(String query, int limit){
         Seq<SearchResult> out = new Seq<>();
-        if(!available || !ready) return out;
+        if(closed || !available || !ready) return out;
 
         String trimmed = query == null ? "" : query.trim();
         if(trimmed.isEmpty()) return out;
@@ -192,8 +198,8 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void flushIfDirty(){
-        if(!available || !dirty) return;
-        executor.execute(() -> {
+        if(closed || !available || !dirty) return;
+        execute(() -> {
             dirty = false;
             lastPersistAt = Time.millis();
         });
@@ -201,16 +207,49 @@ public final class EmbeddingIndex implements AutoCloseable{
 
     @Override
     public void close(){
+        close(3000L);
+    }
+
+    public void close(long timeoutMillis){
+        if(closed) return;
+        closed = true;
+        available = false;
+        ready = false;
+        rebuilding = false;
+        dirty = false;
+        status = "语义索引已关闭";
         executor.shutdownNow();
+        if(timeoutMillis > 0L){
+            try{
+                executor.awaitTermination(timeoutMillis, TimeUnit.MILLISECONDS);
+            }catch(InterruptedException e){
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void execute(Runnable task){
+        if(closed) return;
+        try{
+            executor.execute(() -> {
+                if(closed) return;
+                task.run();
+            });
+        }catch(RejectedExecutionException ignored){
+        }
     }
 
     private void loadOrRebuild() throws Exception{
+        if(closed) return;
         ensureSchema();
+        if(closed) return;
         if(invalidateVectorsIfModelChanged()){
             status = "检测到语义模型已切换，正在重建搜索索引 0/0";
         }
         totalEntries = countIndexableEntries();
+        if(closed) return;
         loadAllVectors();
+        if(closed) return;
         updateReadyStatus();
         if(ready){
             ready = true;
@@ -224,6 +263,7 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     private void rebuildAll() throws Exception{
+        if(closed) return;
         rebuilding = true;
         ready = false;
         totalEntries = countIndexableEntries();
@@ -243,10 +283,11 @@ public final class EmbeddingIndex implements AutoCloseable{
             conn.commit();
         }
 
-        resumeBuild(new ResumeCheckpoint(0, indexedEntries));
+        if(!closed) resumeBuild(new ResumeCheckpoint(0, indexedEntries));
     }
 
     private void resumeBuild(ResumeCheckpoint checkpoint) throws Exception{
+        if(closed) return;
         rebuilding = true;
         ready = false;
         dirty = false;
@@ -259,16 +300,18 @@ public final class EmbeddingIndex implements AutoCloseable{
         }
 
         int lastId = Math.max(0, checkpoint.afterId);
-        while(true){
+        while(!closed && !Thread.currentThread().isInterrupted()){
             Seq<SqlChatRow> batch = loadBatch(lastId, rebuildBatchSize);
             if(batch.isEmpty()) break;
 
             for(SqlChatRow row : batch){
+                if(closed || Thread.currentThread().isInterrupted()) return;
                 lastId = row.id;
                 if(row.message == null || row.message.trim().isEmpty()) continue;
                 if(hasVector(row.id)) continue;
 
                 float[] vector = engine.embed(row.message);
+                if(closed || Thread.currentThread().isInterrupted()) return;
                 ServerPlayerDataBaseMod.ChatEntry chat = new ServerPlayerDataBaseMod.ChatEntry();
                 chat.uid = row.uid;
                 chat.senderName = row.senderName;
@@ -289,15 +332,17 @@ public final class EmbeddingIndex implements AutoCloseable{
             status = "正在建立搜索索引 " + indexedEntries + "/" + totalEntries;
         }
 
-        rebuilding = false;
-        dirty = false;
-        lastPersistAt = Time.millis();
-        updateReadyStatus();
-        status = ready ? "索引就绪，共 " + indexedEntries + " 条" : "索引未完成";
+        if(!closed){
+            rebuilding = false;
+            dirty = false;
+            lastPersistAt = Time.millis();
+            updateReadyStatus();
+            status = ready ? "索引就绪，共 " + indexedEntries + " 条" : "索引未完成";
+        }
     }
 
     private void updateReadyStatus(){
-        ready = available && !rebuilding && indexedEntries == totalEntries;
+        ready = !closed && available && !rebuilding && indexedEntries == totalEntries;
     }
 
     private void ensureSchema() throws Exception{

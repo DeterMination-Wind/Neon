@@ -40,12 +40,12 @@ public class BetterProjectorOverlayMod extends Mod {
             if (settingsAdded) return;
             settingsAdded = true;
 
-            GithubUpdateCheck.applyDefaults();
+            if (!bekBundled) GithubUpdateCheck.applyDefaults();
 
             if (!bekBundled) {
                 ui.settings.addCategory("@settings.bpo", Icon.map, BetterProjectorOverlayFeature::buildSettings);
             }
-            GithubUpdateCheck.checkOnce();
+            if (!bekBundled) GithubUpdateCheck.checkOnce();
         });
     }
 }

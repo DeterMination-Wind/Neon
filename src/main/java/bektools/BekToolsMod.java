@@ -18,13 +18,16 @@ import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
+import advancedreplace.AdvancedReplaceMod;
 import bettermapeditor.BetterMapEditorMod;
 import betterhotkey.BetterHotKeyMod;
 import betterminimap.BetterMiniMapMod;
 import betterlogisticsspeed.BetterLogisticsSpeedMod;
+import betterpolyai.BetterPolyAiMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterscreenshot.features.BetterScreenShotFeature;
 import custommarker.features.CustomMarkerFeature;
+import foreignservertranslator.ForeignServerTranslatorMod;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -37,6 +40,7 @@ import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
 import stealthpath.StealthPathMod;
+import tripwire.TripwireMod;
 import whousesthisbuilding.WhoUsesThisBuildingMod;
 
 import static mindustry.Vars.ui;
@@ -57,6 +61,10 @@ public class BekToolsMod extends Mod{
     private final WhoUsesThisBuildingMod whoUsesThisBuilding;
     private final PatchViewerMod patchViewer;
     private final PinyinSearchSupportMod pinyinSearchSupport;
+    private final ForeignServerTranslatorMod foreignServerTranslator;
+    private final TripwireMod tripwire;
+    private final BetterPolyAiMod betterPolyAi;
+    private final AdvancedReplaceMod advancedReplace;
     private final PostHogUsageReporter postHogUsageReporter;
 
     public BekToolsMod(){
@@ -95,6 +103,10 @@ public class BekToolsMod extends Mod{
         WhoUsesThisBuildingMod.bekBundled = true;
         PatchViewerMod.bekBundled = true;
         PinyinSearchSupportMod.bekBundled = true;
+        ForeignServerTranslatorMod.bekBundled = true;
+        TripwireMod.bekBundled = true;
+        BetterPolyAiMod.bekBundled = true;
+        AdvancedReplaceMod.bekBundled = true;
 
         BetterScreenShotFeature.configureOverlayUi(overlayUi);
         CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
@@ -129,6 +141,13 @@ public class BekToolsMod extends Mod{
         patchViewer.init();
         pinyinSearchSupport = new PinyinSearchSupportMod();
         pinyinSearchSupport.init();
+        foreignServerTranslator = new ForeignServerTranslatorMod();
+        foreignServerTranslator.init();
+        tripwire = new TripwireMod();
+        betterPolyAi = new BetterPolyAiMod();
+        betterPolyAi.init();
+        advancedReplace = new AdvancedReplaceMod();
+        advancedReplace.init();
         postHogUsageReporter = new PostHogUsageReporter(getClass());
         CustomMarkerFeature.init();
         BetterScreenShotFeature.init();
@@ -187,6 +206,10 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, whoUsesThisBuilding::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, patchViewer::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, pinyinSearchSupport::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.fst", "Foreign Server Translator"), Icon.chat, foreignServerTranslator::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, tripwire::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, betterPolyAi::bekBuildSettings);
+            addGroup(table, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, advancedReplace::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
         });
     }

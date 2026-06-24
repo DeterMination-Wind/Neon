@@ -1,4 +1,4 @@
-﻿# AGENTS.md - Neon 模组说明
+# AGENTS.md - Neon 模组说明
 
 ## 文件结构（当前仓库）
 ```text
@@ -6,18 +6,6 @@ Neon/
 |-- .github/
 |   \-- workflows/
 |       \-- release.yml
-|-- bin/
-|   \-- main/
-|       |-- bektools/
-|       |-- betterhotkey/
-|       |-- betterlogisticsspeed/
-|       |-- bundles/
-|       |-- hiddenmessage/
-|       |-- modupdater/
-|       |-- powergridminimap/
-|       |-- radialbuildmenu/
-|       |-- stealthpath/
-|       \-- mod.json
 |-- gradle/
 |   \-- wrapper/
 |       |-- gradle-wrapper.jar
@@ -25,7 +13,32 @@ Neon/
 |-- src/
 |   \-- main/
 |       |-- java/
+|       |   |-- bektools/              (聚合设置入口 / 核心)
+|       |   |-- betterhotkey/          (快捷键增强)
+|       |   |-- betterlogisticsspeed/  (物流速率增强)
+|       |   |-- bettermapeditor/       (地图编辑增强)
+|       |   |-- betterminimap/         (增强小地图)
+|       |   |-- betterpolyai/          (Poly 建造辅助)
+|       |   |-- betterprojectoroverlay/(投影叠加)
+|       |   |-- betterscreenshot/      (更好的截图)
+|       |   |-- custommarker/          (自定义标记)
+|       |   |-- foreignservertranslator/(外语服务器翻译)
+|       |   |-- mdtxcompat/            (MindustryX 兼容桥接)
+|       |   |-- mindustry/ui/fragments/(翻译聊天 UI 组件)
+|       |   |-- modupdater/            (模组更新中心)
+|       |   |-- patchviewer/           (补丁查看器)
+|       |   |-- pinyinsearchsupport/   (拼音搜索支持)
+|       |   |-- powergridminimap/      (电网小地图)
+|       |   |-- radialbuildmenu/       (圆盘快捷建造)
+|       |   |-- serverplayerdatabase/  (玩家数据库)
+|       |   |-- stealthpath/           (偷袭小道)
+|       |   |-- tripwire/              (地理围栏报警)
+|       |   \-- whousesthisbuilding/   (谁在用这个建筑)
+|       |-- kotlin/
+|       |   \-- advancedreplace/       (地图编辑高级替换)
 |       \-- resources/
+|           |-- bundles/
+|           \-- fst-bundles/           (ForeignServerTranslator 独立 bundle)
 |-- tools/
 |   |-- bektools-bundles/
 |   |   |-- bundle.properties
@@ -42,6 +55,7 @@ Neon/
 |-- gradlew.bat
 |-- LICENSE
 |-- mod.json
+|-- mod.hjson
 |-- README.md
 \-- settings.gradle
 ```

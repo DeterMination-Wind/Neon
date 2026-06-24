@@ -7,11 +7,16 @@ import arc.scene.Group;
 import arc.scene.event.ChangeListener;
 import arc.scene.event.EventListener;
 import arc.scene.ui.Image;
+import arc.scene.ui.Label;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField;
+import arc.scene.ui.Tooltip;
+import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
 import arc.struct.Seq;
 import arc.util.Log;
+import arc.util.Strings;
 import arc.util.Timer;
 import arc.util.pooling.Pools;
 import mindustry.Vars;
@@ -26,6 +31,8 @@ public final class FieldDispatcher{
     private final ObjectMap<TextField, Seq<ChangeListener>> vanillas = new ObjectMap<>();
     private final ObjectMap<TextField, Timer.Task> debounces = new ObjectMap<>();
     private final ObjectSet<String> bundleSearchKeys = new ObjectSet<>();
+    private final ObjectSet<String> modsContextTokens = new ObjectSet<>();
+    private final ObjectSet<String> modsExactTokens = new ObjectSet<>();
     private boolean keysCollected;
 
     public void scan(){
@@ -65,7 +72,38 @@ public final class FieldDispatcher{
                 String v = Core.bundle.get(k, "");
                 if(v != null && !v.isEmpty()) bundleSearchKeys.add(v);
             }
+            String[] modsKeys = {
+                "mods", "mods.browser", "mods.browser.sortdate", "mods.browser.sortstars",
+                "mods.guide", "mods.openfolder", "mods.none", "mods.disabled",
+                "mods.group.mod", "mods.group.internal", "mod.disabled"
+            };
+            for(String k : modsKeys){
+                addModsContextToken("@" + k);
+                String v = Core.bundle.get(k, "");
+                addModsContextToken(v);
+                if(!"mod.disabled".equals(k)){
+                    addModsContextToken(Strings.stripColors(v));
+                }
+            }
+            addModsExactToken("@mods");
+            addModsExactToken(Core.bundle.get("mods", ""));
+            addModsExactToken(Strings.stripColors(Core.bundle.get("mods", "")));
         }catch(Throwable ignored){}
+    }
+
+    private void addModsContextToken(String token){
+        if(token == null) return;
+        token = token.trim().toLowerCase(Locale.ROOT);
+        if(token.length() < 4) return;
+        if("mod".equals(token) || "mods".equals(token) || "disabled".equals(token)) return;
+        modsContextTokens.add(token);
+    }
+
+    private void addModsExactToken(String token){
+        if(token == null) return;
+        token = token.trim().toLowerCase(Locale.ROOT);
+        if(token.length() < 2) return;
+        modsExactTokens.add(token);
     }
 
     private static void collect(Element root, Seq<TextField> out){
@@ -157,24 +195,120 @@ public final class FieldDispatcher{
         String typed = field.getText();
         if(typed == null) typed = "";
 
+        if(typed.isEmpty() || isModsSearchField(field)){
+            fireListeners(field, list);
+            return;
+        }
+
+        ScopeTree scope = ScopeTree.locate(field);
+        if(scope == null || !scope.isValid()){
+            fireListeners(field, list);
+            return;
+        }
+
         String prev = FieldTextProxy.swap(field, "");
+        if(field.getText() != null && !field.getText().isEmpty()){
+            fireListeners(field, list);
+            return;
+        }
         try{
             fireListeners(field, list);
         }finally{
             FieldTextProxy.swap(field, prev != null ? prev : typed);
         }
 
-        if(typed.isEmpty()) return;
-
-        ScopeTree scope = ScopeTree.locate(field);
-        if(scope == null) return;
+        if(!scope.isValid()){
+            scope = ScopeTree.locate(field);
+        }
+        if(scope == null || !scope.isValid()) return;
 
         MatchEngine.MatchOptions opts = new MatchEngine.MatchOptions(
             Core.settings.getBool(PinyinSearchSupportMod.keyFuzzy, true),
             Core.settings.getBool(PinyinSearchSupportMod.keyInitials, true),
             Core.settings.getBool(PinyinSearchSupportMod.keyHeteronym, true)
         );
-        scope.postFilter(typed, opts);
+        try{
+            scope.postFilter(typed, opts);
+        }catch(Throwable t){
+            Log.warn("[PinyinSearchSupport] post filter failed: @", t.getMessage());
+        }
+    }
+
+    private boolean isModsSearchField(TextField field){
+        if(field == null || field.getScene() == null) return false;
+        if(!keysCollected) collectBundleKeys();
+
+        Group root = locateContextRoot(field);
+        if(root == null) return false;
+
+        Group cursor = root;
+        for(int depth = 0; depth < 4 && cursor != null; depth++){
+            if(Core.scene != null && cursor == Core.scene.root) break;
+            if(containsModsContext(cursor, new int[]{0})) return true;
+            cursor = cursor.parent;
+        }
+        return false;
+    }
+
+    private static Group locateContextRoot(TextField field){
+        Group cursor = field.parent;
+        for(int depth = 0; depth < 12 && cursor != null; depth++){
+            if(hasTableScrollPane(cursor)) return cursor;
+            cursor = cursor.parent;
+        }
+        return null;
+    }
+
+    private static boolean hasTableScrollPane(Element root){
+        if(root instanceof ScrollPane){
+            return ((ScrollPane)root).getWidget() instanceof Table;
+        }
+        if(root instanceof Group){
+            Seq<Element> ch = ((Group)root).getChildren();
+            for(int i = 0; i < ch.size; i++){
+                if(hasTableScrollPane(ch.get(i))) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsModsContext(Element root, int[] visited){
+        if(root == null || visited[0]++ > 1200) return false;
+
+        if(root instanceof Label){
+            CharSequence text = ((Label)root).getText();
+            if(matchesModsContext(text == null ? null : text.toString())) return true;
+        }
+
+        Seq<EventListener> listeners = root.getListeners();
+        for(int i = 0; i < listeners.size; i++){
+            EventListener l = listeners.get(i);
+            if(l instanceof Tooltip && containsModsContext(((Tooltip)l).getContainer(), visited)){
+                return true;
+            }
+        }
+
+        if(root instanceof Group){
+            Seq<Element> ch = ((Group)root).getChildren();
+            for(int i = 0; i < ch.size; i++){
+                if(containsModsContext(ch.get(i), visited)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesModsContext(String text){
+        if(text == null || text.isEmpty()) return false;
+
+        String lower = text.trim().toLowerCase(Locale.ROOT);
+        String stripped = Strings.stripColors(lower).trim();
+        if(modsExactTokens.contains(lower) || modsExactTokens.contains(stripped)) return true;
+
+        if(lower.contains("@mods.") || lower.contains("@mod.disabled")) return true;
+        for(String token : modsContextTokens){
+            if(token != null && token.length() > 0 && (lower.contains(token) || stripped.contains(token))) return true;
+        }
+        return false;
     }
 
     private void fireVanilla(TextField field){

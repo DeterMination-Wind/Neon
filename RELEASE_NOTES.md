@@ -1,5 +1,21 @@
 # Neon / 氖 — Release Notes
 
+## v9.0.1
+
+### 中文
+
+- 将 `BetterScreenShot` 设置栏标题改为按用户语言显示：中文环境显示“更好的截图”，仅非中文环境继续显示英文标题。
+- 保持原有 BSS 功能与热键逻辑不变，仅修正设置面板标题本地化体验。
+- 同步更新发布版本到 `v9.0.1`。
+
+### English
+
+- Changed the `BetterScreenShot` settings-panel title to follow the user language: Chinese users now see a Chinese title, while non-Chinese users still see the English title.
+- Kept the existing BSS behavior and hotkey flow unchanged; this release only fixes the panel-title localization.
+- Bumped the release version to `v9.0.1`.
+
+---
+
 ## Local dev
 
 ### 中文

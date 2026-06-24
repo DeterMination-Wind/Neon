@@ -7,7 +7,7 @@ def modDescriptor = new groovy.json.JsonSlurper().parse(file("mod.json"))
 def artifactBaseName = (modDescriptor.name ?: project.name).toString()
 
 group = "bektools"
-version = "0.0.0"
+version = "9.0.1"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17

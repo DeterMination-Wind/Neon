@@ -22,6 +22,8 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
+import java.util.Locale;
+
 import static mindustry.Vars.state;
 import static mindustry.Vars.ui;
 import static mindustry.Vars.world;
@@ -58,6 +60,7 @@ public class BetterScreenShotFeature {
 
     private static KeyBind keybindCapture;
     private static Table panel;
+    private static Label titleLabel;
     private static Label sizeLabel;
     private static Label statusLabel;
     private static TextButton captureButton;
@@ -130,6 +133,7 @@ public class BetterScreenShotFeature {
             lastOverlayEnabled = enabled;
         }
 
+        updateTitle();
         updateCaptureButton();
     }
 
@@ -143,9 +147,10 @@ public class BetterScreenShotFeature {
         panel.left();
         panel.defaults().left().growX().padBottom(4f);
 
-        Label title = new Label(Core.bundle.get("bss.window.title"));
-        title.setColor(Pal.accent);
-        panel.add(title).row();
+        titleLabel = new Label("");
+        titleLabel.setColor(Pal.accent);
+        panel.add(titleLabel).row();
+        updateTitle();
 
         sizeLabel = new Label("");
         sizeLabel.setWrap(true);
@@ -315,6 +320,19 @@ public class BetterScreenShotFeature {
         if (captureButton == null) return;
         captureButton.setText(capturing ? Core.bundle.get("bss.button.capturing") : Core.bundle.get("bss.button.capture"));
         captureButton.setDisabled(capturing || !enabled);
+    }
+
+    private static void updateTitle() {
+        if (titleLabel == null) return;
+        titleLabel.setText(resolveWindowTitle());
+    }
+
+    private static String resolveWindowTitle() {
+        Locale locale = Core.bundle == null ? null : Core.bundle.getLocale();
+        if (locale != null && "zh".equalsIgnoreCase(locale.getLanguage())) {
+            return Core.bundle.get("bss.window.title.zh", "更好的截图");
+        }
+        return Core.bundle == null ? "BetterScreenShot" : Core.bundle.get("bss.window.title", "BetterScreenShot");
     }
 
     private static float getResolution() {

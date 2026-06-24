@@ -3,6 +3,9 @@ plugins{
     id "org.jetbrains.kotlin.jvm" version "2.2.0"
 }
 
+def modDescriptor = new groovy.json.JsonSlurper().parse(file("mod.json"))
+def artifactBaseName = (modDescriptor.name ?: project.name).toString()
+
 group = "bektools"
 version = "0.0.0"
 
@@ -84,7 +87,7 @@ tasks.register("copyZipToBuildDir", Copy){
     dependsOn tasks.named("jar")
     from(tasks.named("jar").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${project.name}-${project.version}.zip" }
+    rename{ _ -> "${artifactBaseName}.zip" }
 }
 
 tasks.register("copyJarToBuildDir", Copy){
@@ -92,7 +95,7 @@ tasks.register("copyJarToBuildDir", Copy){
     dependsOn tasks.named("jarAndroid")
     from(tasks.named("jarAndroid").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${project.name}-${project.version}-android.jar" }
+    rename{ _ -> "${artifactBaseName}-android.jar" }
 }
 
 tasks.named("jar").configure{
@@ -230,6 +233,7 @@ tasks.register("jarMerged", Jar){
     from(projectDir){
         include "mod.json"
         include "mod.hjson"
+        include "icon.png"
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
@@ -265,7 +269,7 @@ tasks.register("copyMergedJarToBuildDir", Copy){
     dependsOn tasks.named("jarMerged")
     from(tasks.named("jarMerged").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${mergedArchiveBase}-${project.version}.jar" }
+    rename{ _ -> "${artifactBaseName}.jar" }
 }
 
 tasks.register("copyMergedZipToBuildDir", Copy){
@@ -273,7 +277,7 @@ tasks.register("copyMergedZipToBuildDir", Copy){
     dependsOn tasks.named("zipMerged")
     from(tasks.named("zipMerged").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${mergedArchiveBase}-${project.version}.zip" }
+    rename{ _ -> "${artifactBaseName}.zip" }
 }
 
 tasks.named("jarMerged").configure{

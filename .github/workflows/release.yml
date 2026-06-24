@@ -41,7 +41,7 @@ jobs:
             chmod +x ./gradlew
             gradle_cmd="./gradlew"
           fi
-          $gradle_cmd --no-daemon clean deploy
+          $gradle_cmd -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon clean deploy
 
       - name: Prepare versioned release assets
         if: startsWith(github.ref, 'refs/tags/')

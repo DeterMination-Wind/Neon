@@ -12,7 +12,7 @@ public class TripwireFence {
     public final int id;
     public final Seq<Vec2> points = new Seq<>();
     public final ObjectSet<UnitType> selectedUnits = new ObjectSet<>();
-    public boolean isRightSide;
+    public DirectionMode direction = DirectionMode.all;
     public Team team;
 
     public TripwireFence(int id, Team team) {
@@ -26,6 +26,34 @@ public class TripwireFence {
 
     public boolean contains(UnitType type) {
         return type != null && selectedUnits.contains(type);
+    }
+
+    public static boolean isCoreUnit(UnitType type) {
+        if (type == null || type.name == null) return false;
+        switch (type.name) {
+            case "alpha":
+            case "beta":
+            case "gamma":
+            case "evoke":
+            case "incite":
+            case "emanate":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public boolean crossedSelectedSide(float cross1, float cross2) {
+        if (Math.abs(cross1) < 0.0001f && Math.abs(cross2) < 0.0001f) return false;
+        switch (direction) {
+            case outer:
+                return cross1 < 0f && cross2 >= 0f;
+            case inner:
+                return cross1 > 0f && cross2 <= 0f;
+            case all:
+            default:
+                return (cross1 < 0f && cross2 >= 0f) || (cross1 > 0f && cross2 <= 0f);
+        }
     }
 
     public float distanceTo(float x, float y) {
@@ -71,5 +99,42 @@ public class TripwireFence {
 
     private static float cross(float ax, float ay, float bx, float by, float px, float py) {
         return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    }
+
+    public enum DirectionMode {
+        inner(0, "tripwire.inner"),
+        outer(1, "tripwire.outer"),
+        all(2, "tripwire.allDirections");
+
+        public final int id;
+        public final String bundleKey;
+
+        DirectionMode(int id, String bundleKey) {
+            this.id = id;
+            this.bundleKey = bundleKey;
+        }
+
+        public DirectionMode next() {
+            switch (this) {
+                case inner:
+                    return outer;
+                case outer:
+                    return all;
+                case all:
+                default:
+                    return inner;
+            }
+        }
+
+        public static DirectionMode byId(int id) {
+            for (DirectionMode mode : values()) {
+                if (mode.id == id) return mode;
+            }
+            return all;
+        }
+
+        public static DirectionMode fromLegacyRightSide(boolean rightSide) {
+            return rightSide ? outer : inner;
+        }
     }
 }

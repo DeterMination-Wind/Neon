@@ -18,6 +18,7 @@ import static mindustry.Vars.content;
 
 public final class TripwireData {
     public static final Seq<TripwireFence> fences = new Seq<>();
+    private static final int chunkVersion = 2;
     private static int nextId = 1;
     private static boolean inited;
 
@@ -31,7 +32,7 @@ public final class TripwireData {
         SaveVersion.addCustomChunk("tripwire-data", new SaveFileReader.CustomChunk() {
             @Override
             public void write(DataOutput stream) throws IOException {
-                stream.writeInt(1);
+                stream.writeInt(chunkVersion);
                 stream.writeInt(fences.size);
                 for (TripwireFence fence : fences) {
                     stream.writeInt(fence.id);
@@ -40,7 +41,7 @@ public final class TripwireData {
                         stream.writeFloat(point.x);
                         stream.writeFloat(point.y);
                     }
-                    stream.writeBoolean(fence.isRightSide);
+                    stream.writeInt(fence.direction.id);
                     stream.writeInt(fence.selectedUnits.size);
                     for (UnitType type : fence.selectedUnits) {
                         stream.writeUTF(type.name);
@@ -53,7 +54,7 @@ public final class TripwireData {
             public void read(DataInput stream) throws IOException {
                 clear();
                 int version = stream.readInt();
-                if (version != 1) return;
+                if (version < 1 || version > chunkVersion) return;
                 int count = stream.readInt();
                 for (int i = 0; i < count; i++) {
                     int id = stream.readInt();
@@ -62,7 +63,9 @@ public final class TripwireData {
                     for (int p = 0; p < pointCount; p++) {
                         fence.points.add(new Vec2(stream.readFloat(), stream.readFloat()));
                     }
-                    fence.isRightSide = stream.readBoolean();
+                    fence.direction = version == 1
+                        ? TripwireFence.DirectionMode.fromLegacyRightSide(stream.readBoolean())
+                        : TripwireFence.DirectionMode.byId(stream.readInt());
                     int unitCount = stream.readInt();
                     for (int u = 0; u < unitCount; u++) {
                         UnitType type = content.getByName(ContentType.unit, stream.readUTF());
@@ -89,7 +92,9 @@ public final class TripwireData {
     }
 
     public static TripwireFence create(Team team) {
-        return new TripwireFence(nextId++, team == null ? Team.derelict : team);
+        TripwireFence fence = new TripwireFence(nextId++, team == null ? Team.derelict : team);
+        selectDefaultUnits(fence);
+        return fence;
     }
 
     public static void add(TripwireFence fence) {
@@ -113,5 +118,16 @@ public final class TripwireData {
             }
         }
         return best;
+    }
+
+    private static void selectDefaultUnits(TripwireFence fence) {
+        if (content == null) return;
+        for (UnitType type : content.units()) {
+            if (isDefaultSelected(type)) fence.selectedUnits.add(type);
+        }
+    }
+
+    private static boolean isDefaultSelected(UnitType type) {
+        return type != null && !TripwireFence.isCoreUnit(type);
     }
 }

@@ -54,17 +54,12 @@ public final class TripwireDetector {
                 Vec2 b = fence.points.get(i + 1);
                 float cross1 = TripwireFence.cross(a, b, lastX, lastY);
                 float cross2 = TripwireFence.cross(a, b, unit.x, unit.y);
-                if (!crossedSelectedSide(fence.isRightSide, cross1, cross2)) continue;
+                if (!fence.crossedSelectedSide(cross1, cross2)) continue;
                 if (!movementIntersectsSegment(lastX, lastY, unit.x, unit.y, a.x, a.y, b.x, b.y)) continue;
                 TripwireAlert.crossed((a.x + b.x) / 2f, (a.y + b.y) / 2f, unit);
                 return;
             }
         }
-    }
-
-    private static boolean crossedSelectedSide(boolean right, float cross1, float cross2) {
-        if (Math.abs(cross1) < 0.0001f && Math.abs(cross2) < 0.0001f) return false;
-        return right ? cross1 < 0f && cross2 >= 0f : cross1 > 0f && cross2 <= 0f;
     }
 
     private static boolean movementIntersectsSegment(float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy) {

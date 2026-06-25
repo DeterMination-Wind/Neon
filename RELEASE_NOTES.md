@@ -1,5 +1,21 @@
 # Neon / 氖 — Release Notes
 
+## v9.0.2
+
+### 中文
+
+- 补全 Neon 设置页里仍显示英文的模块入口名，中文环境现在会显示对应中文标题。
+- `betterMiniMap` 的开关标题改为直接显示“启用”。
+- 保持 `BetterScreenShot` 中文标题逻辑不变，并沿用 GitHub Release workflow 的 JDK 修复。
+
+### English
+
+- Filled in the remaining English module titles in the Neon settings page so Chinese users now see localized section names.
+- Changed the `betterMiniMap` toggle title to plain `Enable` in the translated UI.
+- Kept the BetterScreenShot Chinese-title behavior and the GitHub Release workflow JDK fix.
+
+---
+
 ## v9.0.1
 
 ### 中文

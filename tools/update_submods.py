@@ -690,6 +690,27 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
     return java_src
 
 
+def inject_overlay_compat_hooks(mod_id: str, java_src: str) -> str:
+    if mod_id == "pgmm":
+        java_src = java_src.replace(
+            "this(vanillaMarkers(), OverlayUiBridge.UNSUPPORTED);",
+            "this(vanillaMarkers(), OverlayUiBridge.autoDetect());",
+        )
+        java_src = java_src.replace(
+            "// MindustryX OverlayUI integration is injected by the dedicated mainX entry.",
+            "// Optional OverlayUI integration is injected by the dedicated mainX entry or detected in vanilla.",
+        )
+        return java_src
+
+    if mod_id in {"sp", "rbm", "spdb", "bhk"}:
+        java_src = java_src.replace(
+            "return OverlayUiBridge.UNSUPPORTED;",
+            "return OverlayUiBridge.autoDetect();",
+            1,
+        )
+    return java_src
+
+
 def ensure_bundled_return(java_src: str) -> str:
     # Insert `if(bekBundled) return;` right after the ui/settings null check.
     # Works for:
@@ -809,13 +830,14 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
             dst_path = target_pkg_dir / rel
             text = read_text(src_path)
             if (
-                mod.inject_bek_hooks
-                and mod.main_class_file
+                mod.main_class_file
                 and mod.java_package_dir is not None
                 and target_pkg_dir == mod.java_package_dir
                 and src_path.name == mod.main_class_file
             ):
-                text = inject_bek_hooks(mod.id, text)
+                if mod.inject_bek_hooks:
+                    text = inject_bek_hooks(mod.id, text)
+                text = inject_overlay_compat_hooks(mod.id, text)
             write_text(dst_path, text)
 
 

@@ -1905,7 +1905,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private static OverlayUiBridge vanillaOverlayUi(){
         LegacyMindustryXGuard.rejectLegacyMindustryX("ServerPlayerDataBase");
-        return OverlayUiBridge.UNSUPPORTED;
+        return OverlayUiBridge.autoDetect();
     }
 
     private void exportPlayersToFile(){

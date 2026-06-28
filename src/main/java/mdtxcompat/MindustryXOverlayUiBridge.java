@@ -54,7 +54,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             }
             return new WindowHandle(window);
         } catch (Throwable t) {
-            disable("MindustryX OverlayUI registerWindow failed; disabling integration.", t);
+            disable("OverlayUI registerWindow failed; disabling integration.", t);
             return NO_WINDOW;
         }
     }
@@ -70,7 +70,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
                 toggleMethod.invoke(overlayInstance);
             }
         } catch (Throwable t) {
-            disable("MindustryX OverlayUI toggle failed; disabling integration.", t);
+            disable("OverlayUI toggle failed; disabling integration.", t);
         }
     }
 
@@ -91,7 +91,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             available = false;
             return false;
         } catch (Throwable t) {
-            disable("MindustryX OverlayUI symbols resolve failed; disabling integration.", t);
+            disable("OverlayUI symbols resolve failed; disabling integration.", t);
             return false;
         }
     }

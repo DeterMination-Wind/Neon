@@ -160,7 +160,7 @@ public class BekToolsMod extends Mod{
 
     private static OverlayUiBridge vanillaOverlayUi(){
         LegacyMindustryXGuard.rejectLegacyMindustryX("Neon");
-        return OverlayUiBridge.UNSUPPORTED;
+        return OverlayUiBridge.autoDetect();
     }
 
     @FunctionalInterface

@@ -149,7 +149,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private final PowerTableOverlay powerTable = new PowerTableOverlay();
     private final MarkerBridge xMarkers;
     private final NativeMarkers nativeMarkers = new NativeMarkers();
-    // MindustryX OverlayUI integration is injected by the dedicated mainX entry.
+    // Optional OverlayUI integration is injected by the dedicated mainX entry or detected in vanilla.
     private final OverlayUiBridge xOverlayUi;
     private OverlayUiBridge.OverlayWindowHandle xPowerTableWindow = null;
     private boolean lastPowerTableEnabled = false;
@@ -159,7 +159,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private boolean consoleApiLogged = false;
 
     public PowerGridMinimapMod(){
-        this(vanillaMarkers(), OverlayUiBridge.UNSUPPORTED);
+        this(vanillaMarkers(), OverlayUiBridge.autoDetect());
     }
 
     protected PowerGridMinimapMod(MarkerBridge markers, OverlayUiBridge overlayUi){

@@ -6,6 +6,9 @@
   "description": "A bundled toolkit with 19 client modules, now including ForeignServerTranslator, Tripwire, BetterPolyAi, and AdvancedReplace in Neon unified settings. / 辅助模组十九合一，现并入 ForeignServerTranslator、Tripwire、BetterPolyAi 与 AdvancedReplace 并统一到 Neon 设置入口。",
   "version": "9.0.2",
   "minGameVersion": 154,
+  "softDependencies": [
+    "overlay-compat-bridge"
+  ],
   "hidden": true,
   "java": true,
   "main": "bektools.BekToolsMod",

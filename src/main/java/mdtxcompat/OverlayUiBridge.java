@@ -7,6 +7,10 @@ import arc.scene.ui.layout.Table;
 public interface OverlayUiBridge {
     OverlayUiBridge UNSUPPORTED = new NoopOverlayUiBridge();
 
+    static OverlayUiBridge autoDetect() {
+        return new MindustryXOverlayUiBridge();
+    }
+
     boolean isSupported();
 
     OverlayWindowHandle registerWindow(String name, Table table, Prov<Boolean> availability);

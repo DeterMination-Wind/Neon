@@ -38,6 +38,7 @@ import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -242,9 +243,20 @@ public class OverlayUI {
             }
 
             try {
-                String raw = Core.settings.getString(name, null);
-                if (raw == null || raw.isEmpty()) return new WindowData();
-                WindowData data = json.fromJson(WindowData.class, raw);
+                Object raw = Core.settings.get(name, (Object) null);
+                if (raw == null) return new WindowData();
+
+                String rawStr;
+                if (raw instanceof String) {
+                    rawStr = (String) raw;
+                } else if (raw instanceof byte[]) {
+                    rawStr = new String((byte[]) raw, StandardCharsets.UTF_8);
+                } else {
+                    return new WindowData();
+                }
+
+                if (rawStr.isEmpty()) return new WindowData();
+                WindowData data = json.fromJson(WindowData.class, rawStr);
                 return data == null ? new WindowData() : data;
             } catch (Throwable t) {
                 Log.err("[Neon Embedded Overlay] failed to load window setting: @", name);

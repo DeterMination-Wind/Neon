@@ -310,6 +310,7 @@ public class BekToolsMod extends Mod{
 
     private static class NestedSettingsTable extends SettingsMenuDialog.SettingsTable{
         private boolean suppressRebuild = true;
+        private boolean rebuilding = false;
 
         public NestedSettingsTable(float indent){
             super();
@@ -320,12 +321,15 @@ public class BekToolsMod extends Mod{
 
         @Override
         public void rebuild(){
-            if(suppressRebuild) return;
+            if(suppressRebuild || rebuilding) return;
+            rebuilding = true;
 
             clearChildren();
             for(Setting setting : list){
                 setting.add(this);
             }
+
+            rebuilding = false;
         }
 
         public void finishBuild(){

@@ -37,7 +37,7 @@ final class AutoDetectingOverlayUiBridge implements OverlayUiBridge {
 
     private OverlayUiBridge probeDelegate() {
         if (LegacyMindustryXGuard.isMindustryXRuntime()) {
-            return OverlayUiBridge.UNSUPPORTED;
+            return external.isSupported() ? external : OverlayUiBridge.UNSUPPORTED;
         }
 
         if (external.isSupported()) {

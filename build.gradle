@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "9.0.2"
+version = "10.0.1"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -70,12 +70,22 @@ jar{
     // A Mindustry Java mod is a zip/jar archive with classes + resources.
     // Use .zip extension for distribution.
     archiveFileName = "Neon.zip"
+    from(projectDir){
+        include "mod.json"
+        include "mod.hjson"
+        include "icon.png"
+    }
 }
 
 tasks.register("jarAndroid", Jar){
     group = "build"
     description = "Packages Neon as a .jar for Mindustry Android (classes.dex)."
     archiveFileName = "Neon-android.jar"
+    from(projectDir){
+        include "mod.json"
+        include "mod.hjson"
+        include "icon.png"
+    }
 }
 
 // Keep a copy in workspace root "构建/<mod-name>/" (mod name + version).

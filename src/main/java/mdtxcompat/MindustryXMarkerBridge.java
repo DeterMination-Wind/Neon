@@ -32,8 +32,7 @@ public class MindustryXMarkerBridge implements MarkerBridge {
         if (!available) return false;
         if (resolved) return true;
         try {
-            ClassLoader loader = MindustryXMarkerBridge.class.getClassLoader();
-            Class<?> markerType = Class.forName("mindustryX.features.MarkerType", false, loader);
+            Class<?> markerType = LegacyMindustryXGuard.loadMindustryXClass("mindustryX.features.MarkerType");
             markMethod = markerType.getMethod("newMarkFromChat", String.class, Vec2.class);
             resolved = true;
             return true;

@@ -1,5 +1,21 @@
 # Neon Release Notes
 
+## v10.0.1
+
+### 中文
+
+- 修复 Neon 在原生具有 OverlayUI 的 MindustryX 中仍错误加载 overlaycompatbridge 的问题。
+- 修复 Neon 设置页在部分运行时因为初始化失败而整栏消失的问题。
+- 修复发布产物缺失 `mod.json` / `mod.hjson` 导致 `No Mod Json Found` 的问题。
+
+### English
+
+- Fixed Neon incorrectly loading `overlaycompatbridge` even when running on a native MindustryX build that already provides OverlayUI.
+- Fixed the Neon settings section disappearing when initialization failed in some runtimes.
+- Fixed release artifacts missing `mod.json` / `mod.hjson`, which caused `No Mod Json Found`.
+
+---
+
 ## v10.0.0
 
 ### 中文

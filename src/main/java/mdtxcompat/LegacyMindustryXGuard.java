@@ -10,7 +10,46 @@ public final class LegacyMindustryXGuard {
     }
 
     public static boolean isMindustryXRuntime() {
-        return locateMindustryX() != null || classExists("mindustryX.VarsX") || classExists("mindustryX.loader.Main");
+        return locateMindustryX() != null
+            || classExists("mindustryX.VarsX", runtimeClassLoader())
+            || classExists("mindustryX.loader.Main", runtimeClassLoader())
+            || classExists("mindustryX.VarsX", LegacyMindustryXGuard.class.getClassLoader())
+            || classExists("mindustryX.loader.Main", LegacyMindustryXGuard.class.getClassLoader());
+    }
+
+    public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
+        ClassNotFoundException first = null;
+
+        if (isMindustryXRuntime()) {
+            try {
+                return Class.forName(name, false, runtimeClassLoader());
+            } catch (ClassNotFoundException e) {
+                first = e;
+            } catch (LinkageError e) {
+                ClassNotFoundException wrapped = new ClassNotFoundException(name, e);
+                first = wrapped;
+            }
+        }
+
+        try {
+            return Class.forName(name, false, LegacyMindustryXGuard.class.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            if (first != null) e.addSuppressed(first);
+            throw e;
+        } catch (LinkageError e) {
+            ClassNotFoundException wrapped = new ClassNotFoundException(name, e);
+            if (first != null) wrapped.addSuppressed(first);
+            throw wrapped;
+        }
+    }
+
+    public static ClassLoader runtimeClassLoader() {
+        if (Vars.mods != null) {
+            ClassLoader loader = Vars.mods.getClass().getClassLoader();
+            if (loader != null) return loader;
+        }
+        ClassLoader loader = Vars.class.getClassLoader();
+        return loader == null ? LegacyMindustryXGuard.class.getClassLoader() : loader;
     }
 
     public static void rejectLegacyMindustryX(String modName) {
@@ -32,9 +71,9 @@ public final class LegacyMindustryXGuard {
         return Vars.mods.locateMod("mdtx");
     }
 
-    private static boolean classExists(String name) {
+    private static boolean classExists(String name, ClassLoader loader) {
         try {
-            Class.forName(name, false, LegacyMindustryXGuard.class.getClassLoader());
+            Class.forName(name, false, loader);
             return true;
         } catch (ClassNotFoundException | LinkageError ignored) {
             return false;

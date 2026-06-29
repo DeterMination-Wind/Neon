@@ -66,6 +66,7 @@ public class BekToolsMod extends Mod{
     private final BetterPolyAiMod betterPolyAi;
     private final AdvancedReplaceMod advancedReplace;
     private final PostHogUsageReporter postHogUsageReporter;
+    private boolean settingsRegistered;
 
     public BekToolsMod(){
         this(
@@ -153,8 +154,16 @@ public class BekToolsMod extends Mod{
         BetterScreenShotFeature.init();
 
         Events.on(ClientLoadEvent.class, e -> {
-            postHogUsageReporter.onClientLoad();
-            registerSettings();
+            try{
+                postHogUsageReporter.onClientLoad();
+            }catch(Throwable t){
+                Log.err("Neon: failed to initialize usage reporter; continuing with settings registration.", t);
+            }
+            try{
+                registerSettings();
+            }catch(Throwable t){
+                Log.err("Neon: failed to register unified settings.", t);
+            }
         });
     }
 
@@ -180,6 +189,7 @@ public class BekToolsMod extends Mod{
 
     private void registerSettings(){
         if(ui == null || ui.settings == null) return;
+        if(settingsRegistered) return;
 
         ui.settings.addCategory("@bektools.category", Icon.settings, table -> {
             addGroup(table, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, pgmm::bekBuildSettings);
@@ -211,6 +221,7 @@ public class BekToolsMod extends Mod{
             addGroup(table, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, advancedReplace::bekBuildSettings);
             addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
         });
+        settingsRegistered = true;
     }
 
     private static void addGroup(SettingsMenuDialog.SettingsTable table, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){

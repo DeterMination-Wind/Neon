@@ -48,8 +48,7 @@ public class MindustryXSchematicShareBridge implements SchematicShareBridge {
         if (!available) return false;
         if (resolved) return true;
         try {
-            ClassLoader loader = MindustryXSchematicShareBridge.class.getClassLoader();
-            Class<?> shareFeature = Class.forName("mindustryX.features.ShareFeature", false, loader);
+            Class<?> shareFeature = LegacyMindustryXGuard.loadMindustryXClass("mindustryX.features.ShareFeature");
             shareSchematicMethod = shareFeature.getMethod("shareSchematic", Schematic.class);
             shareClipboardMethod = shareFeature.getMethod("shareSchematicClipboard", Schematic.class);
             resolved = true;

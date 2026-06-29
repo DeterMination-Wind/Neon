@@ -90,9 +90,8 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         long now = System.currentTimeMillis();
         if (lastMissingAt != 0L && now - lastMissingAt < missingRetryMillis) return false;
 
-        ClassLoader loader = MindustryXOverlayUiBridge.class.getClassLoader();
         try {
-            Class<?> overlayClass = Class.forName("mindustryX.features.ui.OverlayUI", false, loader);
+            Class<?> overlayClass = LegacyMindustryXGuard.loadMindustryXClass("mindustryX.features.ui.OverlayUI");
             instanceField = overlayClass.getField("INSTANCE");
             registerWindowMethod = overlayClass.getMethod("registerWindow", String.class, Table.class);
             getOpenMethod = overlayClass.getMethod("getOpen");
@@ -107,7 +106,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             lastMissingAt = now;
             if (!missingLogged) {
                 missingLogged = true;
-                Log.info("Neon OverlayUI integration: mindustryX.features.ui.OverlayUI not found with loader " + loader + "; install OverlayCompatBridge in this launcher mod directory or use MindustryX to enable overlay windows.");
+                Log.info("Neon OverlayUI integration: mindustryX.features.ui.OverlayUI not found; install OverlayCompatBridge in this launcher mod directory or use MindustryX to enable overlay windows.");
                 logLoadedModSnapshot();
             }
             return false;

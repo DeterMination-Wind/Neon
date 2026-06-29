@@ -1,5 +1,23 @@
 # Neon Release Notes
 
+## v10.0.2
+
+### 中文
+
+- 修复 v10.0.0 升级后拼音搜索失效的问题；蓝图搜索和方块搜索不再因为重复接管搜索框而出现“空结果”或“闪一下后恢复全列表”。
+- 将 Neon 的内部模组名恢复为稳定的 `Neon`，避免旧版 `Neon` 与新版 `bek-tools` 在 `mods` 目录中被 Mindustry 误判为两个不同模组并同时加载。
+- 为 PinyinSearchSupport 增加重复加载保护与诊断日志；如果玩家残留旧版 Neon 或独立拼音搜索模组，Neon 会给出明确提示而不是继续把搜索框补丁叠加到同一界面上。
+- 保留对旧 `bek-tools` 名称的仓库解析兼容，已安装环境在更新后仍能正确识别 Neon 的更新源。
+
+### English
+
+- Fixed the pinyin search regression introduced after upgrading to v10.0.0; schematic search and block search no longer fall into empty results or flash back to the full list due to duplicate field patching.
+- Restored Neon's stable internal mod name to `Neon`, preventing old `Neon` builds and newer `bek-tools` builds from being treated as two different mods and loaded together.
+- Added duplicate-load protection and diagnostic logging to PinyinSearchSupport, so leftover old Neon builds or standalone pinyin-search mods now produce a clear warning instead of stacking multiple search-field patches onto the same UI.
+- Kept repository resolution compatibility for the legacy `bek-tools` name so existing installs can still resolve Neon updates correctly after upgrading.
+
+---
+
 ## v10.0.1
 
 ### 中文

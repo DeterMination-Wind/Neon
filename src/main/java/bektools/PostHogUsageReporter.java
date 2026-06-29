@@ -156,7 +156,7 @@ final class PostHogUsageReporter{
     }
 
     private ModMeta resolveModMeta(){
-        String modName = "bek-tools";
+        String modName = "Neon";
         String modVersion = "unknown";
         if(Vars.mods != null){
             Mods.LoadedMod mod = Vars.mods.getMod(modType);

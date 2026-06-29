@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
 final class GithubUpdateCheck{
     private static final String owner = "DeterMination-Wind";
     private static final String repo = "Neon";
-    private static final String modName = "bek-tools";
+    private static final String modName = "neon";
 
     private static final String mirrorPrefix = "https://ghfile.geekertao.top/";
 

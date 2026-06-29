@@ -20,6 +20,7 @@ public final class RepoResolver{
     private static boolean modIndexLoading;
 
     static{
+        builtinMap.put("neon", "DeterMination-Wind/Neon");
         builtinMap.put("bek-tools", "DeterMination-Wind/Neon");
         builtinMap.put("betterminimap", "DeterMination-Wind/betterMiniMap");
         builtinMap.put("betterhotkey", "DeterMination-Wind/betterHotKey");

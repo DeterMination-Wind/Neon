@@ -1157,7 +1157,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private static OverlayUiBridge vanillaOverlayUi(){
-        LegacyMindustryXGuard.rejectLegacyMindustryX("StealthPath");
         return OverlayUiBridge.autoDetect();
     }
 

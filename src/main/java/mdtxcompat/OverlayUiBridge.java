@@ -6,9 +6,10 @@ import arc.scene.ui.layout.Table;
 
 public interface OverlayUiBridge {
     OverlayUiBridge UNSUPPORTED = new NoopOverlayUiBridge();
+    OverlayUiBridge AUTO_DETECT = new AutoDetectingOverlayUiBridge();
 
     static OverlayUiBridge autoDetect() {
-        return new MindustryXOverlayUiBridge();
+        return AUTO_DETECT;
     }
 
     boolean isSupported();

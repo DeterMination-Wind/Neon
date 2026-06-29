@@ -190,7 +190,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private static OverlayUiBridge vanillaOverlayUi(){
-        LegacyMindustryXGuard.rejectLegacyMindustryX("Radial Build Menu");
         return OverlayUiBridge.autoDetect();
     }
 

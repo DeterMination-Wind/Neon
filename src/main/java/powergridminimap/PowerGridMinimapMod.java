@@ -314,7 +314,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     }
 
     private static MarkerBridge vanillaMarkers(){
-        LegacyMindustryXGuard.rejectLegacyMindustryX("Power Grid Minimap");
         return MarkerBridge.UNSUPPORTED;
     }
 

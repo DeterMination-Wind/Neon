@@ -1904,7 +1904,6 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private static OverlayUiBridge vanillaOverlayUi(){
-        LegacyMindustryXGuard.rejectLegacyMindustryX("ServerPlayerDataBase");
         return OverlayUiBridge.autoDetect();
     }
 

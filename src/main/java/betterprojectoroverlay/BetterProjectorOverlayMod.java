@@ -24,7 +24,6 @@ public class BetterProjectorOverlayMod extends Mod {
     }
 
     private static MarkerBridge vanillaMarkers() {
-        LegacyMindustryXGuard.rejectLegacyMindustryX("BetterProjectorOverlay");
         return MarkerBridge.UNSUPPORTED;
     }
 

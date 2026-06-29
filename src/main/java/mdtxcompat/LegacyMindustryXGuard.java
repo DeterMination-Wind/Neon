@@ -9,6 +9,10 @@ public final class LegacyMindustryXGuard {
     private LegacyMindustryXGuard() {
     }
 
+    public static boolean isMindustryXRuntime() {
+        return locateMindustryX() != null || classExists("mindustryX.VarsX") || classExists("mindustryX.loader.Main");
+    }
+
     public static void rejectLegacyMindustryX(String modName) {
         Mods.LoadedMod mindustryX = locateMindustryX();
         if (mindustryX == null) return;
@@ -26,5 +30,14 @@ public final class LegacyMindustryXGuard {
         Mods.LoadedMod mod = Vars.mods.locateMod("mindustryx");
         if (mod != null) return mod;
         return Vars.mods.locateMod("mdtx");
+    }
+
+    private static boolean classExists(String name) {
+        try {
+            Class.forName(name, false, LegacyMindustryXGuard.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return false;
+        }
     }
 }

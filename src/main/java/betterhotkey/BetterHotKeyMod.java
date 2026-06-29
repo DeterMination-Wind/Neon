@@ -26,7 +26,6 @@ public class BetterHotKeyMod extends Mod {
     }
 
     private static OverlayUiBridge vanillaOverlayUi() {
-        LegacyMindustryXGuard.rejectLegacyMindustryX("betterHotKey");
         return OverlayUiBridge.autoDetect();
     }
 

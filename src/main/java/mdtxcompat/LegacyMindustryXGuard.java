@@ -18,29 +18,14 @@ public final class LegacyMindustryXGuard {
     }
 
     public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
-        ClassNotFoundException first = null;
-
         if (isMindustryXRuntime()) {
             try {
                 return Class.forName(name, false, runtimeClassLoader());
-            } catch (ClassNotFoundException e) {
-                first = e;
-            } catch (LinkageError e) {
-                ClassNotFoundException wrapped = new ClassNotFoundException(name, e);
-                first = wrapped;
+            } catch (ClassNotFoundException ignored) {
             }
         }
 
-        try {
-            return Class.forName(name, false, LegacyMindustryXGuard.class.getClassLoader());
-        } catch (ClassNotFoundException e) {
-            if (first != null) e.addSuppressed(first);
-            throw e;
-        } catch (LinkageError e) {
-            ClassNotFoundException wrapped = new ClassNotFoundException(name, e);
-            if (first != null) wrapped.addSuppressed(first);
-            throw wrapped;
-        }
+        return Class.forName(name, false, LegacyMindustryXGuard.class.getClassLoader());
     }
 
     public static ClassLoader runtimeClassLoader() {

@@ -21,6 +21,7 @@ import mindustry.ui.Fonts;
 
 public final class MarkerTranslator{
     private static final ObjectMap<String, Object> inFlightRequests = new ObjectMap<>();
+    private static boolean installed;
 
     private MarkerTranslator(){
     }
@@ -30,6 +31,8 @@ public final class MarkerTranslator{
 
     /** Registers the render hook that draws translated text below TextMarker/ShapeTextMarker on the map. */
     public static void install(){
+        if(installed) return;
+        installed = true;
         Events.run(Trigger.draw, () -> {
             if(!TranslatorFeature.isCurrentServerForeign()) return;
 

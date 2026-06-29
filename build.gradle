@@ -3,8 +3,7 @@ plugins{
     id "org.jetbrains.kotlin.jvm" version "2.2.0"
 }
 
-def modDescriptor = new groovy.json.JsonSlurper().parse(file("mod.json"))
-def artifactBaseName = (modDescriptor.name ?: project.name).toString()
+def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
 version = "9.0.2"
@@ -80,14 +79,14 @@ tasks.register("jarAndroid", Jar){
 }
 
 // Keep a copy in workspace root "构建/<mod-name>/" (mod name + version).
-def buildOutDir = new File(rootDir.parentFile, "构建/${project.name}")
+def buildOutDir = new File(rootDir.parentFile, "构建/${releaseArtifactBaseName}")
 
 tasks.register("copyZipToBuildDir", Copy){
     doNotTrackState("Copies into build output folder for convenience.")
     dependsOn tasks.named("jar")
     from(tasks.named("jar").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${artifactBaseName}.zip" }
+    rename{ _ -> "${releaseArtifactBaseName}.zip" }
 }
 
 tasks.register("copyJarToBuildDir", Copy){
@@ -95,7 +94,7 @@ tasks.register("copyJarToBuildDir", Copy){
     dependsOn tasks.named("jarAndroid")
     from(tasks.named("jarAndroid").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${artifactBaseName}-android.jar" }
+    rename{ _ -> "${releaseArtifactBaseName}-android.jar" }
 }
 
 tasks.named("jar").configure{
@@ -214,7 +213,7 @@ tasks.named("jarAndroid").configure{
     from(sourceSets.main.output.resourcesDir)
 }
 
-def mergedArchiveBase = project.name
+def mergedArchiveBase = releaseArtifactBaseName
 
 tasks.register("jarMerged", Jar){
     group = "build"
@@ -269,7 +268,7 @@ tasks.register("copyMergedJarToBuildDir", Copy){
     dependsOn tasks.named("jarMerged")
     from(tasks.named("jarMerged").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${artifactBaseName}.jar" }
+    rename{ _ -> "${releaseArtifactBaseName}.jar" }
 }
 
 tasks.register("copyMergedZipToBuildDir", Copy){
@@ -277,7 +276,7 @@ tasks.register("copyMergedZipToBuildDir", Copy){
     dependsOn tasks.named("zipMerged")
     from(tasks.named("zipMerged").flatMap{ it.archiveFile })
     into(buildOutDir)
-    rename{ _ -> "${artifactBaseName}.zip" }
+    rename{ _ -> "${releaseArtifactBaseName}.zip" }
 }
 
 tasks.named("jarMerged").configure{

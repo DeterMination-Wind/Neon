@@ -146,7 +146,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private final RescueAdvisor rescueAdvisor = new RescueAdvisor();
     private final Vec2 tmpGridCenter = new Vec2();
     private final RescueAlert rescueAlert = new RescueAlert();
-    private final PowerTableOverlay powerTable = new PowerTableOverlay();
+    private PowerTableOverlay powerTable;
     private final MarkerBridge xMarkers;
     private final NativeMarkers nativeMarkers = new NativeMarkers();
     // Optional OverlayUI integration is injected by the dedicated mainX entry or detected in vanilla.
@@ -574,6 +574,10 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
     private void ensurePowerTableAttached(){
         if(ui == null || ui.hudGroup == null) return;
+
+        if(powerTable == null){
+            powerTable = new PowerTableOverlay();
+        }
 
         //Prefer MindustryX OverlayUI if available, so the table becomes a proper Overlay panel (draggable/pinnable).
         //WayzerMapBrowser follows the same pattern: use OverlayUI when installed, otherwise fall back to normal HUD/Core.scene UI.

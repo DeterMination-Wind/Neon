@@ -34,6 +34,7 @@ final class PostHogUsageReporter{
     private boolean flushed;
     private double inGameSeconds;
     private Thread shutdownHook;
+    private PlayerIdResolution cachedIdResolution;
 
     PostHogUsageReporter(Class<? extends Mod> modType){
         this.modType = modType;
@@ -49,6 +50,9 @@ final class PostHogUsageReporter{
         Events.run(EventType.Trigger.update, this::onUpdate);
         Events.on(EventType.DisposeEvent.class, e -> flush("dispose-event"));
         installShutdownHook();
+
+        cachedIdResolution = resolvePlayerId();
+        Log.info(logTag + " player id pre-cached. source=" + cachedIdResolution.source + ", distinct_id=" + cachedIdResolution.playerId);
     }
 
     private void onUpdate(){
@@ -76,7 +80,7 @@ final class PostHogUsageReporter{
 
         ModMeta meta = resolveModMeta();
         String gameVersion = normalize(Version.buildString(), "unknown");
-        PlayerIdResolution idResolution = resolvePlayerId();
+        PlayerIdResolution idResolution = cachedIdResolution;
         String distinctId = normalize(idResolution.playerId, "unknown");
         String playerName = normalize(resolvePlayerName(), "unknown");
         Log.info(logTag + " send prepared. distinct_id=" + distinctId + ", player_id=" + distinctId + ", player_id_source=" + idResolution.source + ", raw_player_uuid=" + idResolution.rawPlayerUuid + ", raw_platform_uuid=" + idResolution.rawPlatformUuid + ", cached_player_id=" + idResolution.cachedPlayerId + ", player_name=" + playerName + ", game_version=" + gameVersion + ", mod_version=" + meta.modVersion + ", usage_minutes=" + nextPending);

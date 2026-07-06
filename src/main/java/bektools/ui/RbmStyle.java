@@ -1,24 +1,63 @@
 package bektools.ui;
 
 import arc.Core;
+import arc.func.Cons;
 import arc.graphics.Color;
+import arc.math.Mathf;
+import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
+import arc.scene.ui.CheckBox;
 import arc.scene.ui.Image;
+import arc.scene.ui.Label;
+import arc.scene.ui.ScrollPane;
+import arc.scene.ui.Slider;
+import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.util.Scaling;
 import mindustry.gen.Tex;
-import mindustry.graphics.Pal;
+import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
 import java.util.Locale;
 
 public final class RbmStyle{
+    private static final float defaultButtonHeight = 42f;
+    private static final float dialogEdgePadding = 56f;
+    private static final float settingsRowInset = 72f;
+    private static final float dialogGap = 8f;
+    private static final float dialogMinRightPaneWidth = 440f;
+    private static final float settingMargin = 10f;
+    private static final float settingTopPad = 6f;
+    private static final float settingIconSize = 20f;
+
     private RbmStyle(){
     }
 
     public static float prefWidth(){
-        // Match RBM: wide enough that long texts don't get clipped.
-        return Math.min(Core.graphics.getWidth() / 1.02f, 980f);
+        return Math.min(Core.graphics.getWidth() - dialogEdgePadding, 980f);
+    }
+
+    public static float rowWidth(){
+        return Math.max(320f, Math.min(prefWidth() - settingsRowInset, dialogContentWidth()));
+    }
+
+    public static float buttonHeight(){
+        return defaultButtonHeight;
+    }
+
+    public static float dialogContentWidth(){
+        return Math.max(420f, Math.min(Core.graphics.getWidth() - dialogEdgePadding, 960f));
+    }
+
+    public static TwoPaneLayout twoPaneLayout(float desiredLeftWidth){
+        float total = dialogContentWidth();
+        float left = Mathf.clamp(desiredLeftWidth, 220f, 300f);
+        float right = total - left - dialogGap;
+        if(right < dialogMinRightPaneWidth){
+            left = Math.max(220f, total - dialogGap - dialogMinRightPaneWidth);
+            right = total - left - dialogGap;
+        }
+        return new TwoPaneLayout(total, left, Math.max(240f, right), dialogGap);
     }
 
     private static String normalizeHex(String text){
@@ -36,7 +75,6 @@ public final class RbmStyle{
         return hex;
     }
 
-    // Same key as RBM (kept here so BEK sections match RBM's theme color).
     private static final String keyHudColor = "rbm-hudcolor";
 
     private static String defaultHudColorHex(){
@@ -65,7 +103,7 @@ public final class RbmStyle{
                 int b = Integer.parseInt(hex.substring(4, 6), 16);
                 hudColorCache.set(r / 255f, g / 255f, b / 255f, 1f);
             }catch(Throwable t){
-                hudColorCache.set(Pal.accent);
+                hudColorCache.set(VscodeSettingsStyle.accentColor());
             }
         }
 
@@ -83,7 +121,7 @@ public final class RbmStyle{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            float width = prefWidth();
+            float width = rowWidth();
             table.row();
             table.table(t -> {
                 t.center();
@@ -128,6 +166,216 @@ public final class RbmStyle{
         }
     }
 
+    public static class IconCheckSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final boolean def;
+        private final Drawable icon;
+        private final Cons<Boolean> changed;
+
+        public IconCheckSetting(String name, boolean def, Drawable icon, Cons<Boolean> changed){
+            this(name, null, def, icon, changed);
+        }
+
+        public IconCheckSetting(String name, String title, boolean def, Drawable icon, Cons<Boolean> changed){
+            super(name);
+            if(title != null) this.title = title;
+            this.def = def;
+            this.icon = icon;
+            this.changed = changed;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            CheckBox box = new CheckBox(title);
+            box.getLabel().setWrap(true);
+            box.getLabelCell().growX().minWidth(0f);
+            box.update(() -> box.setChecked(Core.settings.getBool(name, def)));
+            box.changed(() -> {
+                Core.settings.put(name, box.isChecked());
+                if(changed != null) changed.get(box.isChecked());
+            });
+
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
+                t.left().margin(settingMargin);
+                if(icon != null) t.image(icon).size(settingIconSize).padRight(8f);
+                t.add(box).left().growX().minWidth(0f);
+            }).width(rowWidth()).left().padTop(settingTopPad);
+
+            addDesc(box);
+            table.row();
+        }
+    }
+
+    public static class IconSliderSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final int def, min, max, step;
+        private final Drawable icon;
+        private final SettingsMenuDialog.StringProcessor sp;
+        private final arc.func.Intc changed;
+
+        public IconSliderSetting(String name, int def, int min, int max, int step, Drawable icon, SettingsMenuDialog.StringProcessor sp, arc.func.Intc changed){
+            super(name);
+            this.def = def;
+            this.min = min;
+            this.max = max;
+            this.step = step;
+            this.icon = icon;
+            this.sp = sp;
+            this.changed = changed;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            Slider slider = new Slider(min, max, step, false);
+            slider.setValue(Core.settings.getInt(name, def));
+
+            Label value = new Label("", Styles.outlineLabel);
+            Table content = new Table();
+            content.left();
+            if(icon != null) content.image(icon).size(settingIconSize).padRight(8f);
+            content.add(title, Styles.outlineLabel).left().growX().minWidth(0f).wrap();
+            content.add(value).padLeft(10f).right();
+            content.margin(3f, 10f, 3f, 10f);
+            content.touchable = Touchable.disabled;
+
+            slider.changed(() -> {
+                int v = (int)slider.getValue();
+                Core.settings.put(name, v);
+                value.setText(sp == null ? String.valueOf(v) : sp.get(v));
+                if(changed != null) changed.get(v);
+            });
+            slider.change();
+
+            Table root = table.table(VscodeSettingsStyle.cardBackground(), t -> {
+                t.left().margin(6f);
+                t.stack(slider, content).growX().height(buttonHeight());
+            }).width(rowWidth()).left().padTop(settingTopPad).get();
+            addDesc(root);
+            table.row();
+        }
+    }
+
+    public static class IconTextSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final String def;
+        private final Drawable icon;
+        private final Cons<String> changed;
+
+        public IconTextSetting(String name, String def, Drawable icon, Cons<String> changed){
+            super(name);
+            this.def = def;
+            this.icon = icon;
+            this.changed = changed;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            final TextField[] fieldRef = {null};
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
+                t.left().margin(settingMargin);
+                if(icon != null) t.image(icon).size(settingIconSize).padRight(8f);
+                t.add(title).left().growX().minWidth(0f).wrap();
+                TextField field = t.field(Core.settings.getString(name, def), text -> {
+                    Core.settings.put(name, text);
+                    if(changed != null) changed.get(text);
+                }).growX().minWidth(140f).get();
+                field.setMessageText(def);
+                fieldRef[0] = field;
+            }).width(rowWidth()).left().padTop(settingTopPad);
+
+            if(fieldRef[0] != null) addDesc(fieldRef[0]);
+            table.row();
+        }
+    }
+
+    public static class IconIntFieldSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final int def;
+        private final int min;
+        private final int max;
+        private final Drawable icon;
+        private final arc.func.Intc changed;
+
+        public IconIntFieldSetting(String name, int def, int min, int max, Drawable icon, arc.func.Intc changed){
+            super(name);
+            this.def = def;
+            this.min = min;
+            this.max = max;
+            this.icon = icon;
+            this.changed = changed;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            final TextField[] fieldRef = {null};
+            final boolean[] updatingText = {false};
+            int stored = Core.settings.getInt(name, def);
+            int clamped = Mathf.clamp(stored, min, max);
+            if(clamped != stored) Core.settings.put(name, clamped);
+
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
+                t.left().margin(settingMargin);
+                if(icon != null) t.image(icon).size(settingIconSize).padRight(8f);
+                t.add(title).left().growX().minWidth(0f).wrap();
+                TextField field = t.field(String.valueOf(clamped), text -> {
+                    if(updatingText[0]) return;
+                    int parsed;
+                    try{
+                        parsed = Integer.parseInt(text.trim());
+                    }catch(Throwable ignored){
+                        return;
+                    }
+                    int value = Mathf.clamp(parsed, min, max);
+                    Core.settings.put(name, value);
+                    if(changed != null) changed.get(value);
+                    String normalized = String.valueOf(value);
+                    if(!normalized.equals(fieldRef[0].getText())){
+                        updatingText[0] = true;
+                        fieldRef[0].setText(normalized);
+                        fieldRef[0].setCursorPosition(normalized.length());
+                        updatingText[0] = false;
+                    }
+                }).growX().minWidth(140f).get();
+                field.setMessageText(String.valueOf(def));
+                field.setFilter((f, c) -> Character.isDigit(c) || (c == '-' && f.getCursorPosition() == 0 && !f.getText().contains("-")));
+                fieldRef[0] = field;
+            }).width(rowWidth()).left().padTop(settingTopPad);
+
+            if(fieldRef[0] != null) addDesc(fieldRef[0]);
+            table.row();
+        }
+    }
+
+    public static class ActionButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final Drawable icon;
+        private final Runnable action;
+
+        public ActionButtonSetting(String name, Drawable icon, Runnable action){
+            this(name, null, icon, action);
+        }
+
+        public ActionButtonSetting(String name, String title, Drawable icon, Runnable action){
+            super(name);
+            if(title != null) this.title = title;
+            this.icon = icon;
+            this.action = action;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            table.table(VscodeSettingsStyle.cardBackground(), row -> {
+                row.left().margin(6f);
+                if(icon != null) row.image(icon).size(settingIconSize).padRight(8f);
+                row.button(title, Styles.flatt, action).growX().height(buttonHeight()).padLeft(icon == null ? 8f : 0f);
+            }).width(rowWidth()).left().padTop(settingTopPad);
+            table.row();
+        }
+    }
+
+    public static ScrollPane verticalPane(Table content){
+        ScrollPane pane = new ScrollPane(content);
+        pane.setFadeScrollBars(false);
+        pane.setScrollingDisabled(true, false);
+        pane.setOverscroll(false, false);
+        return pane;
+    }
+
     public static class IndentSetting extends SettingsMenuDialog.SettingsTable.Setting{
         private final float indent;
 
@@ -155,6 +403,20 @@ public final class RbmStyle{
             table.row();
             table.add().height(height);
             table.row();
+        }
+    }
+
+    public static class TwoPaneLayout{
+        public final float totalWidth;
+        public final float leftWidth;
+        public final float rightWidth;
+        public final float gap;
+
+        public TwoPaneLayout(float totalWidth, float leftWidth, float rightWidth, float gap){
+            this.totalWidth = totalWidth;
+            this.leftWidth = leftWidth;
+            this.rightWidth = rightWidth;
+            this.gap = gap;
         }
     }
 }

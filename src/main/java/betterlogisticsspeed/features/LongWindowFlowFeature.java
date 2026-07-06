@@ -16,6 +16,8 @@ import arc.struct.Seq;
 import arc.util.Scaling;
 import arc.util.Strings;
 import arc.util.Time;
+import bektools.ui.RbmStyle;
+import betterlogisticsspeed.BetterLogisticsSpeedMod;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
 import mindustry.type.Item;
@@ -108,10 +110,13 @@ public class LongWindowFlowFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.checkPref(keyEnabled, true);
-        table.sliderPref(keyWindowSeconds, 10, 2, 60, 1, i -> i + "s");
-        table.checkPref(keyShowTotal, true);
-        table.sliderPref(keyDecimals, 1, 1, 2, 1, String::valueOf);
+        if (!BetterLogisticsSpeedMod.bekBundled) {
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.betterlogisticsspeed", "Better Logistics Speed"), mindustry.gen.Icon.chartBar));
+        }
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, mindustry.gen.Icon.eyeSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(keyWindowSeconds, 10, 2, 60, 1, mindustry.gen.Icon.refreshSmall, i -> i + "s", null));
+        table.pref(new RbmStyle.IconCheckSetting(keyShowTotal, true, mindustry.gen.Icon.listSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(keyDecimals, 1, 1, 2, 1, mindustry.gen.Icon.editSmall, String::valueOf, null));
         refreshSettings();
     }
 

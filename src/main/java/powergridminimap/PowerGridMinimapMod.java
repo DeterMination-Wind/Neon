@@ -42,6 +42,7 @@ import arc.struct.IntSet;
 import arc.struct.LongSeq;
 import arc.util.Structs;
 import arc.util.Strings;
+import bektools.ui.RbmStyle;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -442,7 +443,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-            // Match MindustryX settings style (icon + Tex.button rows + wrapped titles).
+            // Match Neon aggregate settings style (icon + card rows + wrapped titles).
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.basic", "Basic"), Icon.settings));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyGridAlpha, 40, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));

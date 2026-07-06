@@ -1,5 +1,7 @@
 package whousesthisbuilding;
 
+import bektools.ui.RbmStyle;
+import bektools.ui.VscodeSettingsStyle;
 import arc.Core;
 import arc.Events;
 import arc.graphics.Color;
@@ -89,14 +91,17 @@ public class WhoUsesThisBuildingMod extends Mod{
     }
 
     private void buildSettings(SettingsMenuDialog.SettingsTable table){
-        table.checkPref(keyEnabled, true, value -> {
+        if(!bekBundled){
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.whousesthisbuilding", "Who Uses This Building"), Icon.logicSmall));
+        }
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, value -> {
             enabled = value;
             if(!enabled){
                 clearOverlay();
             }
-        });
+        }));
         table.pref(new HotkeySetting(keyHotkey, defaultHotkey));
-        table.sliderPref(keyFontScale, 100, 50, 300, 5, value -> value + "%");
+        table.pref(new RbmStyle.IconSliderSetting(keyFontScale, 100, 50, 300, 5, Icon.resizeSmall, value -> value + "%", null));
     }
 
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
@@ -703,16 +708,20 @@ public class WhoUsesThisBuildingMod extends Mod{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            Table row = new Table();
-            row.left();
+            Table row = new Table(VscodeSettingsStyle.cardBackground());
+            row.left().margin(10f);
             row.defaults().pad(3f);
-            row.add(title).left().growX().wrap();
+            row.image(Icon.settingsSmall).size(20f).padRight(8f);
+            row.add(title).left().growX().minWidth(0f).wrap();
 
-            TextButton capture = row.button("", Styles.defaultt, () -> showHotkeyCaptureDialog(name))
-            .minWidth(180f).pad(8f).get();
+            TextButton capture = row.button("", Styles.flatt, () -> showHotkeyCaptureDialog(name))
+                .minWidth(180f)
+                .height(RbmStyle.buttonHeight())
+                .padLeft(8f)
+                .get();
             capture.update(() -> capture.setText(displayKeyName(Core.settings.getString(name, defaultValue))));
 
-            addDesc(table.add(row).left().growX().padTop(4f).get());
+            addDesc(table.add(row).left().width(RbmStyle.rowWidth()).padTop(6f).get());
             table.row();
         }
     }

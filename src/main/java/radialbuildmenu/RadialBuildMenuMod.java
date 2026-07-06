@@ -2,7 +2,6 @@ package radialbuildmenu;
 
 import arc.Core;
 import arc.Events;
-import arc.func.Prov;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -32,11 +31,14 @@ import arc.util.Strings;
 import arc.util.Time;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.Jformat;
+import bektools.ui.RbmStyle;
+import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.WorldLoadEvent;
 import mindustry.game.Team;
+import mindustry.gen.Icon;
 import mindustry.gen.Groups;
 import mindustry.gen.Unit;
 import mindustry.gen.Tex;
@@ -268,19 +270,22 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             ensureWheelProfilesLoaded();
             ensureRuleSlotGroupsLoaded();
 
-            table.checkPref(keyEnabled, true);
+            if(!bekBundled){
+                table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("rbm.category"), Icon.settings));
+            }
+            table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
             table.pref(new HotkeySetting());
 
-            table.sliderPref(keyHudScale, 100, 50, 200, 5, v -> v + "%");
-            table.sliderPref(keyHudAlpha, 100, 0, 100, 5, v -> v + "%");
+            table.pref(new RbmStyle.IconSliderSetting(keyHudScale, 100, 50, 200, 5, Icon.resizeSmall, v -> v + "%", null));
+            table.pref(new RbmStyle.IconSliderSetting(keyHudAlpha, 100, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
             table.pref(new IconCheckSetting(keyPersistentHud, false, null));
             table.pref(new IconSliderSetting(keyPersistentHudAlpha, 35, 0, 100, 5, null, v -> v + "%"));
-            table.sliderPref(keyInnerRadius, 80, 40, 200, 5, v -> v + "px");
-            table.sliderPref(keyOuterRadius, 140, 60, 360, 5, v -> v + "px");
+            table.pref(new RbmStyle.IconSliderSetting(keyInnerRadius, 80, 40, 200, 5, Icon.moveSmall, v -> v + "px", null));
+            table.pref(new RbmStyle.IconSliderSetting(keyOuterRadius, 140, 60, 360, 5, Icon.moveSmall, v -> v + "px", null));
             table.pref(new HudColorSetting());
-            table.checkPref(keyCenterScreen, false);
-            table.checkPref(keyShowEmptySlots, false);
-            table.checkPref(keyProMode, false);
+            table.pref(new RbmStyle.IconCheckSetting(keyCenterScreen, false, Icon.moveSmall, null));
+            table.pref(new RbmStyle.IconCheckSetting(keyShowEmptySlots, false, Icon.listSmall, null));
+            table.pref(new RbmStyle.IconCheckSetting(keyProMode, false, Icon.settingsSmall, null));
             table.pref(new WheelProfilesButtonSetting(RadialBuildMenuMod.this));
 
             for(int i = 0; i < maxSlots; i++) table.pref(new SlotSetting(i, keySlotPrefix, "rbm.setting.slot"));
@@ -290,9 +295,9 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
             table.pref(new IoSetting());
 
-            if(!bekBundled) table.checkPref(GithubUpdateCheck.enabledKey(), true);
-            if(!bekBundled) table.checkPref(GithubUpdateCheck.showDialogKey(), true);
-        
+            if(!bekBundled) table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
+            if(!bekBundled) table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+
     }
 
 
@@ -465,17 +470,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         rebuildLeft[0].run();
         rebuildRight[0].run();
 
-        ScrollPane leftPane = new ScrollPane(left);
-        leftPane.setFadeScrollBars(false);
-        leftPane.setScrollingDisabled(true, false);
-        ScrollPane rightPane = new ScrollPane(right);
-        rightPane.setFadeScrollBars(false);
-        rightPane.setScrollingDisabled(true, false);
+        ScrollPane leftPane = bektools.ui.RbmStyle.verticalPane(left);
+        ScrollPane rightPane = bektools.ui.RbmStyle.verticalPane(right);
+        bektools.ui.RbmStyle.TwoPaneLayout layout = bektools.ui.RbmStyle.twoPaneLayout(260f);
 
         dialog.cont.table(root -> {
-            root.add(leftPane).width(260f).growY().minHeight(430f).padRight(8f);
-            root.add(rightPane).width(Math.max(520f, prefWidth() - 280f)).growY().minHeight(430f);
-        }).grow();
+            root.defaults().top();
+            root.add(leftPane).width(layout.leftWidth).growY().minHeight(430f).padRight(layout.gap);
+            root.add(rightPane).width(layout.rightWidth).growY().minHeight(430f);
+        }).width(layout.totalWidth).growY();
 
         dialog.show();
     }
@@ -957,17 +960,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         rebuildLeft[0].run();
         rebuildRight[0].run();
 
-        ScrollPane leftPane = new ScrollPane(left);
-        leftPane.setFadeScrollBars(false);
-        leftPane.setScrollingDisabled(true, false);
-        ScrollPane rightPane = new ScrollPane(right);
-        rightPane.setFadeScrollBars(false);
-        rightPane.setScrollingDisabled(true, false);
+        ScrollPane leftPane = bektools.ui.RbmStyle.verticalPane(left);
+        ScrollPane rightPane = bektools.ui.RbmStyle.verticalPane(right);
+        bektools.ui.RbmStyle.TwoPaneLayout layout = bektools.ui.RbmStyle.twoPaneLayout(280f);
 
         dialog.cont.table(root -> {
-            root.add(leftPane).width(280f).growY().minHeight(430f).padRight(8f);
-            root.add(rightPane).width(Math.max(520f, prefWidth() - 300f)).growY().minHeight(430f);
-        }).grow();
+            root.defaults().top();
+            root.add(leftPane).width(layout.leftWidth).growY().minHeight(430f).padRight(layout.gap);
+            root.add(rightPane).width(layout.rightWidth).growY().minHeight(430f);
+        }).width(layout.totalWidth).growY();
 
         dialog.show();
     }
@@ -1250,15 +1251,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         adv.pref(new RuleSlotGroupsButtonSetting(this));
 
-        adv.sliderPref(keyIconScale, 100, 50, 200, 5, v -> v + "%");
-        adv.sliderPref(keyBackStrength, 22, 0, 60, 2, v -> v + "%");
-        adv.sliderPref(keyRingAlpha, 65, 0, 100, 5, v -> v + "%");
-        adv.sliderPref(keyRingStroke, 2, 1, 6, 1, v -> v + "px");
+        adv.pref(new RbmStyle.IconSliderSetting(keyIconScale, 100, 50, 200, 5, Icon.resizeSmall, v -> v + "%", null));
+        adv.pref(new RbmStyle.IconSliderSetting(keyBackStrength, 22, 0, 60, 2, Icon.imageSmall, v -> v + "%", null));
+        adv.pref(new RbmStyle.IconSliderSetting(keyRingAlpha, 65, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
+        adv.pref(new RbmStyle.IconSliderSetting(keyRingStroke, 2, 1, 6, 1, Icon.pencilSmall, v -> v + "px", null));
 
-        adv.checkPref(keyDirectionSelect, true);
-        adv.sliderPref(keyDeadzoneScale, 35, 0, 100, 5, v -> v + "%");
-        adv.sliderPref(keyHoverPadding, 12, 0, 30, 1, v -> v + "px");
-        adv.sliderPref(keyHoverUpdateFrames, 0, 0, 10, 1, v -> v == 0 ? Core.bundle.get("rbm.advanced.everyframe") : v + "f");
+        adv.pref(new RbmStyle.IconCheckSetting(keyDirectionSelect, true, Icon.moveSmall, null));
+        adv.pref(new RbmStyle.IconSliderSetting(keyDeadzoneScale, 35, 0, 100, 5, Icon.resizeSmall, v -> v + "%", null));
+        adv.pref(new RbmStyle.IconSliderSetting(keyHoverPadding, 12, 0, 30, 1, Icon.moveSmall, v -> v + "px", null));
+        adv.pref(new RbmStyle.IconSliderSetting(keyHoverUpdateFrames, 0, 0, 10, 1, Icon.refreshSmall, v -> v == 0 ? Core.bundle.get("rbm.advanced.everyframe") : v + "f", null));
 
         ScrollPane pane = new ScrollPane(adv);
         pane.setFadeScrollBars(false);
@@ -1280,32 +1281,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         ruleSlotGroupLastEval = -9999f;
     }
 
-    private class HeaderSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final arc.scene.style.Drawable icon;
-
-        public HeaderSetting(String title, arc.scene.style.Drawable icon){
-            super("rbm-header");
-            this.title = title;
-            this.icon = icon;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            float width = prefWidth();
-            table.row();
-            table.table(Styles.black3, t -> {
-                t.left().margin(8f);
-                if(icon != null){
-                    t.image(icon).size(18f).padRight(6f);
-                }
-                t.add(title).color(Pal.accent).left().growX().minWidth(0f).wrap();
-            }).width(width).padTop(10f).padBottom(5f).left();
-            table.row();
-            table.image(Tex.whiteui).color(Pal.accent).height(3f).width(width).padBottom(10f).left();
-            table.row();
-        }
-    }
-
     // SubHeaderSetting / AdvancedButtonSetting extracted into `RbmSettingsExtracted`.
 
     private class HotkeySetting extends SettingsMenuDialog.SettingsTable.Setting{
@@ -1317,43 +1292,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 t.image(mindustry.gen.Icon.settings).size(20f).padRight(8f);
                 t.add(title).left().growX().minWidth(0f).wrap();
-                t.label(() -> radialMenu.value.key.toString()).color(Pal.accent).padLeft(10f);
+                t.label(() -> radialMenu.value.key.toString()).color(VscodeSettingsStyle.accentColor()).padLeft(10f);
                 t.button("@rbm.setting.opencontrols", Styles.flatt, () -> ui.controls.show())
                     .width(190f)
-                    .height(40f)
-                    .padLeft(10f);
-            }).width(prefWidth).padTop(6f);
-            table.row();
-        }
-    }
-
-    private class ToggleSlotGroupHotkeySetting extends SettingsMenuDialog.SettingsTable.Setting{
-        public ToggleSlotGroupHotkeySetting(){
-            super("rbm-toggle-slot-group-hotkey");
-            title = Core.bundle.get("rbm.setting.toggleHotkey");
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
-                t.left().margin(10f);
-
-                t.image(mindustry.gen.Icon.refresh).size(20f).padRight(8f);
-                t.add(title).left().growX().minWidth(0f).wrap();
-                t.label(() -> toggleSlotGroup.value.key.toString()).color(Pal.accent).padLeft(10f);
-                t.label(() -> {
-                    int g = Mathf.clamp(Core.settings.getInt(keyToggleSlotGroupState, 0), 0, 1);
-                    return Core.bundle.get(g == 0 ? "rbm.slotgroup.a" : "rbm.slotgroup.b");
-                }).color(Pal.accent).padLeft(8f);
-                t.button("@rbm.setting.opencontrols", Styles.flatt, () -> ui.controls.show())
-                    .width(190f)
-                    .height(40f)
+                    .height(RbmStyle.buttonHeight())
                     .padLeft(10f);
             }).width(prefWidth).padTop(6f);
             table.row();
@@ -1372,19 +1319,19 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 t.image(mindustry.gen.Icon.list).size(20f).padRight(8f);
                 t.add(title).left().growX().minWidth(0f).wrap();
-                t.label(() -> Core.bundle.format("rbm.wheels.count", mod.wheelProfiles().size)).color(Pal.accent).padLeft(8f);
+                t.label(() -> Core.bundle.format("rbm.wheels.count", mod.wheelProfiles().size)).color(VscodeSettingsStyle.accentColor()).padLeft(8f);
                 t.button("@rbm.wheels.open", Styles.flatt, mod::showWheelProfilesDialog)
                     .width(150f)
-                    .height(40f)
+                    .height(RbmStyle.buttonHeight())
                     .padLeft(10f);
                 TextButton advanced = t.button("@setting.rbm-advanced.name", Styles.flatt, mod::showAdvancedDialog)
                     .width(150f)
-                    .height(40f)
+                    .height(RbmStyle.buttonHeight())
                     .padLeft(8f)
                     .get();
                 advanced.update(() -> advanced.setDisabled(!Core.settings.getBool(keyProMode, false)));
@@ -1405,15 +1352,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 t.image(mindustry.gen.Icon.logic).size(20f).padRight(8f);
                 t.add(title).left().growX().minWidth(0f).wrap();
-                t.label(() -> Core.bundle.format("rbm.rulegroups.count", mod.ruleSlotGroups().size)).color(Pal.accent).padLeft(8f);
+                t.label(() -> Core.bundle.format("rbm.rulegroups.count", mod.ruleSlotGroups().size)).color(VscodeSettingsStyle.accentColor()).padLeft(8f);
                 t.button("@rbm.rulegroups.open", Styles.flatt, mod::showRuleSlotGroupsDialog)
                     .width(190f)
-                    .height(40f)
+                    .height(RbmStyle.buttonHeight())
                     .padLeft(10f);
             }).width(prefWidth).padTop(6f);
             table.row();
@@ -1432,14 +1379,14 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 t.image(mindustry.gen.Icon.list).size(20f).padRight(8f);
                 t.add(title).left().growX().minWidth(0f).wrap();
                 t.button("@rbm.slotgroups.open", Styles.flatt, mod::showSlotGroupsDialog)
                     .width(190f)
-                    .height(40f)
+                    .height(RbmStyle.buttonHeight())
                     .padLeft(10f);
             }).width(prefWidth).padTop(6f);
             table.row();
@@ -1462,7 +1409,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                  t.left().margin(10f);
   
                  t.add(title).width(160f).left().wrap();
@@ -1488,7 +1435,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
                 t.button("@rbm.setting.set", Styles.flatt, () -> showBlockSelectDialog(block -> {
                     Core.settings.put(name, block == null ? "" : block.name);
-                })).width(140f).height(40f).padLeft(8f);
+                })).width(140f).height(RbmStyle.buttonHeight()).padLeft(8f);
             }).width(prefWidth).padTop(6f);
             table.row();
         }
@@ -1503,7 +1450,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            Table root = table.table(Tex.button, t -> {
+            Table root = table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 t.table(top -> {
@@ -1554,13 +1501,13 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                         if(hex.length() > 6) hex = hex.substring(0, 6);
                         Core.settings.put(keyHudColor, normalizeHex(hex));
                         preview.setColor(readHudColor());
-                    })).minWidth(140f).height(40f);
+                    })).minWidth(140f).height(RbmStyle.buttonHeight());
 
                     btns.button("@rbm.color.reset", Styles.flatt, () -> {
                         Core.settings.put(keyHudColor, defaultHudColorHex());
                         field.setText(Core.settings.getString(keyHudColor, defaultHudColorHex()));
                         preview.setColor(readHudColor());
-                    }).minWidth(140f).height(40f).padLeft(8f);
+                    }).minWidth(140f).height(RbmStyle.buttonHeight()).padLeft(8f);
                 }).growX().fillX().minWidth(0f).padTop(6f);
             }).width(prefWidth()).padTop(6f).get();
             addDesc(root);
@@ -1569,60 +1516,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
 
         private boolean isHexChar(char c){
             return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-        }
-    }
-
-    private static class CollapsiblePlanetSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final String titleText;
-        private final arc.scene.style.Drawable icon;
-        private final String openKey;
-        private final arc.func.Cons<SettingsMenuDialog.SettingsTable> builder;
-        private final arc.func.Prov<Color> accent;
-
-        public CollapsiblePlanetSetting(String titleText, arc.scene.style.Drawable icon, String openKey, arc.func.Cons<SettingsMenuDialog.SettingsTable> builder, arc.func.Prov<Color> accent){
-            super("rbm-adv-collapsible");
-            this.titleText = titleText;
-            this.icon = icon;
-            this.openKey = openKey;
-            this.builder = builder;
-            this.accent = accent;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            boolean startOpen = Core.settings.getBool(openKey, true);
-            final boolean[] open = {startOpen};
-
-            float width = prefWidth();
-            final Image[] arrow = {null};
-            Table header = table.table(Tex.button, t -> {
-                t.left().margin(10f);
-                if(icon != null) t.image(icon).size(18f).padRight(6f);
-                t.add(titleText).color(Pal.accent).left().growX().minWidth(0f).wrap();
-                arrow[0] = t.image(startOpen ? mindustry.gen.Icon.downOpen : mindustry.gen.Icon.rightOpen).size(18f).padLeft(6f).get();
-            }).width(width).padTop(10f).get();
-            table.row();
-
-            SettingsMenuDialog.SettingsTable inner = new SettingsMenuDialog.SettingsTable();
-            builder.get(inner);
-
-            arc.scene.ui.layout.Collapser collapser = new arc.scene.ui.layout.Collapser(inner, true);
-            collapser.setDuration(0.12f);
-            collapser.setCollapsed(!startOpen, false);
-
-            table.table(Tex.button, t -> {
-                t.left().top().margin(10f);
-                t.add(collapser).growX().minWidth(0f);
-            }).width(width).padTop(6f);
-            table.row();
-
-            Runnable toggle = () -> {
-                open[0] = !open[0];
-                Core.settings.put(openKey, open[0]);
-                if(arrow[0] != null) arrow[0].setDrawable(open[0] ? mindustry.gen.Icon.downOpen : mindustry.gen.Icon.rightOpen);
-                collapser.toggle();
-            };
-            header.clicked(toggle);
         }
     }
 
@@ -1669,150 +1562,13 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             });
 
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
                 t.image(mindustry.gen.Icon.refresh).size(20f).padRight(8f);
                 t.add(title, Styles.outlineLabel).left().growX().minWidth(0f).wrap();
                 t.add(field).width(140f).padLeft(8f);
             }).width(prefWidth).padTop(6f);
             addDesc(field);
-            table.row();
-        }
-    }
-
-    private static class ConditionalSwitchSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final RadialBuildMenuMod mod;
-
-        public ConditionalSwitchSetting(RadialBuildMenuMod mod){
-            super("rbm-cond");
-            this.mod = mod;
-            title = Core.bundle.get("setting.rbm-cond-enabled.name");
-            description = Core.bundle.getOrNull("setting.rbm-cond-enabled.description");
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            float prefWidth = prefWidth();
-
-            Table root = table.table(Tex.button, t -> {
-                t.left().margin(10f);
-                t.image(mindustry.gen.Icon.logic).size(20f).padRight(8f);
-                t.add(title, Styles.outlineLabel).left().growX().minWidth(0f).wrap();
-
-                arc.scene.ui.CheckBox box = new arc.scene.ui.CheckBox("");
-                box.update(() -> box.setChecked(Core.settings.getBool(keyCondEnabled, false)));
-                box.changed(() -> Core.settings.put(keyCondEnabled, box.isChecked()));
-                t.add(box).right().padLeft(10f);
-            }).width(prefWidth).padTop(6f).get();
-
-            addDesc(root);
-            table.row();
-
-            Table inner = table.table(Tex.button, t -> {
-                t.top().left().margin(10f);
-
-                t.add("@rbm.cond.help").left().growX().wrap().minWidth(0f).padBottom(6f);
-                t.row();
-
-                t.add("@rbm.cond.initial.condition").left().padBottom(4f);
-                t.row();
-
-                arc.scene.ui.TextArea init = new arc.scene.ui.TextArea(Core.settings.getString(keyCondInitialExpr, ""));
-                init.setMessageText(Core.bundle.get("rbm.cond.placeholder"));
-                init.changed(() -> Core.settings.put(keyCondInitialExpr, init.getText()));
-                t.add(init).growX().minHeight(70f).padBottom(8f);
-                t.row();
-
-                t.add("@rbm.cond.initial.slots").left().padBottom(4f);
-                t.row();
-
-                // 16 slots
-                for(int i = 0; i < maxSlots; i++){
-                    final int slot = i;
-                    t.table(row -> {
-                        row.left();
-                        row.add(Core.bundle.format("rbm.setting.slot", slot + 1)).width(140f).left();
-
-                        row.table(info -> {
-                            info.left();
-                            Image icon = info.image(Tex.clear).size(32f).padRight(8f).get();
-                            icon.setScaling(Scaling.fit);
-                            info.labelWrap(() -> {
-                                Block b = mod.slotBlock(keyCondInitialSlotPrefix, slot);
-                                return b == null ? Core.bundle.get("rbm.setting.none") : b.localizedName;
-                            }).left().growX().fillX().minWidth(0f);
-
-                            final Block[] last = {null};
-                            info.update(() -> {
-                                Block b = mod.slotBlock(keyCondInitialSlotPrefix, slot);
-                                if(b == last[0]) return;
-                                last[0] = b;
-                                icon.setDrawable(b == null ? Tex.clear : new TextureRegionDrawable(b.uiIcon));
-                            });
-                        }).left().growX().minWidth(0f);
-
-                        row.button("@rbm.setting.set", Styles.flatt, () -> mod.showBlockSelectDialog(block -> {
-                            Core.settings.put(keyCondInitialSlotPrefix + slot, block == null ? "" : block.name);
-                        })).width(120f).height(40f).padLeft(8f);
-                    }).growX().padTop(3f);
-                    t.row();
-                }
-
-                t.add("@rbm.cond.after.enable").left().padTop(10f).padBottom(4f);
-                arc.scene.ui.CheckBox afterBox = new arc.scene.ui.CheckBox("");
-                afterBox.update(() -> afterBox.setChecked(Core.settings.getBool(keyCondAfterEnabled, false)));
-                afterBox.changed(() -> Core.settings.put(keyCondAfterEnabled, afterBox.isChecked()));
-                t.add(afterBox).right().padLeft(10f);
-                t.row();
-
-                Table afterSection = t.table().left().growX().get();
-                afterSection.visible(() -> Core.settings.getBool(keyCondAfterEnabled, false));
-
-                afterSection.add("@rbm.cond.after.condition").left().padBottom(4f);
-                afterSection.row();
-
-                arc.scene.ui.TextArea after = new arc.scene.ui.TextArea(Core.settings.getString(keyCondAfterExpr, ""));
-                after.setMessageText(Core.bundle.get("rbm.cond.placeholder"));
-                after.changed(() -> Core.settings.put(keyCondAfterExpr, after.getText()));
-                afterSection.add(after).growX().minHeight(70f).padBottom(8f);
-                afterSection.row();
-
-                afterSection.add("@rbm.cond.after.slots").left().padBottom(4f);
-                afterSection.row();
-
-                for(int i = 0; i < maxSlots; i++){
-                    final int slot = i;
-                    afterSection.table(row -> {
-                        row.left();
-                        row.add(Core.bundle.format("rbm.setting.slot", slot + 1)).width(140f).left();
-
-                        row.table(info -> {
-                            info.left();
-                            Image icon = info.image(Tex.clear).size(32f).padRight(8f).get();
-                            icon.setScaling(Scaling.fit);
-                            info.labelWrap(() -> {
-                                Block b = mod.slotBlock(keyCondAfterSlotPrefix, slot);
-                                return b == null ? Core.bundle.get("rbm.setting.none") : b.localizedName;
-                            }).left().growX().fillX().minWidth(0f);
-
-                            final Block[] last = {null};
-                            info.update(() -> {
-                                Block b = mod.slotBlock(keyCondAfterSlotPrefix, slot);
-                                if(b == last[0]) return;
-                                last[0] = b;
-                                icon.setDrawable(b == null ? Tex.clear : new TextureRegionDrawable(b.uiIcon));
-                            });
-                        }).left().growX().minWidth(0f);
-
-                        row.button("@rbm.setting.set", Styles.flatt, () -> mod.showBlockSelectDialog(block -> {
-                            Core.settings.put(keyCondAfterSlotPrefix + slot, block == null ? "" : block.name);
-                        })).width(120f).height(40f).padLeft(8f);
-                    }).growX().padTop(3f);
-                    afterSection.row();
-                }
-            }).width(prefWidth).padTop(6f).get();
-
-            inner.visible(() -> Core.settings.getBool(keyCondEnabled, false));
             table.row();
         }
     }
@@ -1826,15 +1582,15 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             float prefWidth = prefWidth();
-            table.table(Tex.button, t -> {
+            table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(10f);
 
                 t.image(mindustry.gen.Icon.info).size(20f).padRight(8f);
-                t.add(title).width(140f).left().wrap();
+                t.add(title).left().growX().minWidth(0f).wrap();
                 t.button("@rbm.io.export", Styles.flatt, RadialBuildMenuMod.this::showExportDialog)
-                    .width(160f).height(40f).padLeft(8f);
+                    .growX().height(RbmStyle.buttonHeight()).padLeft(8f);
                 t.button("@rbm.io.import", Styles.flatt, RadialBuildMenuMod.this::showImportDialog)
-                    .width(160f).height(40f).padLeft(8f);
+                    .growX().height(RbmStyle.buttonHeight()).padLeft(8f);
             }).width(prefWidth).padTop(6f);
             table.row();
         }
@@ -3120,8 +2876,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     static float prefWidth(){
-        // slightly wider so long texts don't get clipped in settings dialogs
-        return Math.min(Core.graphics.getWidth() / 1.02f, 980f);
+        return RbmStyle.rowWidth();
     }
     // WideSliderSetting extracted into `RbmSettingsExtracted`.
 

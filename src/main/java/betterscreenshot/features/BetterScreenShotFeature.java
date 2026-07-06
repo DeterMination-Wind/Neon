@@ -14,6 +14,7 @@ import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import arc.util.Interval;
 import arc.util.Strings;
+import bektools.ui.RbmStyle;
 import bektools.profiler.NeonProfiler;
 import betterscreenshot.core.Screenshot;
 import mdtxcompat.OverlayUiBridge;
@@ -104,9 +105,9 @@ public class BetterScreenShotFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.checkPref(keyEnabled, true);
-        table.sliderPref(keyResolution, 100, 25, 400, 25, i -> i + "%");
-        table.checkPref(keyShowProgress, true);
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, mindustry.gen.Icon.eyeSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(keyResolution, 100, 25, 400, 25, mindustry.gen.Icon.resizeSmall, i -> i + "%", null));
+        table.pref(new RbmStyle.IconCheckSetting(keyShowProgress, true, mindustry.gen.Icon.listSmall, null));
         refreshSettings();
         updateSizeHint();
     }

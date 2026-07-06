@@ -18,6 +18,7 @@ import arc.util.Align;
 import arc.util.Interval;
 import arc.util.Time;
 import arc.util.pooling.Pools;
+import bektools.ui.RbmStyle;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterprojectoroverlay.GithubUpdateCheck;
 import mdtxcompat.MarkerBridge;
@@ -164,16 +165,20 @@ public class BetterProjectorOverlayFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.checkPref(keyEnabled, true);
-        table.checkPref(keyPreviewEnabled, true);
-        table.checkPref(keyMarkerEnabled, true);
-        table.checkPref(keyChatEnabled, false);
-        table.sliderPref(keyScanInterval, 8, 1, 30, 1, i -> i + "s");
-        table.sliderPref(keyPreviewTextScale, 125, 60, 260, 5, i -> i + "%");
-        table.sliderPref(keyPreviewTextAlpha, 100, 20, 100, 5, i -> i + "%");
         if (!BetterProjectorOverlayMod.bekBundled) {
-            table.checkPref(GithubUpdateCheck.enabledKey(), true);
-            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.betterprojectoroverlay", "Better Projector Overlay"), mindustry.gen.Icon.effect));
+        }
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, mindustry.gen.Icon.eyeSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keyPreviewEnabled, true, mindustry.gen.Icon.zoomSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keyMarkerEnabled, true, mindustry.gen.Icon.warningSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keyChatEnabled, false, mindustry.gen.Icon.chatSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(keyScanInterval, 8, 1, 30, 1, mindustry.gen.Icon.refreshSmall, i -> i + "s", null));
+        table.pref(new RbmStyle.IconSliderSetting(keyPreviewTextScale, 125, 60, 260, 5, mindustry.gen.Icon.resizeSmall, i -> i + "%", null));
+        table.pref(new RbmStyle.IconSliderSetting(keyPreviewTextAlpha, 100, 20, 100, 5, mindustry.gen.Icon.imageSmall, i -> i + "%", null));
+        if (!BetterProjectorOverlayMod.bekBundled) {
+            table.pref(new RbmStyle.SubHeaderSetting("Update"));
+            table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, mindustry.gen.Icon.refreshSmall, null));
+            table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, mindustry.gen.Icon.infoSmall, null));
         }
 
         refreshSettings();

@@ -1,5 +1,7 @@
 package patchviewer;
 
+import bektools.ui.RbmStyle;
+import bektools.ui.VscodeSettingsStyle;
 import arc.Core;
 import arc.Events;
 import arc.graphics.Color;
@@ -2706,10 +2708,13 @@ public class PatchViewerMod extends Mod{
     private void buildSettings(SettingsMenuDialog.SettingsTable table){
         table.defaults().growX().pad(4f).left();
 
-        table.checkPref(keyEnabled, true);
+        if(!bekBundled){
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.patchviewer", "Patch Viewer"), Icon.listSmall));
+        }
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
         table.pref(new QuickDisplayModeSetting());
-        table.sliderPref(keyQuickHudOpacity, 70, 20, 100, 1, value -> value + "%");
-        table.sliderPref(keyQuickHudWidth, 420, 100, 900, 10, value -> value + "px");
+        table.pref(new RbmStyle.IconSliderSetting(keyQuickHudOpacity, 70, 20, 100, 1, Icon.imageSmall, value -> value + "%", null));
+        table.pref(new RbmStyle.IconSliderSetting(keyQuickHudWidth, 420, 100, 900, 10, Icon.resizeSmall, value -> value + "px", null));
         addColorSetting(table, "patchviewer.settings.hud-background", "HUD background color", keyQuickHudBackgroundColor, defaultQuickHudBackgroundColor);
         table.pref(new MessageSetting("patchviewer-color-hint", "patchviewer.settings.color-hint", "Colors support named values like gold and hex values like #ffd700 or ffd700."));
         addColorSetting(table, "patchviewer.settings.removed", "Removed entry color", keyRemovedColor, defaultRemovedColor);
@@ -2741,8 +2746,9 @@ public class PatchViewerMod extends Mod{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            Cell<Table> cell = table.table(row -> {
+            Cell<Table> cell = table.table(VscodeSettingsStyle.cardBackground(), row -> {
                 row.left().defaults().left();
+                row.margin(10f);
                 row.add(title).width(210f).wrap().padRight(8f);
 
                 CheckBox cursor = new CheckBox(modeLabel(quickModeHud));
@@ -2770,7 +2776,7 @@ public class PatchViewerMod extends Mod{
                 refresh.run();
                 row.add(cursor).padRight(18f);
                 row.add(buildInfo);
-            }).growX().fillX();
+            }).width(RbmStyle.rowWidth()).left().padTop(6f);
 
             addDesc(cell.get());
             table.row();
@@ -2790,7 +2796,10 @@ public class PatchViewerMod extends Mod{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.add("[lightgray]" + bundle(messageKey, messageFallback) + "[]").left().wrap().growX();
+            table.table(VscodeSettingsStyle.cardBackground(), row -> {
+                row.left().margin(10f);
+                row.add("[lightgray]" + bundle(messageKey, messageFallback) + "[]").left().wrap().growX().minWidth(0f);
+            }).width(RbmStyle.rowWidth()).left().padTop(6f);
             table.row();
         }
     }
@@ -2806,8 +2815,9 @@ public class PatchViewerMod extends Mod{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            Cell<Table> cell = table.table(row -> {
+            Cell<Table> cell = table.table(VscodeSettingsStyle.cardBackground(), row -> {
                 row.left().defaults().left();
+                row.margin(10f);
 
                 row.add(title).width(210f).wrap().padRight(8f);
 
@@ -2852,8 +2862,8 @@ public class PatchViewerMod extends Mod{
                     field.setText(readColorSetting(name, defaultValue));
                     refresh.run();
                     updating[0] = false;
-                }).height(42f).padLeft(8f);
-            }).growX().fillX();
+                }).height(RbmStyle.buttonHeight()).padLeft(8f);
+            }).width(RbmStyle.rowWidth()).left().padTop(6f);
 
             addDesc(cell.get());
             table.row();

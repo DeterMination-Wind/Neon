@@ -31,6 +31,7 @@ import arc.util.Align;
 import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
+import bektools.ui.RbmStyle;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.*;
@@ -751,15 +752,16 @@ public class StealthPathMod extends mindustry.mod.Mod{
                     advanced.left();
                     buildAdvancedSettings(advanced);
                     advanced.rebuild();
-                    holder.add(advanced).growX().row();
+                    holder.add(advanced).width(RbmStyle.rowWidth()).left().row();
                 }else{
                     Table locked = new Table();
                     locked.left().margin(10f);
+                    locked.background(bektools.ui.VscodeSettingsStyle.cardBackground());
                     locked.add("@sp.toast.pro-required").left().growX().wrap();
                     locked.button("@sp.setting.advanced.locked", Styles.flatt, () -> Core.settings.put(keyProMode, true))
-                        .height(40f)
+                        .height(RbmStyle.buttonHeight())
                         .padLeft(8f);
-                    holder.add(locked).growX().padTop(6f).row();
+                    holder.add(locked).width(RbmStyle.rowWidth()).left().padTop(6f).row();
                 }
             };
 
@@ -772,7 +774,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 }
             });
 
-            table.add(holder).growX().row();
+            table.add(holder).width(RbmStyle.rowWidth()).left().row();
         }
     }
 
@@ -806,18 +808,18 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void addThreatModeRow(Table table){
-        table.table(Tex.button, t -> {
+        table.table(bektools.ui.VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.threat.mode").left().width(170f);
 
             TextButton modeButton = t.button("", Styles.flatt, this::cycleThreatMode)
                 .growX()
-                .height(40f)
+                .height(RbmStyle.buttonHeight())
                 .padLeft(8f)
                 .get();
 
             modeButton.update(() -> modeButton.setText(threatModeDisplay(Core.settings.getInt(keyThreatMode, threatModeGround))));
-        }).growX().padTop(6f);
+        }).width(RbmStyle.rowWidth()).left().padTop(6f);
 
         table.row();
     }
@@ -835,27 +837,27 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void addTargetRow(Table table){
-        table.table(Tex.button, t -> {
+        table.table(bektools.ui.VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.target.mode").left().width(170f);
 
             TextButton modeButton = t.button("", Styles.flatt, this::cycleTargetMode)
                 .growX()
-                .height(40f)
+                .height(RbmStyle.buttonHeight())
                 .padLeft(8f)
                 .get();
 
             modeButton.update(() -> modeButton.setText(targetModeDisplay(Core.settings.getInt(keyTargetMode, targetModeCore))));
-        }).growX().padTop(6f);
+        }).width(RbmStyle.rowWidth()).left().padTop(6f);
 
         table.row();
-        table.table(Tex.button, t -> {
+        table.table(bektools.ui.VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.target.block").left().width(170f);
 
             TextButton selectButton = t.button("", Styles.flatt, () -> showBlockSelectDialog(block -> Core.settings.put(keyTargetBlock, block == null ? "" : block.name)))
                 .growX()
-                .height(40f)
+                .height(RbmStyle.buttonHeight())
                 .padLeft(8f)
                 .get();
 
@@ -865,23 +867,23 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 selectButton.setDisabled(!enabled);
                 selectButton.setText(block == null ? Core.bundle.get("sp.setting.target.block.none") : block.localizedName);
             });
-        }).growX().padTop(6f);
+        }).width(RbmStyle.rowWidth()).left().padTop(6f);
     }
 
     private void addGoalInputSourceRow(Table table){
         table.row();
-        table.table(Tex.button, t -> {
+        table.table(bektools.ui.VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.goal.source").left().width(170f);
 
             TextButton sourceButton = t.button("", Styles.flatt, this::cycleGoalInputSource)
                 .growX()
-                .height(40f)
+                .height(RbmStyle.buttonHeight())
                 .padLeft(8f)
                 .get();
 
             sourceButton.update(() -> sourceButton.setText(goalInputSourceDisplay(Core.settings.getInt(keyGoalInputSource, goalInputMouse))));
-        }).growX().padTop(6f);
+        }).width(RbmStyle.rowWidth()).left().padTop(6f);
     }
 
     private void cycleGoalInputSource(){
@@ -897,18 +899,18 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void addPathfinderRow(Table table){
-        table.table(Tex.button, t -> {
+        table.table(bektools.ui.VscodeSettingsStyle.cardBackground(), t -> {
             t.left().margin(10f);
             t.add("@sp.setting.pathfinder").left().width(170f);
 
             TextButton modeButton = t.button("", Styles.flatt, this::cyclePathfinder)
                 .growX()
-                .height(40f)
+                .height(RbmStyle.buttonHeight())
                 .padLeft(8f)
                 .get();
 
             modeButton.update(() -> modeButton.setText(pathfinderDisplay(pathfinderMode())));
-        }).growX().padTop(6f);
+        }).width(RbmStyle.rowWidth()).left().padTop(6f);
 
         table.row();
     }

@@ -3,6 +3,8 @@ package tripwire;
 import arc.Core;
 import arc.graphics.Color;
 import arc.math.Mathf;
+import bektools.ui.RbmStyle;
+import mindustry.gen.Icon;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
 public final class TripwireSettings {
@@ -18,31 +20,37 @@ public final class TripwireSettings {
     public static final String colorR = "tripwire-color-r";
     public static final String colorG = "tripwire-color-g";
     public static final String colorB = "tripwire-color-b";
-    private static final int[] chatBatchDelayMillis = {300, 450, 500, 600, 750, 900, 1000};
-    private static final int defaultChatBatchDelayIndex = 2;
+    private static final int[] chatBatchDelayMillis = {
+        100, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500,
+        5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 10000
+    };
+    private static final int defaultChatBatchDelayIndex = 1;
 
     private TripwireSettings() {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        section(table, "tripwire-section-detection");
+        if (!TripwireMod.bekBundled) {
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.tripwire", "Tripwire"), Icon.map));
+        }
+        table.pref(new RbmStyle.SubHeaderSetting("Detection"));
         migrateDetectionInterval();
-        table.sliderPref(detectInterval, 150, 100, 200, 10, i -> i + "ms");
-        table.checkPref(chatAlert, true);
-        table.sliderPref(chatBatchDelay, defaultChatBatchDelayIndex, 0, chatBatchDelayMillis.length - 1, 1, TripwireSettings::formatChatBatchDelay);
-        table.checkPref(toastAlert, true);
+        table.pref(new RbmStyle.IconSliderSetting(detectInterval, 150, 100, 200, 10, Icon.refreshSmall, i -> i + "ms", null));
+        table.pref(new RbmStyle.IconCheckSetting(chatAlert, true, Icon.chatSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(chatBatchDelay, defaultChatBatchDelayIndex, 0, chatBatchDelayMillis.length - 1, 1, Icon.refreshSmall, TripwireSettings::formatChatBatchDelay, null));
+        table.pref(new RbmStyle.IconCheckSetting(toastAlert, true, Icon.infoSmall, null));
 
-        section(table, "tripwire-section-display");
-        table.checkPref(showFences, true);
-        table.checkPref(showMinimap, true);
-        table.sliderPref(lineWidth, 2, 1, 8, 1, i -> i + "px");
-        table.sliderPref(iconSize, 24, 8, 48, 1, i -> i + "px");
+        table.pref(new RbmStyle.SubHeaderSetting("Display"));
+        table.pref(new RbmStyle.IconCheckSetting(showFences, true, Icon.gridSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(showMinimap, true, Icon.mapSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(lineWidth, 2, 1, 8, 1, Icon.pencilSmall, i -> i + "px", null));
+        table.pref(new RbmStyle.IconSliderSetting(iconSize, 24, 8, 48, 1, Icon.resizeSmall, i -> i + "px", null));
 
-        section(table, "tripwire-section-color");
-        table.checkPref(overrideColor, false);
-        table.sliderPref(colorR, 255, 0, 255, 1, String::valueOf);
-        table.sliderPref(colorG, 220, 0, 255, 1, String::valueOf);
-        table.sliderPref(colorB, 64, 0, 255, 1, String::valueOf);
+        table.pref(new RbmStyle.SubHeaderSetting("Color"));
+        table.pref(new RbmStyle.IconCheckSetting(overrideColor, false, Icon.effectSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(colorR, 255, 0, 255, 1, Icon.effectSmall, String::valueOf, null));
+        table.pref(new RbmStyle.IconSliderSetting(colorG, 220, 0, 255, 1, Icon.effectSmall, String::valueOf, null));
+        table.pref(new RbmStyle.IconSliderSetting(colorB, 64, 0, 255, 1, Icon.effectSmall, String::valueOf, null));
     }
 
     private static void section(SettingsMenuDialog.SettingsTable table, String key) {
@@ -83,8 +91,7 @@ public final class TripwireSettings {
     private static String formatChatBatchDelay(int index) {
         int millis = chatBatchDelayMillis[Mathf.clamp(index, 0, chatBatchDelayMillis.length - 1)];
         if (millis % 1000 == 0) return millis / 1000 + "s";
-        if (millis % 100 == 0) return "0." + millis / 100 + "s";
-        return "0." + millis / 10 + "s";
+        return (millis / 1000) + "." + ((millis % 1000) / 100) + "s";
     }
 
     public static boolean toastAlert() {

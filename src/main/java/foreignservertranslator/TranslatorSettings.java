@@ -5,8 +5,9 @@ import arc.scene.ui.TextField;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Scl;
 import arc.struct.Seq;
+import bektools.ui.RbmStyle;
+import bektools.ui.VscodeSettingsStyle;
 import mindustry.gen.Icon;
-import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import mindustry.ui.dialogs.SettingsMenuDialog;
@@ -16,31 +17,31 @@ public final class TranslatorSettings{
     }
 
     public static void build(SettingsMenuDialog.SettingsTable table){
-        table.checkPref(TranslatorFeature.openAiEnabledKey, false);
-        table.textPref(TranslatorFeature.baseUrlKey, "");
+        if(!ForeignServerTranslatorMod.bekBundled){
+            table.pref(new RbmStyle.HeaderSetting("Foreign Server Translator", Icon.chat));
+        }
+        table.pref(new RbmStyle.SubHeaderSetting("Chat translation"));
+        table.pref(new RbmStyle.IconCheckSetting(TranslatorFeature.openAiEnabledKey, false, Icon.chatSmall, null));
+        table.pref(new RbmStyle.IconTextSetting(TranslatorFeature.baseUrlKey, "", Icon.linkSmall, null));
         table.pref(new ApiKeySetting());
-        table.textPref(TranslatorFeature.modelKey, "gpt-4o-mini");
-        table.sliderPref(TranslatorFeature.contextMessagesKey, 3, 0, 10, 1, value -> value + "");
-        table.checkPref(TranslatorFeature.bundleHintsKey, false);
-        table.checkPref(TranslatorFeature.fullBundleContextKey, false);
+        table.pref(new RbmStyle.IconTextSetting(TranslatorFeature.modelKey, "gpt-4o-mini", Icon.settingsSmall, null));
+        table.pref(new RbmStyle.IconSliderSetting(TranslatorFeature.contextMessagesKey, 3, 0, 10, 1, Icon.listSmall, value -> value + "", null));
+        table.pref(new RbmStyle.IconCheckSetting(TranslatorFeature.bundleHintsKey, false, Icon.infoSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(TranslatorFeature.fullBundleContextKey, false, Icon.bookSmall, null));
         table.pref(new LanguageSetting(TranslatorFeature.incomingLanguageKey, "zh-Hans"));
         table.pref(new LanguageSetting(TranslatorFeature.outgoingLanguageKey, "en"));
         table.pref(new CacheControlsSetting());
         table.pref(new TokenStatsSetting());
 
-        // Marker translation settings header
-        table.row();
-        table.add(Core.bundle.get("fst.markerSettings", "Marker Translation")).left().growX().padTop(16f).padBottom(4f);
-        table.row();
-
-        table.checkPref("fst.marker.openAiEnabled", false);
-        table.textPref("fst.marker.baseUrl", "");
+        table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("fst.markerSettings", "Marker Translation"), Icon.map));
+        table.pref(new RbmStyle.IconCheckSetting("fst.marker.openAiEnabled", false, Icon.mapSmall, null));
+        table.pref(new RbmStyle.IconTextSetting("fst.marker.baseUrl", "", Icon.linkSmall, null));
         table.pref(new MarkerApiKeySetting());
-        table.textPref("fst.marker.model", "gpt-4o-mini");
+        table.pref(new RbmStyle.IconTextSetting("fst.marker.model", "gpt-4o-mini", Icon.settingsSmall, null));
     }
 
     private static float prefWidth(){
-        return Math.min(Core.graphics.getWidth() / Scl.scl() / 1.15f, 560f);
+        return RbmStyle.rowWidth();
     }
 
     private static final class ApiKeySetting extends SettingsMenuDialog.SettingsTable.Setting{
@@ -50,12 +51,12 @@ public final class TranslatorSettings{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.table(Tex.button, row -> {
+            table.table(VscodeSettingsStyle.cardBackground(), row -> {
                 row.left().margin(10f);
                 row.add(title).left().growX().minWidth(0f).wrap();
                 row.label(() -> mask(Core.settings.getString(name, ""))).left().width(140f).padLeft(10f);
-                row.button("@fst.apiKey.edit", () -> showDialog(table)).width(120f).height(46f).padLeft(8f);
-            }).width(prefWidth()).padTop(4f).left();
+                row.button("@fst.apiKey.edit", Styles.flatt, () -> showDialog(table)).width(120f).height(RbmStyle.buttonHeight()).padLeft(8f);
+            }).width(prefWidth()).padTop(6f).left();
             table.row();
         }
 
@@ -98,17 +99,17 @@ public final class TranslatorSettings{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.table(Tex.button, row -> {
+            table.table(VscodeSettingsStyle.cardBackground(), row -> {
                 row.left().margin(10f);
                 row.add(title).left().growX().minWidth(0f).wrap();
 
                 TextButton select = row.button("", Styles.flatt, () -> showLanguageDialog(table))
-                    .width(300f).height(46f).padLeft(10f).get();
+                    .width(300f).height(RbmStyle.buttonHeight()).padLeft(10f).get();
                 select.update(() -> select.setText(LanguageCatalog.display(Core.settings.getString(name, def))));
 
                 row.button(Icon.refresh, Styles.emptyi, LanguageCatalog::refresh)
                     .size(46f).padLeft(4f).tooltip("@fst.languages.refresh");
-            }).width(prefWidth()).padTop(4f).left();
+            }).width(prefWidth()).padTop(6f).left();
             table.row();
         }
 
@@ -148,19 +149,19 @@ public final class TranslatorSettings{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.table(Tex.button, box -> {
+            table.table(VscodeSettingsStyle.cardBackground(), box -> {
                 box.left().margin(10f);
                 box.add(title).left().growX().colspan(2).wrap().row();
                 box.label(() -> Core.bundle.format("fst.cache.status", TranslatorCache.serverLanguageCount(), TranslatorCache.translationCount()))
                     .left().growX().colspan(2).padTop(8f).wrap().row();
-                box.button("@fst.cache.clearServerLanguages", () -> {
+                box.button("@fst.cache.clearServerLanguages", Styles.flatt, () -> {
                     TranslatorCache.clearServerLanguages();
                     table.rebuild();
-                }).height(46f).growX().padTop(8f).padRight(4f);
-                box.button("@fst.cache.clearTranslations", () -> {
+                }).height(RbmStyle.buttonHeight()).growX().padTop(8f).padRight(4f);
+                box.button("@fst.cache.clearTranslations", Styles.flatt, () -> {
                     TranslatorCache.clearTranslations();
                     table.rebuild();
-                }).height(46f).growX().padTop(8f).padLeft(4f);
+                }).height(RbmStyle.buttonHeight()).growX().padTop(8f).padLeft(4f);
             }).width(prefWidth()).padTop(8f).left();
             table.row();
         }
@@ -173,7 +174,7 @@ public final class TranslatorSettings{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.table(Tex.button, box -> {
+            table.table(VscodeSettingsStyle.cardBackground(), box -> {
                 box.left().margin(10f);
                 box.add(title).left().growX().colspan(4).wrap().row();
                 box.add(Core.bundle.get("fst.tokens.kind")).left().padTop(8f).growX();
@@ -206,12 +207,12 @@ public final class TranslatorSettings{
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            table.table(Tex.button, row -> {
+            table.table(VscodeSettingsStyle.cardBackground(), row -> {
                 row.left().margin(10f);
                 row.add(title).left().growX().minWidth(0f).wrap();
                 row.label(() -> mask(Core.settings.getString(name, ""))).left().width(140f).padLeft(10f);
-                row.button("@fst.apiKey.edit", () -> showDialog(table)).width(120f).height(46f).padLeft(8f);
-            }).width(prefWidth()).padTop(4f).left();
+                row.button("@fst.apiKey.edit", Styles.flatt, () -> showDialog(table)).width(120f).height(RbmStyle.buttonHeight()).padLeft(8f);
+            }).width(prefWidth()).padTop(6f).left();
             table.row();
         }
 

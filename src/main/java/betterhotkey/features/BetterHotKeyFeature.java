@@ -25,6 +25,8 @@ import arc.struct.Seq;
 import arc.util.Strings;
 import arc.util.Time;
 import arc.util.Align;
+import bektools.ui.RbmStyle;
+import betterhotkey.BetterHotKeyMod;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.content.Blocks;
@@ -284,56 +286,26 @@ public class BetterHotKeyFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.pref(new CenteredCheckSetting(keyEnabled, true, null));
-        table.pref(new CenteredCheckSetting(keyKeepOrder, true, null));
-        table.pref(new CenteredCheckSetting(keyCustomEnabled, true, null));
-        table.pref(new CenteredCheckSetting(keySkipTerrainHotkeys, false, null));
-        table.pref(new CenteredCheckSetting(keyShowIconHotkeys, true, null));
+        if (!BetterHotKeyMod.bekBundled) {
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.betterhotkey", "Better HotKey"), Icon.settingsSmall));
+        }
+        table.pref(new RbmStyle.SubHeaderSetting("General"));
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keyKeepOrder, true, Icon.listSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keyCustomEnabled, true, Icon.settingsSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keySkipTerrainHotkeys, false, Icon.terrainSmall, null));
+        table.pref(new RbmStyle.IconCheckSetting(keyShowIconHotkeys, true, Icon.imageSmall, null));
 
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-open-display-config") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                TextButton b = t.button(title, BetterHotKeyFeature::showDisplayConfigDialog).growX().margin(14f).pad(6f).center().get();
-                b.getLabel().setAlignment(Align.center);
-                b.getLabelCell().growX().align(Align.center);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-open-ignore-list") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                TextButton b = t.button(title, BetterHotKeyFeature::showSkipTerrainIgnoreDialog).growX().margin(14f).pad(6f).center().get();
-                b.getLabel().setAlignment(Align.center);
-                b.getLabelCell().growX().align(Align.center);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-open-config") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                TextButton b = t.button(title, BetterHotKeyFeature::showConfigDialog).growX().margin(14f).pad(6f).center().get();
-                b.getLabel().setAlignment(Align.center);
-                b.getLabelCell().growX().align(Align.center);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-reset-config") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                TextButton b = t.button(title, () -> {
-                    groups.clear();
-                    groups.add(defaultGroup());
-                    saveGroups();
-                    compiledDirty = true;
-                }).growX().margin(14f).pad(6f).center().get();
-                b.getLabel().setAlignment(Align.center);
-                b.getLabelCell().growX().align(Align.center);
-                t.row();
-            }
-        });
+        table.pref(new RbmStyle.SubHeaderSetting("Configuration"));
+        table.pref(new RbmStyle.ActionButtonSetting("bhk-open-display-config", Icon.imageSmall, BetterHotKeyFeature::showDisplayConfigDialog));
+        table.pref(new RbmStyle.ActionButtonSetting("bhk-open-ignore-list", Icon.filterSmall, BetterHotKeyFeature::showSkipTerrainIgnoreDialog));
+        table.pref(new RbmStyle.ActionButtonSetting("bhk-open-config", Icon.listSmall, BetterHotKeyFeature::showConfigDialog));
+        table.pref(new RbmStyle.ActionButtonSetting("bhk-reset-config", Icon.refreshSmall, () -> {
+            groups.clear();
+            groups.add(defaultGroup());
+            saveGroups();
+            compiledDirty = true;
+        }));
 
         loadGroups();
         loadSkipTerrainIgnoreList();

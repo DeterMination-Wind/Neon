@@ -7,6 +7,7 @@ import arc.input.KeyCode;
 import arc.util.Interval;
 import betterpolyai.BetterPolyAiMod;
 import betterpolyai.GithubUpdateCheck;
+import bektools.ui.RbmStyle;
 import mindustry.game.EventType;
 import mindustry.gen.Unit;
 import mindustry.ui.dialogs.SettingsMenuDialog;
@@ -51,11 +52,15 @@ public class PolyAiFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.checkPref(keyEnabled, false);
-        table.textPref(keyBuildGapTiles, String.valueOf(defaultBuildGapTiles));
         if (!BetterPolyAiMod.bekBundled) {
-            table.checkPref(GithubUpdateCheck.enabledKey(), true);
-            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
+            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.betterpolyai", "Better PolyAI"), mindustry.gen.Icon.units));
+        }
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, false, mindustry.gen.Icon.eyeSmall, null));
+        table.pref(new RbmStyle.IconTextSetting(keyBuildGapTiles, String.valueOf(defaultBuildGapTiles), mindustry.gen.Icon.gridSmall, null));
+        if (!BetterPolyAiMod.bekBundled) {
+            table.pref(new RbmStyle.SubHeaderSetting("Update"));
+            table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, mindustry.gen.Icon.refreshSmall, null));
+            table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, mindustry.gen.Icon.infoSmall, null));
         }
         refreshSettings();
     }

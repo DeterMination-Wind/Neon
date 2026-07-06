@@ -255,22 +255,32 @@ public class BekToolsMod extends Mod{
                 Collapser collapser = new Collapser(body, true);
                 collapser.setDuration(0.12f);
                 final boolean[] built = {false};
+                final boolean[] rebuilding = {false};
+                final Runnable[] mountBody = new Runnable[1];
                 final Label[] arrow = new Label[1];
 
-                Runnable buildBody = () -> {
-                    if(built[0]) return;
-                    NestedSettingsTable nested = new NestedSettingsTable(indent);
-                    builder.get(nested);
-                    nested.finishBuild();
-                    body.clearChildren();
-                    body.add(nested).width(width).growX().center();
-                    built[0] = true;
+                mountBody[0] = () -> {
+                    if(rebuilding[0]) return;
+                    rebuilding[0] = true;
+                    try{
+                        NestedSettingsTable nested = new NestedSettingsTable(indent, () -> {
+                            if(rebuilding[0]) return;
+                            mountBody[0].run();
+                        });
+                        builder.get(nested);
+                        nested.finishBuild();
+                        body.clearChildren();
+                        body.add(nested).width(width).growX().center();
+                        built[0] = true;
+                    }finally{
+                        rebuilding[0] = false;
+                    }
                 };
 
                 Runnable toggle = () -> {
                     expanded = !expanded;
                     arrow[0].setText(expanded ? "v" : ">");
-                    if(expanded) buildBody.run();
+                    if(expanded && !built[0]) mountBody[0].run();
                     collapser.setCollapsed(!expanded, true);
                 };
 
@@ -309,11 +319,12 @@ public class BekToolsMod extends Mod{
     }
 
     private static class NestedSettingsTable extends SettingsMenuDialog.SettingsTable{
+        private final Runnable rebuildAction;
         private boolean suppressRebuild = true;
-        private boolean rebuilding = false;
 
-        public NestedSettingsTable(float indent){
+        public NestedSettingsTable(float indent, Runnable rebuildAction){
             super();
+            this.rebuildAction = rebuildAction;
             left();
             defaults().left();
             defaults().padLeft(indent);
@@ -321,20 +332,16 @@ public class BekToolsMod extends Mod{
 
         @Override
         public void rebuild(){
-            if(suppressRebuild || rebuilding) return;
-            rebuilding = true;
-
-            clearChildren();
-            for(Setting setting : list){
-                setting.add(this);
-            }
-
-            rebuilding = false;
+            if(suppressRebuild) return;
+            rebuildAction.run();
         }
 
         public void finishBuild(){
             suppressRebuild = false;
-            rebuild();
+            clearChildren();
+            for(SettingsMenuDialog.SettingsTable.Setting setting : list){
+                setting.add(this);
+            }
         }
     }
 }

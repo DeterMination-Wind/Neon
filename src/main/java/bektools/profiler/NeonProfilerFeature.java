@@ -19,6 +19,8 @@ import arc.util.CommandHandler;
 import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
+import bektools.ui.RbmStyle;
+import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType;
@@ -379,55 +381,37 @@ public final class NeonProfilerFeature{
         table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-toggle") {
             @Override
             public void add(SettingsMenuDialog.SettingsTable t){
-                TextButton button = t.button("", () -> {
-                    boolean enable = !NeonProfiler.isEnabled();
-                    setEnabled(enable);
-                    if(enable){
-                        openPanel();
-                    }
-                }).growX().margin(14f).pad(6f).get();
-                button.update(() -> button.setText(
-                    NeonProfiler.isEnabled()
-                        ? Core.bundle.get("neon.profiler.action.off", "Disable")
-                        : Core.bundle.get("neon.profiler.action.on", "Enable")
-                ));
+                final TextButton[] button = {null};
+                t.table(VscodeSettingsStyle.cardBackground(), row -> {
+                    row.left().margin(6f);
+                    row.image(Icon.chartBar).size(20f).padRight(8f);
+                    button[0] = row.button("", Styles.flatt, () -> {
+                        boolean enable = !NeonProfiler.isEnabled();
+                        setEnabled(enable);
+                        if(enable){
+                            openPanel();
+                        }
+                    }).growX().height(RbmStyle.buttonHeight()).get();
+                }).width(RbmStyle.rowWidth()).left().padTop(6f);
+                if(button[0] != null){
+                    button[0].update(() -> button[0].setText(
+                        NeonProfiler.isEnabled()
+                            ? Core.bundle.get("neon.profiler.action.off", "Disable")
+                            : Core.bundle.get("neon.profiler.action.on", "Enable")
+                    ));
+                }
                 t.row();
             }
         });
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-enabled") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t){
-                t.check(Core.bundle.get("neon.profiler.action.enabled", "Enable profiler"), Core.settings.getBool(keyEnabled, false), checked -> setEnabled(checked)).left().row();
-            }
-        });
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-open") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t){
-                t.button(Core.bundle.get("neon.profiler.action.open", "Open profiler"), NeonProfilerFeature::openPanel).growX().margin(14f).pad(6f).row();
-            }
-        });
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-reset") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t){
-                t.button(Core.bundle.get("neon.profiler.action.reset", "Reset"), NeonProfiler::reset).growX().margin(14f).pad(6f).row();
-            }
-        });
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-copy") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t){
-                t.button(Core.bundle.get("neon.profiler.action.copy", "Copy summary"), () -> Core.app.setClipboardText(NeonProfiler.copySummaryText())).growX().margin(14f).pad(6f).row();
-            }
-        });
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-all") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t){
-                t.check(Core.bundle.get("neon.profiler.action.showall", "Show all rows"), Core.settings.getBool(keyShowAll, false), checked -> {
-                    Core.settings.put(keyShowAll, checked);
-                    NeonProfiler.setShowAll(checked);
-                    refreshPanel();
-                }).left().row();
-            }
-        });
+        table.pref(new RbmStyle.IconCheckSetting("neon-profiler-enabled", Core.bundle.get("neon.profiler.action.enabled", "Enable profiler"), false, Icon.eyeSmall, NeonProfilerFeature::setEnabled));
+        table.pref(new RbmStyle.ActionButtonSetting("neon-profiler-open", Core.bundle.get("neon.profiler.action.open", "Open profiler"), Icon.list, NeonProfilerFeature::openPanel));
+        table.pref(new RbmStyle.ActionButtonSetting("neon-profiler-reset", Core.bundle.get("neon.profiler.action.reset", "Reset"), Icon.refreshSmall, NeonProfiler::reset));
+        table.pref(new RbmStyle.ActionButtonSetting("neon-profiler-copy", Core.bundle.get("neon.profiler.action.copy", "Copy summary"), Icon.copy, () -> Core.app.setClipboardText(NeonProfiler.copySummaryText())));
+        table.pref(new RbmStyle.IconCheckSetting("neon-profiler-all", Core.bundle.get("neon.profiler.action.showall", "Show all rows"), false, Icon.listSmall, checked -> {
+            Core.settings.put(keyShowAll, checked);
+            NeonProfiler.setShowAll(checked);
+            refreshPanel();
+        }));
     }
 
     public static void setEnabled(boolean enabled){

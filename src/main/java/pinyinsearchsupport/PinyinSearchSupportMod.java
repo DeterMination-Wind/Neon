@@ -1,5 +1,6 @@
 package pinyinsearchsupport;
 
+import bektools.ui.RbmStyle;
 import arc.Events;
 import arc.util.Log;
 import arc.util.Timer;
@@ -61,14 +62,17 @@ public class PinyinSearchSupportMod extends Mod{
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
             SettingsMenuDialog.SettingsTable st = (SettingsMenuDialog.SettingsTable)table;
-            st.checkPref(keyEnabled, true);
-            st.checkPref(keyFuzzy, true);
-            st.checkPref(keyInitials, true);
-            st.checkPref(keyHeteronym, true);
-            st.sliderPref(keyDelayMs, defaultDelayMs, 0, 1500, 10, value -> value + " ms");
-            if(!bekBundled) st.checkPref(GithubUpdateCheck.enabledKey(), true);
-            if(!bekBundled) st.checkPref(GithubUpdateCheck.showDialogKey(), true);
-        
+            if(!bekBundled){
+                st.pref(new RbmStyle.HeaderSetting("Pinyin Search Support", Icon.zoom));
+            }
+            st.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
+            st.pref(new RbmStyle.IconCheckSetting(keyFuzzy, true, Icon.filterSmall, null));
+            st.pref(new RbmStyle.IconCheckSetting(keyInitials, true, Icon.listSmall, null));
+            st.pref(new RbmStyle.IconCheckSetting(keyHeteronym, true, Icon.warningSmall, null));
+            st.pref(new RbmStyle.IconSliderSetting(keyDelayMs, defaultDelayMs, 0, 1500, 10, Icon.refreshSmall, value -> value + " ms", null));
+            if(!bekBundled) st.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
+            if(!bekBundled) st.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+
     }
 
     private String scannerOwnerTag(){

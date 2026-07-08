@@ -30,6 +30,7 @@ public final class FieldDispatcher{
     private final ObjectSet<TextField> patched = new ObjectSet<>();
     private final ObjectMap<TextField, Seq<ChangeListener>> vanillas = new ObjectMap<>();
     private final ObjectMap<TextField, Timer.Task> debounces = new ObjectMap<>();
+    private final ObjectMap<TextField, ChangeListener> proxies = new ObjectMap<>();
     private final ObjectSet<String> bundleSearchKeys = new ObjectSet<>();
     private final ObjectSet<String> modsContextTokens = new ObjectSet<>();
     private final ObjectSet<String> modsExactTokens = new ObjectSet<>();
@@ -46,6 +47,7 @@ public final class FieldDispatcher{
         }
         for(TextField f : stale){
             cancelDebounce(f);
+            proxies.remove(f);
             patched.remove(f);
             vanillas.remove(f);
         }
@@ -138,6 +140,7 @@ public final class FieldDispatcher{
         Seq<ChangeListener> existing = new Seq<>();
         for(int i = 0; i < listeners.size; i++){
             EventListener l = listeners.get(i);
+            if(l == proxies.get(field)) continue;
             if(l instanceof ChangeListener) existing.add((ChangeListener)l);
         }
         if(existing.isEmpty()) return;
@@ -155,6 +158,7 @@ public final class FieldDispatcher{
                 self.onChange(field);
             }
         };
+        proxies.put(field, proxy);
         field.addListener(proxy);
     }
 
@@ -195,8 +199,27 @@ public final class FieldDispatcher{
         String typed = field.getText();
         if(typed == null) typed = "";
 
-        if(typed.isEmpty() || isModsSearchField(field)){
+        if(typed.isEmpty() || !shouldUsePinyinSearch(typed) || isModsSearchField(field)){
             fireListeners(field, list);
+            return;
+        }
+
+        MatchEngine.MatchOptions opts = new MatchEngine.MatchOptions(
+            Core.settings.getBool(PinyinSearchSupportMod.keyFuzzy, true),
+            Core.settings.getBool(PinyinSearchSupportMod.keyInitials, true),
+            Core.settings.getBool(PinyinSearchSupportMod.keyHeteronym, true)
+        );
+
+        if(SectorListAdapter.isSectorSearch(field)){
+            fireListeners(field, list);
+            SectorListAdapter.filter(field, typed, opts);
+            return;
+        }
+
+        if(SchematicsAdapter.isSchematicsSearch(field)){
+            if(!SchematicsAdapter.filter(field, typed, opts)){
+                fireListeners(field, list);
+            }
             return;
         }
 
@@ -222,16 +245,20 @@ public final class FieldDispatcher{
         }
         if(scope == null || !scope.isValid()) return;
 
-        MatchEngine.MatchOptions opts = new MatchEngine.MatchOptions(
-            Core.settings.getBool(PinyinSearchSupportMod.keyFuzzy, true),
-            Core.settings.getBool(PinyinSearchSupportMod.keyInitials, true),
-            Core.settings.getBool(PinyinSearchSupportMod.keyHeteronym, true)
-        );
         try{
             scope.postFilter(typed, opts);
         }catch(Throwable t){
             Log.warn("[PinyinSearchSupport] post filter failed: @", t.getMessage());
         }
+    }
+
+    private static boolean shouldUsePinyinSearch(String query){
+        if(query == null || query.isEmpty()) return false;
+        for(int i = 0; i < query.length(); i++){
+            char c = query.charAt(i);
+            if(Character.isLetter(c) || pinyinsearchsupport.match.PinyinIndex.isCjk(c)) return true;
+        }
+        return false;
     }
 
     private boolean isModsSearchField(TextField field){

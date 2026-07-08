@@ -171,11 +171,16 @@ public class PatchViewerMod extends Mod{
 
     private void installDialogHook(){
         try{
+            final ContentInfoDialog originalDialog = Vars.ui == null ? null : Vars.ui.content;
             Vars.ui.content = new ContentInfoDialog(){
                 @Override
                 public void show(UnlockableContent content){
                     if(!isPatchViewerEnabled()){
-                        super.show(content);
+                        if(originalDialog != null && originalDialog != this){
+                            originalDialog.show(content);
+                        }else{
+                            showPatched(content);
+                        }
                         return;
                     }
                     showPatched(content);
@@ -1493,7 +1498,7 @@ public class PatchViewerMod extends Mod{
             String raw = label.getText() == null ? "" : label.getText().toString();
             String visible = Strings.stripColors(raw);
             String normalized = normalizeText(visible);
-            out.add(new LabelState(label, raw, visible, normalized, buildLabelMatchKey(normalized), groupKey, nextInsideStack, new Color(label.color)));
+            out.add(new LabelState(label, raw, visible, normalized, buildLabelMatchKey(normalized), groupKey, nextInsideStack, new Color(label.color), readLabelWrap(label), readLabelEllipsis(label)));
             return;
         }
         if(element instanceof Table){
@@ -1522,12 +1527,28 @@ public class PatchViewerMod extends Mod{
         return key.isEmpty() ? normalized : key;
     }
 
+    private boolean readLabelWrap(Label label){
+        Object value = Reflector.get(label, "wrap");
+        return value instanceof Boolean && (Boolean)value;
+    }
+
+    private String readLabelEllipsis(Label label){
+        Object value = Reflector.get(label, "ellipsis");
+        return value instanceof String ? (String)value : null;
+    }
+
     private void restoreLabelStates(Seq<LabelState> labels){
         if(labels == null) return;
         for(LabelState state : labels){
             if(state == null || state.label == null) continue;
             state.label.setText(state.rawText);
             state.label.setColor(state.originalColor);
+            state.label.setWrap(state.originalWrap);
+            if(state.originalEllipsis == null){
+                state.label.setEllipsis(false);
+            }else{
+                state.label.setEllipsis(state.originalEllipsis);
+            }
         }
     }
 
@@ -3203,8 +3224,10 @@ public class PatchViewerMod extends Mod{
         final String groupKey;
         final boolean insideStack;
         final Color originalColor;
+        final boolean originalWrap;
+        final String originalEllipsis;
 
-        LabelState(Label label, String rawText, String visibleText, String normalizedText, String matchKey, String groupKey, boolean insideStack, Color originalColor){
+        LabelState(Label label, String rawText, String visibleText, String normalizedText, String matchKey, String groupKey, boolean insideStack, Color originalColor, boolean originalWrap, String originalEllipsis){
             this.label = label;
             this.rawText = rawText;
             this.visibleText = visibleText == null ? "" : visibleText;
@@ -3213,6 +3236,8 @@ public class PatchViewerMod extends Mod{
             this.groupKey = groupKey == null ? "" : groupKey;
             this.insideStack = insideStack;
             this.originalColor = originalColor;
+            this.originalWrap = originalWrap;
+            this.originalEllipsis = originalEllipsis;
         }
     }
 

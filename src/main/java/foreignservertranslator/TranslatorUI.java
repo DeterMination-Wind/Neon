@@ -5,6 +5,7 @@ import arc.func.Cons;
 import arc.func.Intc;
 import arc.input.KeyCode;
 import arc.math.Interp;
+import arc.math.geom.Vec2;
 import arc.scene.Element;
 import arc.scene.actions.Actions;
 import arc.scene.event.Touchable;
@@ -13,6 +14,7 @@ import arc.scene.ui.TextField;
 import arc.scene.ui.TextField.TextFieldFilter;
 import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.Table;
+import arc.struct.IntMap;
 import arc.struct.ObjectMap;
 import arc.util.Align;
 import arc.util.Log;
@@ -27,6 +29,7 @@ import java.lang.reflect.Modifier;
 
 public class TranslatorUI extends UI{
     private final ObjectMap<String, Element> translatedPopups = new ObjectMap<>();
+    private final IntMap<Table> translatedLabels = new IntMap<>();
 
     public static TranslatorUI wrap(UI original) throws IllegalAccessException{
         if(original instanceof TranslatorUI) return (TranslatorUI)original;
@@ -41,13 +44,61 @@ public class TranslatorUI extends UI{
     }
 
     @Override
-    public void showText(String titleText, String text){
-        showText(titleText, text, Align.center);
+    public void showLabel(@Nullable String info, int id, float duration, float worldx, float worldy, int flags){
+        if(info == null){
+            super.showLabel(null, id, duration, worldx, worldy, flags);
+            showLabelOnTop(null, id, 0f, 0f, 0f);
+            return;
+        }
+
+        String source = TranslatorFeature.stripIncomingHint(info);
+        if(!TranslatorFeature.shouldTranslateWorldText(info)){
+            super.showLabel(source, id, duration, worldx, worldy, flags);
+            showLabelOnTop(null, id, 0f, 0f, 0f);
+            return;
+        }
+
+        super.showLabel(source, id, duration, worldx, worldy, flags);
+        WorldTextTranslator.translateMessageText(info, translated -> showLabelOnTop(translated, id, duration, worldx, worldy + 8f));
+    }
+
+    public void showLabelOnTop(@Nullable String info, int id, float duration, float worldx, float worldy){
+        if(info == null){
+            Table old = translatedLabels.remove(id);
+            if(old != null) old.remove();
+            return;
+        }
+
+        Table table = new Table(Styles.black3).margin(4);
+        if(id != -1){
+            Table old = translatedLabels.put(id, table);
+            if(old != null) old.remove();
+        }
+        table.touchable = Touchable.disabled;
+        table.update(() -> {
+            if(Vars.state.isMenu()){
+                table.remove();
+                if(id != -1) translatedLabels.remove(id);
+                return;
+            }
+            Vec2 v = Core.camera.project(worldx, worldy);
+            table.setPosition(v.x, v.y, Align.center);
+            if(table.parent != null && table.parent.getChildren().peek() != table){
+                table.toFront();
+            }
+        });
+        table.actions(Actions.delay(duration), Actions.remove(), Actions.run(() -> { if(id != -1) translatedLabels.remove(id); }));
+        table.add(info).style(Styles.outlineLabel);
+        table.pack();
+        table.act(0f);
+        Core.scene.add(table);
+        table.toFront();
+        table.getChildren().first().act(0f);
     }
 
     @Override
     public void showText(String titleText, String text, int align){
-        if(!TranslatorFeature.isCurrentServerForeign()){
+        if(!TranslatorFeature.shouldTranslateWorldText(text)){
             super.showText(titleText, text, align);
             return;
         }
@@ -66,7 +117,7 @@ public class TranslatorUI extends UI{
 
     @Override
     public void showInfo(String info){
-        if(!TranslatorFeature.isCurrentServerForeign()){
+        if(!TranslatorFeature.shouldTranslateWorldText(info)){
             super.showInfo(info);
             return;
         }
@@ -83,7 +134,7 @@ public class TranslatorUI extends UI{
 
     @Override
     public void showInfoText(String titleText, String text){
-        if(!TranslatorFeature.isCurrentServerForeign()){
+        if(!TranslatorFeature.shouldTranslateWorldText(text)){
             super.showInfoText(titleText, text);
             return;
         }
@@ -103,7 +154,7 @@ public class TranslatorUI extends UI{
 
     @Override
     public void showTextInput(String titleText, String text, int textLength, String def, boolean numbers, boolean allowEmpty, Cons<String> confirmed, Runnable closed){
-        if(!TranslatorFeature.isCurrentServerForeign()){
+        if(!TranslatorFeature.shouldTranslateWorldText(text)){
             super.showTextInput(titleText, text, textLength, def, numbers, allowEmpty, confirmed, closed);
             return;
         }
@@ -163,24 +214,25 @@ public class TranslatorUI extends UI{
     }
 
     @Override
-    public void showInfoPopup(@Nullable String info, float duration, int align, int top, int left, int bottom, int right){
+    public void showInfoPopup(@Nullable String id, String info, float duration, int align, int top, int left, int bottom, int right){
         if(info == null){
-            super.showInfoPopup(null, duration, align, top, left, bottom, right);
+            super.showInfoPopup(id, null, duration, align, top, left, bottom, right);
             return;
         }
 
-        super.showInfoPopup(info, duration, align, top, left, bottom, right);
+        super.showInfoPopup(id, info, duration, align, top, left, bottom, right);
         translateOne(info, translated -> {
-            Element old = translatedPopups.remove("popup");
+            String popupKey = id == null ? "popup" : id;
+            Element old = translatedPopups.remove(popupKey);
             if(old != null) old.remove();
             Element clone = showPopupClone(translated, duration, top, bottom);
-            if(clone != null) translatedPopups.put("popup", clone);
+            if(clone != null) translatedPopups.put(popupKey, clone);
         });
     }
 
     @Override
     public void showMenu(String title, String message, String[][] options, Intc callback){
-        if(!TranslatorFeature.isCurrentServerForeign()){
+        if(!TranslatorFeature.shouldTranslateWorldText(message) && !TranslatorFeature.shouldTranslateWorldText(title)){
             super.showMenu(title, message, options, callback);
             return;
         }
@@ -195,7 +247,7 @@ public class TranslatorUI extends UI{
 
     @Override
     public void showFollowUpMenu(int menuId, String title, String message, String[][] options, Intc callback){
-        if(!TranslatorFeature.isCurrentServerForeign()){
+        if(!TranslatorFeature.shouldTranslateWorldText(message) && !TranslatorFeature.shouldTranslateWorldText(title)){
             super.showFollowUpMenu(menuId, title, message, options, callback);
             return;
         }
@@ -376,12 +428,12 @@ public class TranslatorUI extends UI{
     }
 
     private void translateOne(String text, Cons<String> done){
-        if(!TranslatorFeature.shouldTranslateServerText(text)){
+        if(!TranslatorFeature.shouldTranslateWorldText(text)){
             done.get(displayText(text));
             return;
         }
 
-        TranslatorFeature.translateServerText(text, done, error -> {
+        TranslatorFeature.translateWorldText(text, done, error -> {
             Log.warn("ForeignServerTranslator failed to translate server UI text: @", error.getMessage());
             done.get(displayText(text));
         });

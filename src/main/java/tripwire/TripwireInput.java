@@ -2,8 +2,8 @@ package tripwire;
 
 import arc.Core;
 import arc.Events;
-import arc.input.KeyCode;
 import arc.input.KeyBind;
+import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Rect;
 import arc.math.geom.Vec2;
@@ -27,7 +27,10 @@ public final class TripwireInput {
     private static String leftHintText = "";
     private static String bottomHintText = "";
     private static boolean creating;
-    private static boolean deleting;
+    private static boolean keyboardDeleteDragging;
+    private static boolean overlayDeleteMode;
+    private static boolean overlayDeleteDragging;
+    private static boolean deleteRectValid;
     private static boolean hintsBuilt;
     private static float deleteStartX;
     private static float deleteStartY;
@@ -40,38 +43,94 @@ public final class TripwireInput {
         Events.on(EventType.ClientLoadEvent.class, e -> buildHints());
     }
 
+    public static void pressDrawButton() {
+        if (!overlayAvailable() || deleteModeActive()) return;
+        toggleCreate();
+    }
+
+    public static void pressDeleteButton() {
+        if (!overlayAvailable() || creating || keyboardDeleteDragging) return;
+        if (overlayDeleteMode) {
+            finishOverlayDeleteMode();
+        } else {
+            overlayDeleteMode = true;
+            overlayDeleteDragging = false;
+            deleteRectValid = false;
+        }
+    }
+
+    public static boolean overlayAvailable() {
+        return state != null && state.isGame();
+    }
+
+    public static boolean isDrawHoldActive() {
+        return creating;
+    }
+
+    public static boolean isDeleteHoldActive() {
+        return overlayDeleteMode || keyboardDeleteDragging;
+    }
+
     private static void update() {
         updateHints();
 
-        if (state == null || !state.isGame()) {
+        if (!overlayAvailable()) {
             if (creating) cancelCreate();
-            if (deleting) deleting = false;
+            cancelDeleteModes();
             return;
         }
         if (Core.scene.hasKeyboard()) return;
 
-        if (Core.input.keyTap(createKey)) toggleCreate();
+        if (Core.input.keyTap(createKey) && !deleteModeActive()) toggleCreate();
 
-        if (Core.input.keyDown(deleteKey)) {
-            if (!deleting && Core.input.keyTap(KeyCode.mouseLeft) && !Core.scene.hasMouse()) {
-                deleting = true;
-                deleteStartX = Core.input.mouseWorldX();
-                deleteStartY = Core.input.mouseWorldY();
-            }
-        } else if (deleting) {
-            finishDelete();
-        }
+        updateKeyboardDelete();
+        updateOverlayDelete();
 
-        if (deleting && !Core.input.keyDown(KeyCode.mouseLeft)) finishDelete();
-
-        if (creating && Core.input.keyTap(KeyCode.mouseLeft) && !Core.scene.hasMouse()) {
+        if (creating && Core.input.keyTap(KeyCode.mouseLeft) && !mouseOverUi()) {
             creatingPoints.add(new Vec2(Core.input.mouseWorldX(), Core.input.mouseWorldY()));
             return;
         }
 
-        if (!creating && !deleting && Core.input.keyTap(KeyCode.mouseLeft) && !Core.scene.hasMouse()) {
+        if (!creating && !deleteModeActive() && Core.input.keyTap(KeyCode.mouseLeft) && !mouseOverUi()) {
             TripwireFence fence = TripwireData.nearest(Core.input.mouseWorldX(), Core.input.mouseWorldY(), 10f);
             if (fence != null) TripwireConfig.show(fence);
+        }
+    }
+
+    private static void updateKeyboardDelete() {
+        if (creating || overlayDeleteMode) return;
+
+        if (Core.input.keyDown(deleteKey)) {
+            if (!keyboardDeleteDragging && Core.input.keyTap(KeyCode.mouseLeft) && !mouseOverUi()) {
+                beginDeleteDrag();
+                keyboardDeleteDragging = true;
+            }
+        } else if (keyboardDeleteDragging) {
+            finishKeyboardDelete();
+        }
+
+        if (!keyboardDeleteDragging) return;
+        if (Core.input.keyDown(KeyCode.mouseLeft)) {
+            updateDeleteRect();
+        } else {
+            finishKeyboardDelete();
+        }
+    }
+
+    private static void updateOverlayDelete() {
+        if (!overlayDeleteMode) return;
+
+        if (!overlayDeleteDragging && Core.input.keyTap(KeyCode.mouseLeft) && !mouseOverUi()) {
+            beginDeleteDrag();
+            overlayDeleteDragging = true;
+            return;
+        }
+
+        if (!overlayDeleteDragging) return;
+        if (Core.input.keyDown(KeyCode.mouseLeft)) {
+            updateDeleteRect();
+        } else {
+            overlayDeleteDragging = false;
         }
     }
 
@@ -79,7 +138,6 @@ public final class TripwireInput {
         if (!creating) {
             creating = true;
             creatingPoints.clear();
-            if (deleting) deleting = false;
             return;
         }
 
@@ -97,10 +155,45 @@ public final class TripwireInput {
         creatingPoints.clear();
     }
 
-    private static void finishDelete() {
-        deleting = false;
+    private static void beginDeleteDrag() {
+        deleteStartX = Core.input.mouseWorldX();
+        deleteStartY = Core.input.mouseWorldY();
+        deleteRectValid = true;
         updateDeleteRect();
+    }
+
+    private static void finishKeyboardDelete() {
+        if (deleteRectValid) {
+            updateDeleteRect();
+            deleteIntersectingFences();
+        }
+        keyboardDeleteDragging = false;
+        deleteRectValid = false;
+    }
+
+    private static void finishOverlayDeleteMode() {
+        if (overlayDeleteDragging) {
+            updateDeleteRect();
+            overlayDeleteDragging = false;
+        }
+        if (deleteRectValid) deleteIntersectingFences();
+        overlayDeleteMode = false;
+        deleteRectValid = false;
+    }
+
+    private static void cancelDeleteModes() {
+        keyboardDeleteDragging = false;
+        overlayDeleteMode = false;
+        overlayDeleteDragging = false;
+        deleteRectValid = false;
+    }
+
+    private static void deleteIntersectingFences() {
         TripwireData.fences.removeAll(fence -> fence.intersects(deleteRect));
+    }
+
+    private static boolean deleteModeActive() {
+        return keyboardDeleteDragging || overlayDeleteMode;
     }
 
     static boolean isCreating() {
@@ -112,11 +205,11 @@ public final class TripwireInput {
     }
 
     static boolean isDeleting() {
-        return deleting;
+        return keyboardDeleteDragging || (overlayDeleteMode && deleteRectValid);
     }
 
     static Rect deleteRect() {
-        updateDeleteRect();
+        if (keyboardDeleteDragging || overlayDeleteDragging) updateDeleteRect();
         return deleteRect;
     }
 
@@ -124,6 +217,10 @@ public final class TripwireInput {
         float x2 = Core.input.mouseWorldX();
         float y2 = Core.input.mouseWorldY();
         deleteRect.set(Math.min(deleteStartX, x2), Math.min(deleteStartY, y2), Math.abs(x2 - deleteStartX), Math.abs(y2 - deleteStartY));
+    }
+
+    private static boolean mouseOverUi() {
+        return Core.scene != null && Core.scene.hasMouse();
     }
 
     private static void buildHints() {
@@ -162,7 +259,7 @@ public final class TripwireInput {
         if (!hintsBuilt) buildHints();
         if (creating) {
             leftHintText = Core.bundle.get("tripwire.hint.create.click");
-        } else if (Core.input.keyDown(deleteKey)) {
+        } else if (Core.input.keyDown(deleteKey) || overlayDeleteMode) {
             leftHintText = Core.bundle.get("tripwire.hint.delete.drag");
         } else {
             leftHintText = "";
@@ -171,7 +268,7 @@ public final class TripwireInput {
     }
 
     private static boolean leftHintVisible() {
-        return ui != null && ui.hudfrag != null && ui.hudfrag.shown && (creating || Core.input.keyDown(deleteKey));
+        return ui != null && ui.hudfrag != null && ui.hudfrag.shown && (creating || Core.input.keyDown(deleteKey) || overlayDeleteMode);
     }
 
     private static boolean bottomHintVisible() {

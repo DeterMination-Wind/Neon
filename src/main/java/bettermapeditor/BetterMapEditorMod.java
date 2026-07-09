@@ -1,6 +1,5 @@
 package bettermapeditor;
 
-import bektools.ui.RbmStyle;
 import arc.Events;
 import bettermapeditor.features.DraggableMirrorAxisFeature;
 import mindustry.game.EventType;
@@ -33,10 +32,8 @@ public class BetterMapEditorMod extends Mod {
             if (bekBundled) return;
 
             ui.settings.addCategory("@settings.bettermapeditor", Icon.map, table -> {
-                table.pref(new RbmStyle.HeaderSetting("Better Map Editor", Icon.map));
-                table.pref(new RbmStyle.SubHeaderSetting("Update"));
-                table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
-                table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
+                table.checkPref(GithubUpdateCheck.enabledKey(), true);
+                table.checkPref(GithubUpdateCheck.showDialogKey(), true);
             });
         });
     }

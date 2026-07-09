@@ -42,7 +42,6 @@ import arc.struct.IntSet;
 import arc.struct.LongSeq;
 import arc.util.Structs;
 import arc.util.Strings;
-import bektools.ui.RbmStyle;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -147,7 +146,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private final RescueAdvisor rescueAdvisor = new RescueAdvisor();
     private final Vec2 tmpGridCenter = new Vec2();
     private final RescueAlert rescueAlert = new RescueAlert();
-    private PowerTableOverlay powerTable;
+    private final PowerTableOverlay powerTable = new PowerTableOverlay();
     private final MarkerBridge xMarkers;
     private final NativeMarkers nativeMarkers = new NativeMarkers();
     // Optional OverlayUI integration is injected by the dedicated mainX entry or detected in vanilla.
@@ -315,6 +314,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     }
 
     private static MarkerBridge vanillaMarkers(){
+        LegacyMindustryXGuard.rejectLegacyMindustryX("Power Grid Minimap");
         return MarkerBridge.UNSUPPORTED;
     }
 
@@ -443,7 +443,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-            // Match Neon aggregate settings style (icon + card rows + wrapped titles).
+            // Match MindustryX settings style (icon + Tex.button rows + wrapped titles).
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.basic", "Basic"), Icon.settings));
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyGridAlpha, 40, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
@@ -574,10 +574,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
     private void ensurePowerTableAttached(){
         if(ui == null || ui.hudGroup == null) return;
-
-        if(powerTable == null){
-            powerTable = new PowerTableOverlay();
-        }
 
         //Prefer MindustryX OverlayUI if available, so the table becomes a proper Overlay panel (draggable/pinnable).
         //WayzerMapBrowser follows the same pattern: use OverlayUI when installed, otherwise fall back to normal HUD/Core.scene UI.

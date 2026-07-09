@@ -45,6 +45,7 @@ import mindustry.mod.Mod;
 import mindustry.net.Administration.TraceInfo;
 import mindustry.net.Packets.AdminAction;
 import mindustry.ui.Bar;
+import mindustry.ui.FileChooser;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.ui.dialogs.BaseDialog;
@@ -1868,7 +1869,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void importPlayersFromFile(){
-        Vars.platform.showFileChooser(true, "json", file -> {
+        FileChooser.open("json").submit(file -> {
             try{
                 PlayerDbFile incoming = json.fromJson(PlayerDbFile.class, file.readString("UTF-8"));
                 if(incoming == null || incoming.players == null){
@@ -1904,11 +1905,12 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private static OverlayUiBridge vanillaOverlayUi(){
+        LegacyMindustryXGuard.rejectLegacyMindustryX("ServerPlayerDataBase");
         return OverlayUiBridge.autoDetect();
     }
 
     private void exportPlayersToFile(){
-        Vars.platform.showFileChooser(false, "json", file -> {
+        FileChooser.save("json").submit(file -> {
             try{
                 PlayerDbFile out = playerDb.snapshot();
                 signPlayerDbFile(out);
@@ -1922,7 +1924,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void importChatsFromFile(){
-        Vars.platform.showFileChooser(true, "json", file -> {
+        FileChooser.open("json").submit(file -> {
             try{
                 ChatDbFile incoming = json.fromJson(ChatDbFile.class, file.readString("UTF-8"));
                 if(incoming == null || incoming.entries == null){
@@ -1958,7 +1960,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void exportChatsToFile(){
-        Vars.platform.showFileChooser(false, "json", file -> {
+        FileChooser.save("json").submit(file -> {
             try{
                 ChatDbFile out = chatDb.snapshot();
                 signChatDbFile(out);

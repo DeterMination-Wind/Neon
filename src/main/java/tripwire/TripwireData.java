@@ -4,7 +4,6 @@ import arc.Events;
 import arc.math.geom.Vec2;
 import arc.struct.Seq;
 import mindustry.ctype.ContentType;
-import mindustry.game.EventType;
 import mindustry.game.Team;
 import mindustry.io.SaveFileReader;
 import mindustry.io.SaveVersion;
@@ -87,8 +86,6 @@ public final class TripwireData {
                 return true;
             }
         });
-
-        Events.on(EventType.WorldLoadEvent.class, e -> clear());
     }
 
     public static TripwireFence create(Team team) {

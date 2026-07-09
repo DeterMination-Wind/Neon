@@ -3,7 +3,6 @@ package betterhotkey.features;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
-import arc.func.Prov;
 import arc.graphics.Color;
 import arc.input.KeyBind;
 import arc.input.KeyCode;
@@ -23,11 +22,8 @@ import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
 import arc.struct.Seq;
 import arc.util.Strings;
-import arc.util.Time;
 import arc.util.Align;
-import bektools.ui.RbmStyle;
-import betterhotkey.BetterHotKeyMod;
-import mdtxcompat.OverlayUiBridge;
+import arc.util.Time;
 import mindustry.game.EventType;
 import mindustry.content.Blocks;
 import mindustry.gen.Icon;
@@ -53,7 +49,6 @@ import static mindustry.Vars.state;
 import static mindustry.Vars.ui;
 
 public class BetterHotKeyFeature {
-    private static final String overlayWindowName = "betterhotkey-hotkeys";
     private static final String keyEnabled = "bhk-enabled";
     private static final String keyKeepOrder = "bhk-keep-order";
     private static final String keyCustomEnabled = "bhk-custom-enabled";
@@ -119,27 +114,6 @@ public class BetterHotKeyFeature {
     private static Label bhkInfoNumber;
     private static Label bhkInfoOccupied;
 
-    private static Table bhkOverlay;
-    private static Label bhkOverlayCustom;
-    private static Label bhkOverlayNumber;
-    private static Label bhkOverlayOccupied;
-
-    private static OverlayUiBridge xOverlayUi = OverlayUiBridge.UNSUPPORTED;
-    private static OverlayUiBridge.OverlayWindowHandle xHotkeyWindow;
-    private static boolean hostedByOverlayUI;
-    private static boolean lastOverlaySyncEnabled;
-
-    public static void configureOverlayUi(OverlayUiBridge overlayUi) {
-        xOverlayUi = overlayUi == null ? OverlayUiBridge.UNSUPPORTED : overlayUi;
-        xHotkeyWindow = null;
-        hostedByOverlayUI = false;
-        lastOverlaySyncEnabled = false;
-    }
-
-    private static final float overlayPad = 8f;
-    private static final float overlayRightInset = 56f; // leave room for the '?' button
-    private static final float overlayTopInset = 10f;
-
     private static Field fieldTopTable;
     private static Field fieldMenuHoverBlock;
 
@@ -184,11 +158,6 @@ public class BetterHotKeyFeature {
             if (updateHooked) return;
             updateHooked = true;
 
-            // Prefer MindustryX OverlayUI if available.
-            // Retry once after a short delay; on some clients UI init is slightly later.
-            ensureOverlayUiAttached();
-            Time.runTask(10f, BetterHotKeyFeature::ensureOverlayUiAttached);
-
             // Flush queued selections after the vanilla build-menu code has processed inputs.
             Events.run(EventType.Trigger.uiDrawEnd, () -> {
                 if (enabled && skipTerrainHotkeys) {
@@ -203,7 +172,7 @@ public class BetterHotKeyFeature {
                 }
 
                 if (enabled) {
-                    updateBuildMenuOverlay();
+                    decorateBuildMenuInfo();
                 }
 
                 updateBuildMenuHotkeyBadges();
@@ -238,74 +207,61 @@ public class BetterHotKeyFeature {
                 } else {
                     pendingFirst = null;
                 }
-
-                syncOverlayUiEnabled();
-
             });
         });
     }
 
-    private static void ensureOverlayUiAttached() {
-        if (hostedByOverlayUI) return;
-        if (!xOverlayUi.isSupported()) return;
-
-        // Create content first so OverlayUI can wrap it.
-        ensureOverlayTable();
-
-        if (bhkOverlay.hasParent()) {
-            bhkOverlay.remove();
-        }
-
-        Prov<Boolean> availability = () -> state != null && state.isGame();
-        boolean hadStoredState = hasStoredOverlayWindowState(overlayWindowName);
-        xHotkeyWindow = xOverlayUi.registerWindow(overlayWindowName, bhkOverlay, availability);
-        if (xHotkeyWindow == null || xHotkeyWindow.asElement() == null) return;
-
-        hostedByOverlayUI = true;
-        // Small info panel: auto-height, not resizable by default.
-        xHotkeyWindow.configure(true, false);
-        if (hadStoredState) {
-            lastOverlaySyncEnabled = enabled;
-        } else {
-            // Only auto-show on first registration. Afterwards respect OverlayUI's persisted state.
-            lastOverlaySyncEnabled = !enabled;
-            syncOverlayUiEnabled();
-        }
-    }
-
-    private static void syncOverlayUiEnabled() {
-        if (xHotkeyWindow == null || xHotkeyWindow.asElement() == null) return;
-        if (enabled == lastOverlaySyncEnabled) return;
-        lastOverlaySyncEnabled = enabled;
-        // Default behavior: when enabled, make it visible (pinned). Players can unpin/hide from OverlayUI.
-        xHotkeyWindow.setEnabledAndPinned(enabled, enabled);
-    }
-
-    private static boolean hasStoredOverlayWindowState(String windowName) {
-        return Core.settings != null && Core.settings.has("overlayUI." + windowName);
-    }
-
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        if (!BetterHotKeyMod.bekBundled) {
-            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.betterhotkey", "Better HotKey"), Icon.settingsSmall));
-        }
-        table.pref(new RbmStyle.SubHeaderSetting("General"));
-        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.eyeSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyKeepOrder, true, Icon.listSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyCustomEnabled, true, Icon.settingsSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keySkipTerrainHotkeys, false, Icon.terrainSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyShowIconHotkeys, true, Icon.imageSmall, null));
+        table.pref(new CenteredCheckSetting(keyEnabled, true, null));
+        table.pref(new CenteredCheckSetting(keyKeepOrder, true, null));
+        table.pref(new CenteredCheckSetting(keyCustomEnabled, true, null));
+        table.pref(new CenteredCheckSetting(keySkipTerrainHotkeys, false, null));
+        table.pref(new CenteredCheckSetting(keyShowIconHotkeys, true, null));
 
-        table.pref(new RbmStyle.SubHeaderSetting("Configuration"));
-        table.pref(new RbmStyle.ActionButtonSetting("bhk-open-display-config", Icon.imageSmall, BetterHotKeyFeature::showDisplayConfigDialog));
-        table.pref(new RbmStyle.ActionButtonSetting("bhk-open-ignore-list", Icon.filterSmall, BetterHotKeyFeature::showSkipTerrainIgnoreDialog));
-        table.pref(new RbmStyle.ActionButtonSetting("bhk-open-config", Icon.listSmall, BetterHotKeyFeature::showConfigDialog));
-        table.pref(new RbmStyle.ActionButtonSetting("bhk-reset-config", Icon.refreshSmall, () -> {
-            groups.clear();
-            groups.add(defaultGroup());
-            saveGroups();
-            compiledDirty = true;
-        }));
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-open-display-config") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t) {
+                TextButton b = t.button(title, BetterHotKeyFeature::showDisplayConfigDialog).growX().margin(14f).pad(6f).center().get();
+                b.getLabel().setAlignment(Align.center);
+                b.getLabelCell().growX().align(Align.center);
+                t.row();
+            }
+        });
+
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-open-ignore-list") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t) {
+                TextButton b = t.button(title, BetterHotKeyFeature::showSkipTerrainIgnoreDialog).growX().margin(14f).pad(6f).center().get();
+                b.getLabel().setAlignment(Align.center);
+                b.getLabelCell().growX().align(Align.center);
+                t.row();
+            }
+        });
+
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-open-config") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t) {
+                TextButton b = t.button(title, BetterHotKeyFeature::showConfigDialog).growX().margin(14f).pad(6f).center().get();
+                b.getLabel().setAlignment(Align.center);
+                b.getLabelCell().growX().align(Align.center);
+                t.row();
+            }
+        });
+
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("bhk-reset-config") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t) {
+                TextButton b = t.button(title, () -> {
+                    groups.clear();
+                    groups.add(defaultGroup());
+                    saveGroups();
+                    compiledDirty = true;
+                }).growX().margin(14f).pad(6f).center().get();
+                b.getLabel().setAlignment(Align.center);
+                b.getLabelCell().growX().align(Align.center);
+                t.row();
+            }
+        });
 
         loadGroups();
         loadSkipTerrainIgnoreList();
@@ -565,115 +521,6 @@ public class BetterHotKeyFeature {
             if (remapped == null || !canSelect(remapped)) return;
 
             deferredRemapBlock = remapped;
-        } catch (Throwable ignored) {
-        }
-    }
-
-    private static void updateBuildMenuOverlay() {
-        if (ui == null || ui.hudfrag == null || ui.hudfrag.blockfrag == null) return;
-        if (state == null || !state.isGame()) return;
-
-        rebuildCompiledBindings();
-        tryInitReflection();
-        if (!reflectReady) {
-            // Still render something in OverlayUI mode so the window isn't blank.
-            ensureOverlayTable();
-            bhkOverlayCustom.setText("[lightgray]" + Core.bundle.get("bhk.info.custom") + ":[] -");
-            bhkOverlayCustom.visible = true;
-            if (skipTerrainHotkeys) {
-                bhkOverlayNumber.setText("[lightgray]" + Core.bundle.get("bhk.info.number") + ":[] -");
-                bhkOverlayNumber.visible = true;
-            } else {
-                bhkOverlayNumber.setText("");
-                bhkOverlayNumber.visible = false;
-            }
-            bhkOverlayOccupied.setText("");
-            bhkOverlayOccupied.visible = false;
-            bhkOverlay.visible = hostedByOverlayUI;
-            return;
-        }
-
-        try {
-            Object pf = ui.hudfrag.blockfrag;
-            Table outer = (Table) fieldTopTable.get(pf);
-            if (outer == null && !hostedByOverlayUI) return;
-
-            ensureOverlayTable();
-            if (!hostedByOverlayUI && bhkOverlay.hasParent()) {
-                bhkOverlay.remove();
-            }
-
-            Block hover = (Block) fieldMenuHoverBlock.get(pf);
-            Block display = hover != null ? hover : control.input.block;
-            if (display == null) {
-                // Keep OverlayUI windows informative even when nothing is selected.
-                bhkOverlayCustom.setText("[lightgray]" + Core.bundle.get("bhk.info.custom") + ":[] -");
-                bhkOverlayCustom.visible = true;
-                if (skipTerrainHotkeys) {
-                    bhkOverlayNumber.setText("[lightgray]" + Core.bundle.get("bhk.info.number") + ":[] -");
-                    bhkOverlayNumber.visible = true;
-                } else {
-                    bhkOverlayNumber.setText("");
-                    bhkOverlayNumber.visible = false;
-                }
-                bhkOverlayOccupied.setText("");
-                bhkOverlayOccupied.visible = false;
-                bhkOverlay.visible = hostedByOverlayUI;
-                return;
-            }
-
-            if (outer != null) {
-                patchVanillaPlacementKeyComboLabel(pf, outer, display);
-            }
-
-            String custom = enabled && customEnabled ? customComboFor(display) : "";
-
-            boolean hasCustom = custom != null && !custom.isEmpty();
-
-            String key = "";
-            String number = "";
-            boolean occupied = false;
-
-            if (hasCustom) {
-                key = custom;
-            }
-            if (enabled && skipTerrainHotkeys) {
-                number = formatPlacementNumberCombo(pf, display, true);
-                occupied = isNumberComboOccupiedByCustom(display, number);
-            }
-
-            boolean hasKey = key != null && !key.isEmpty();
-            boolean hasNumber = number != null && !number.isEmpty();
-
-            // In OverlayUI mode, always show at least a placeholder so the window isn't empty.
-            if (hasKey) {
-                bhkOverlayCustom.setText("[lightgray]" + Core.bundle.get("bhk.info.custom") + ":[] " + key);
-            } else {
-                bhkOverlayCustom.setText("[lightgray]" + Core.bundle.get("bhk.info.custom") + ":[] -");
-            }
-            bhkOverlayCustom.visible = true;
-
-            if (skipTerrainHotkeys) {
-                if (hasNumber) {
-                    bhkOverlayNumber.setText("[lightgray]" + Core.bundle.get("bhk.info.number") + ":[] " + number);
-                } else {
-                    bhkOverlayNumber.setText("[lightgray]" + Core.bundle.get("bhk.info.number") + ":[] -");
-                }
-                bhkOverlayNumber.visible = true;
-            } else {
-                bhkOverlayNumber.setText("");
-                bhkOverlayNumber.visible = false;
-            }
-
-            if (occupied) {
-                bhkOverlayOccupied.setText("[red]" + Core.bundle.get("bhk.info.occupied") + "[]");
-                bhkOverlayOccupied.visible = true;
-            } else {
-                bhkOverlayOccupied.setText("");
-                bhkOverlayOccupied.visible = false;
-            }
-
-            bhkOverlay.visible = hostedByOverlayUI;
         } catch (Throwable ignored) {
         }
     }
@@ -940,32 +787,6 @@ public class BetterHotKeyFeature {
         } catch (Throwable ignored) {
             return "";
         }
-    }
-
-    private static void ensureOverlayTable() {
-        if (bhkOverlay != null) return;
-
-        bhkOverlay = new Table();
-        bhkOverlay.touchable = arc.scene.event.Touchable.disabled;
-        bhkOverlay.left();
-        bhkOverlay.defaults().left();
-
-        bhkOverlayCustom = new Label("");
-        bhkOverlayCustom.setWrap(true);
-        bhkOverlayCustom.setAlignment(Align.left);
-
-        bhkOverlayNumber = new Label("");
-        bhkOverlayNumber.setWrap(true);
-        bhkOverlayNumber.setAlignment(Align.left);
-
-        bhkOverlayOccupied = new Label("");
-        bhkOverlayOccupied.setWrap(true);
-        bhkOverlayOccupied.setAlignment(Align.left);
-
-        // Keep this overlay independent of layout; keep it compact.
-        bhkOverlay.add(bhkOverlayCustom).maxWidth(220f).left().row();
-        bhkOverlay.add(bhkOverlayNumber).maxWidth(220f).left().row();
-        bhkOverlay.add(bhkOverlayOccupied).maxWidth(220f).left();
     }
 
     private static Seq<Block> getByCategoryWithTerrain(Category cat) {
@@ -1403,6 +1224,8 @@ public class BetterHotKeyFeature {
                 if (bhkInfoRow.hasParent()) bhkInfoRow.remove();
                 return;
             }
+
+            patchVanillaPlacementKeyComboLabel(pf, outer, display);
 
             String custom = customComboFor(display);
 

@@ -99,10 +99,7 @@ public final class TranslatorFeature{
         Events.on(ClientPreConnectEvent.class, event -> {
             if(event.host != null){
                 selectedServerKey = serverKey(event.host.address, event.host.port);
-                chatHistory.clear();
-                recentPlayerLines.clear();
-                pendingServerTranslations.clear();
-                detectingServers.clear();
+                resetSessionState();
             }
         });
 
@@ -115,6 +112,15 @@ public final class TranslatorFeature{
 
     public static void selectServer(String key){
         selectedServerKey = key;
+        resetSessionState();
+    }
+
+    public static void resetSessionState(){
+        chatHistory.clear();
+        recentPlayerLines.clear();
+        pendingServerTranslations.clear();
+        detectingServers.clear();
+        WorldTextTranslator.resetSession();
     }
 
     public static boolean isCurrentServerForeign(){
@@ -158,49 +164,68 @@ public final class TranslatorFeature{
         return new OutgoingMessage(prefix, body, target.isEmpty() ? "en" : target, true, overrideToken);
     }
 
-    public static TranslationContext buildTranslationContext(String currentMessage){
-        return buildTranslationContext(currentMessage, null);
-    }
-
-    public static TranslationContext buildTranslationContext(String currentMessage, String targetLanguage){
-        Seq<ChatEntry> entries = contextSnapshot();
-        String sourceLanguage = detectBundleLanguage(currentMessage);
-        Seq<String> bundleHints = new Seq<>();
-        String fullBundleContext = "";
-        if(TranslationService.isOpenAiEnabled()){
-            if(Core.settings.getBool(fullBundleContextKey, false)){
-                fullBundleContext = buildFullBundleContext(sourceLanguage, targetLanguage);
-            }else if(Core.settings.getBool(bundleHintsKey, false)){
-                bundleHints = findBundleHints(currentMessage, entries, targetLanguage);
-            }
-        }
-        return new TranslationContext(entries, bundleHints, null, null, normalizeLanguageCode(sourceLanguage), false, fullBundleContext);
-    }
-
-    public static TranslationContext buildOutgoingTranslationContext(String currentMessage, OutgoingMessage outgoing){
-        TranslationContext context = buildTranslationContext(currentMessage, outgoing == null ? null : outgoing.targetLanguage);
-        if(outgoing != null && outgoing.overrideToken != null){
-            return context.withOutgoingOverride(outgoing.overrideToken, outgoing.targetLanguage);
-        }
-        return context;
+    public static IncomingHint parseIncomingHint(String text){
+        LanguageOverride override = parseLanguageOverride(text);
+        if(override == null) return null;
+        return new IncomingHint(override.token, override.language, override.body);
     }
 
     public static boolean shouldTranslateServerText(String text){
-        if(!isCurrentServerForeign() || text == null) return false;
+        return shouldTranslateWorldText(text);
+    }
+
+    public static boolean shouldTranslateWorldText(String text){
+        if(text == null) return false;
 
         String normalized = normalizeForMatch(text);
         if(normalized.isEmpty() || normalized.startsWith("=>")) return false;
-        return !isLocalBundleReference(text);
+        if(isLocalBundleReference(text)) return false;
+        if(parseIncomingHint(text) != null) return true;
+        return isCurrentServerForeign();
+    }
+
+    public static String stripIncomingHint(String text){
+        IncomingHint hint = parseIncomingHint(text);
+        return hint == null ? text : hint.body;
+    }
+
+    public static String worldTextSourceLanguage(String text){
+        IncomingHint hint = parseIncomingHint(text);
+        return hint == null ? "" : normalizeLanguageCode(hint.language);
+    }
+
+    public static void translateWorldText(String text, Cons<String> success, Cons<Throwable> failure){
+        String target = Core.settings.getString(incomingLanguageKey, "zh-Hans").trim();
+        translateWorldText(text, target.isEmpty() ? "zh-Hans" : target, success, failure);
+    }
+
+    public static void translateWorldText(String text, String targetLanguage, Cons<String> success, Cons<Throwable> failure){
+        if(text == null){
+            success.get("");
+            return;
+        }
+
+        String stripped = stripIncomingHint(text);
+        if(!shouldTranslateWorldText(text)){
+            success.get(stripped);
+            return;
+        }
+
+        String hintedSource = worldTextSourceLanguage(text);
+        if(!hintedSource.isEmpty()){
+            translateServerTextWithSource(selectedServerKey == null ? "" : selectedServerKey, hintedSource, targetLanguage, stripped, success, failure);
+            return;
+        }
+
+        translateServerText(stripped, targetLanguage, success, failure);
     }
 
     public static void translateServerChatLine(String renderedMessage){
         if(!shouldTranslateServerText(renderedMessage) || isRecentPlayerChatLine(renderedMessage)) return;
 
         TranslationSlot slot = reserveIncomingSlot("", renderedMessage);
-        translateServerText(renderedMessage, translated -> {
-            if(isCurrentServerForeign()){
-                completeIncomingSlot(slot, "[lightgray]=> " + renderMarkup(translated) + "[]");
-            }
+        translateWorldText(renderedMessage, translated -> {
+            completeIncomingSlot(slot, "[lightgray]=> " + renderMarkup(translated) + "[]");
         }, error -> {
             Log.warn("ForeignServerTranslator failed to translate server chat line: @", error.getMessage());
             completeIncomingSlot(slot, Core.bundle.get("fst.translate.server.failed", "[scarlet]Failed to translate server message.[]"));
@@ -213,15 +238,21 @@ public final class TranslatorFeature{
     }
 
     public static void translateServerText(String text, String targetLanguage, Cons<String> success, Cons<Throwable> failure){
+        String stripped = stripIncomingHint(text);
         if(!shouldTranslateServerText(text)){
-            success.get(text);
+            success.get(stripped);
             return;
         }
 
         String server = selectedServerKey == null ? "" : selectedServerKey;
         String target = targetLanguage == null || targetLanguage.trim().isEmpty() ? "zh-Hans" : targetLanguage.trim();
+        String hintedSource = worldTextSourceLanguage(text);
+        if(!hintedSource.isEmpty()){
+            translateServerTextWithSource(server, hintedSource, target, stripped, success, failure);
+            return;
+        }
         if(!TranslationService.isOpenAiEnabled()){
-            translateServerTextWithSource(server, "auto", target, text, success, failure);
+            translateServerTextWithSource(server, "auto", target, stripped, success, failure);
             return;
         }
 
@@ -232,17 +263,12 @@ public final class TranslatorFeature{
 
         String sourceLanguage = TranslatorCache.getServerLanguage(server);
         if(sourceLanguage != null && !sourceLanguage.trim().isEmpty()){
-            translateServerTextWithSource(server, sourceLanguage.trim(), target, text, success, failure);
+            translateServerTextWithSource(server, sourceLanguage.trim(), target, stripped, success, failure);
             return;
         }
 
-        pendingServerTranslations.add(new PendingServerTranslation(server, text, target, success, failure));
-        startServerLanguageDetection(server, text);
-    }
-
-    public static void recordOwnMessage(String message){
-        String name = Vars.player == null ? "You" : safeSpeaker(Vars.player.plainName());
-        recordChat(name.isEmpty() ? "You" : name, message);
+        pendingServerTranslations.add(new PendingServerTranslation(server, stripped, target, success, failure));
+        startServerLanguageDetection(server, stripped);
     }
 
     private static void translateServerTextWithSource(String server, String sourceLanguage, String targetLanguage, String text, Cons<String> success, Cons<Throwable> failure){
@@ -334,15 +360,17 @@ public final class TranslatorFeature{
 
     private static void onPlayerMessage(Player sender, String message){
         markRecentPlayerLine(sender, message);
-        if(!isCurrentServerForeign() || sender == null || sender == Vars.player || message == null || message.trim().isEmpty()) return;
+        if(sender == null || sender == Vars.player || message == null || message.trim().isEmpty()) return;
+        if(!shouldTranslateWorldText(message)) return;
 
+        String sourceText = stripIncomingHint(message);
         String target = Core.settings.getString(incomingLanguageKey, "zh-Hans").trim();
-        TranslationContext context = buildTranslationContext(message, target);
+        TranslationContext context = buildTranslationContext(sourceText, target);
         String speaker = safeSpeaker(sender.plainName());
-        recordChat(speaker, message);
+        recordChat(speaker, sourceText);
         TranslationSlot slot = reserveIncomingSlot(speaker, message);
-        TranslationService.translate(message, target.isEmpty() ? "zh-Hans" : target, context, translated -> {
-            if(isCurrentServerForeign() && Vars.ui != null && Vars.ui.chatfrag != null){
+        translateWorldText(message, target.isEmpty() ? "zh-Hans" : target, translated -> {
+            if(Vars.ui != null && Vars.ui.chatfrag != null){
                 completeIncomingSlot(slot, "[lightgray]=> " + renderMarkup(translated) + "[]");
             }
         }, error -> {
@@ -414,6 +442,30 @@ public final class TranslatorFeature{
         while(chatHistory.size > maxStoredContext){
             chatHistory.remove(0);
         }
+    }
+
+    private static TranslationContext buildTranslationContext(String text, String targetLanguage){
+        Seq<ChatEntry> context = contextSnapshot();
+        Seq<String> bundleHints = new Seq<>();
+        String fullBundleContext = "";
+        if(TranslationService.isOpenAiEnabled()){
+            if(Core.settings.getBool(fullBundleContextKey, false)){
+                fullBundleContext = buildFullBundleContext(currentBundleLanguage(), targetLanguage);
+            }else if(Core.settings.getBool(bundleHintsKey, false)){
+                bundleHints = findBundleHints(text, context, targetLanguage);
+            }
+        }
+        return new TranslationContext(context, bundleHints, null, targetLanguage, "", false, fullBundleContext);
+    }
+
+    public static TranslationContext buildOutgoingTranslationContext(String text, OutgoingMessage outgoing){
+        TranslationContext context = buildTranslationContext(text, outgoing == null ? null : outgoing.targetLanguage);
+        if(outgoing == null) return context;
+        return context.withOutgoingOverride(outgoing.overrideToken, outgoing.targetLanguage);
+    }
+
+    public static void recordOwnMessage(String message){
+        recordChat("You", message);
     }
 
     private static Seq<String> findBundleHints(String currentMessage, Seq<ChatEntry> context, String targetLanguage){
@@ -765,6 +817,18 @@ public final class TranslatorFeature{
         final String body;
 
         LanguageOverride(String token, String language, String body){
+            this.token = token;
+            this.language = language;
+            this.body = body;
+        }
+    }
+
+    public static final class IncomingHint{
+        public final String token;
+        public final String language;
+        public final String body;
+
+        IncomingHint(String token, String language, String body){
             this.token = token;
             this.language = language;
             this.body = body;

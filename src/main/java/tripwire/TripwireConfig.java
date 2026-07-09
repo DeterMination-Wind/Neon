@@ -5,6 +5,7 @@ import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.scene.event.Touchable;
 import arc.scene.ui.ImageButton;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Scl;
@@ -25,6 +26,10 @@ public final class TripwireConfig {
     private static final String groupGround = "ground";
     private static final String groupAir = "air";
     private static final String groupNaval = "naval";
+    private static final String planetSerpulo = "serpulo";
+    private static final String planetErekir = "erekir";
+    private static final String planetOther = "other";
+    private static final String[] planetOrder = {planetSerpulo, planetErekir, planetOther};
     private static final String[] groupOrder = {groupGround, groupAir, groupNaval};
     private static final float unitButtonSize = 76f;
     private static final float unitIconSize = 60f;
@@ -110,13 +115,31 @@ public final class TripwireConfig {
         grid.top().left();
         grid.margin(8f);
 
-        for (String group : groupOrder) {
-            Seq<UnitType> row = types.select(type -> group.equals(groupKey(type))).as();
-            if (!row.isEmpty()) addGroupRow(grid, row, selected);
+        for (String planet : planetOrder) {
+            boolean addedPlanet = false;
+            for (String group : groupOrder) {
+                Seq<UnitType> row = types.select(type -> planet.equals(planetKey(type)) && group.equals(groupKey(type))).as();
+                if (row.isEmpty()) continue;
+                if (!addedPlanet) {
+                    addSectionHeader(grid, Core.bundle.get("tripwire.group." + planet));
+                    addedPlanet = true;
+                }
+                addGroupHeader(grid, Core.bundle.get("tripwire.group." + group));
+                addGroupRow(grid, row, selected);
+            }
         }
+    }
 
-        Seq<UnitType> other = types.select(type -> !isKnownGroup(groupKey(type))).as();
-        if (!other.isEmpty()) addGroupRow(grid, other, selected);
+    private static void addSectionHeader(Table grid, String text) {
+        Label label = new Label(text, Styles.outlineLabel);
+        label.setColor(Color.white);
+        grid.add(label).left().padTop(6f).padBottom(6f).row();
+    }
+
+    private static void addGroupHeader(Table grid, String text) {
+        Label label = new Label(text, Styles.outlineLabel);
+        label.setColor(Color.lightGray);
+        grid.add(label).left().padTop(2f).padBottom(4f).row();
     }
 
     private static void addGroupRow(Table grid, Seq<UnitType> types, ObjectSet<UnitType> selected) {
@@ -157,10 +180,57 @@ public final class TripwireConfig {
         return groupGround;
     }
 
-    private static boolean isKnownGroup(String group) {
-        for (String known : groupOrder) {
-            if (known.equals(group)) return true;
+    private static String planetKey(UnitType type) {
+        if (type == null || type.name == null) return planetOther;
+        String name = type.name.toLowerCase(Locale.ROOT);
+        switch (name) {
+            case "stell":
+            case "locus":
+            case "precept":
+            case "vanquish":
+            case "conquer":
+            case "merui":
+            case "cleroi":
+            case "anthicus":
+            case "tecta":
+            case "collaris":
+            case "elude":
+            case "avert":
+            case "obviate":
+            case "quell":
+            case "disrupt":
+                return planetErekir;
+            case "risso":
+            case "minke":
+            case "bryde":
+            case "sei":
+            case "omura":
+            case "flare":
+            case "horizon":
+            case "zenith":
+            case "antumbra":
+            case "eclipse":
+            case "dagger":
+            case "mace":
+            case "fortress":
+            case "scepter":
+            case "reign":
+            case "nova":
+            case "pulsar":
+            case "quasar":
+            case "vela":
+            case "corvus":
+            case "crawler":
+            case "atrax":
+            case "spiroct":
+            case "arkyid":
+            case "toxopid":
+            case "alpha":
+            case "beta":
+            case "gamma":
+                return planetSerpulo;
+            default:
+                return planetOther;
         }
-        return false;
     }
 }

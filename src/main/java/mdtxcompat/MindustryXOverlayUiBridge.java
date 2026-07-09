@@ -1,5 +1,6 @@
 package mdtxcompat;
 
+import arc.Core;
 import arc.func.Prov;
 import arc.scene.Element;
 import arc.scene.ui.layout.Table;
@@ -8,10 +9,23 @@ import mindustry.Vars;
 import mindustry.mod.Mods;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class MindustryXOverlayUiBridge implements OverlayUiBridge {
     private static final long missingRetryMillis = 5000L;
+    private static final long bindRetryMillis = 250L;
+
+    private enum State {
+        UNRESOLVED,
+        DEFERRED,
+        BINDING,
+        READY,
+        RETRYABLE_FAILURE,
+        UNAVAILABLE_CLASS
+    }
 
     private static final OverlayWindowHandle NO_WINDOW = new OverlayWindowHandle() {
         @Override
@@ -33,70 +47,123 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         }
     };
 
+    private final Map<String, PendingWindow> pendingWindows = new LinkedHashMap<>();
+    private final Map<String, WindowHandle> realWindowsByName = new LinkedHashMap<>();
+
     private boolean available = true;
-    private boolean resolved;
     private boolean missingLogged;
     private boolean resolvedLogged;
     private long lastMissingAt;
+    private long nextRetryAt;
+    private State state = State.UNRESOLVED;
+    private Class<?> overlayClass;
     private Field instanceField;
     private Method registerWindowMethod;
     private Method getOpenMethod;
     private Method toggleMethod;
+    private Method initMethod;
+    private Method isAttachedMethod;
+    private Method windowSetAvailabilityMethod;
+    private Method windowSetAutoHeightMethod;
+    private Method windowSetResizableMethod;
+    private Method windowGetDataMethod;
+    private Method dataSetEnabledMethod;
+    private Method dataSetPinnedMethod;
+    private Method dataGetEnabledMethod;
+    private Object overlayInstance;
+    private boolean shadowOpen;
 
     @Override
     public boolean isSupported() {
-        return resolveSymbols();
+        tryBindOrInit("isSupported");
+        return state == State.READY;
     }
 
     @Override
     public OverlayWindowHandle registerWindow(String name, Table table, Prov<Boolean> availability) {
-        if (!resolveSymbols()) return NO_WINDOW;
-        try {
-            Object overlayInstance = instanceField.get(null);
-            if (overlayInstance == null) return NO_WINDOW;
-            Object window = registerWindowMethod.invoke(overlayInstance, name, table);
-            if (window == null) return NO_WINDOW;
-            if (availability != null) {
-                invokeIfPresent(window, "setAvailability", Prov.class, availability);
-            }
-            Log.info("Neon OverlayUI integration: registered window '" + name + "' via " + window.getClass().getName() + ".");
-            return new WindowHandle(window);
-        } catch (Throwable t) {
-            disable("Neon OverlayUI integration: registerWindow failed for '" + name + "'; disabling integration.", t);
-            return NO_WINDOW;
+        PendingWindow pending = pendingWindows.get(name);
+        if (pending == null) {
+            pending = new PendingWindow(name, table, availability);
+            pendingWindows.put(name, pending);
+        } else {
+            pending.table = table;
+            pending.availability = availability;
         }
+        tryBindOrInit("registerWindow:" + name);
+        return pending.handle;
     }
 
     @Override
     public void closeEditorIfOpen() {
-        if (!resolveSymbols()) return;
+        tryBindOrInit("closeEditorIfOpen");
+        if (state != State.READY || overlayInstance == null) {
+            shadowOpen = false;
+            return;
+        }
         try {
-            Object overlayInstance = instanceField.get(null);
-            if (overlayInstance == null) return;
-            Object open = getOpenMethod.invoke(overlayInstance);
+            Object open = invoke(getOpenMethod, overlayInstance);
             if (Boolean.TRUE.equals(open)) {
                 Log.info("Neon OverlayUI integration: closing OverlayUI editor.");
-                toggleMethod.invoke(overlayInstance);
+                invoke(toggleMethod, overlayInstance);
             }
+            syncShadowOpen();
         } catch (Throwable t) {
-            disable("Neon OverlayUI integration: toggle failed; disabling integration.", t);
+            markRetryableFailure();
+            Log.err("Neon OverlayUI integration: toggle failed; keeping integration retryable.", unwrapReflectionFailure(t));
         }
     }
 
-    private boolean resolveSymbols() {
+    private void tryBindOrInit(String reason) {
+        if (!available) return;
+        if (state == State.READY || state == State.BINDING) return;
+        if (!shouldRetryNow()) return;
+        if (!resolveMetadata()) return;
+        if (!isSafeToBindNow()) {
+            state = State.DEFERRED;
+            return;
+        }
+
+        state = State.BINDING;
+        try {
+            Object instance = instanceField.get(null);
+            if (instance == null) {
+                markRetryableFailure();
+                return;
+            }
+            if (initMethod != null) invoke(initMethod, instance);
+            if (isAttachedMethod != null && !Boolean.TRUE.equals(invoke(isAttachedMethod, instance))) {
+                markRetryableFailure();
+                return;
+            }
+            overlayInstance = instance;
+            replayPendingWindows();
+            reconcileOpenStateAfterBind();
+            syncShadowOpen();
+            state = State.READY;
+            nextRetryAt = 0L;
+        } catch (Throwable t) {
+            overlayInstance = null;
+            markRetryableFailure();
+            Log.err("Neon OverlayUI integration: bind failed from " + reason + "; will retry later.", unwrapReflectionFailure(t));
+        }
+    }
+
+    private boolean resolveMetadata() {
         if (!available) return false;
-        if (resolved) return true;
+        if (overlayClass != null) return true;
 
         long now = System.currentTimeMillis();
         if (lastMissingAt != 0L && now - lastMissingAt < missingRetryMillis) return false;
 
         try {
-            Class<?> overlayClass = LegacyMindustryXGuard.loadMindustryXClass("mindustryX.features.ui.OverlayUI");
+            overlayClass = LegacyMindustryXGuard.loadMindustryXClass("mindustryX.features.ui.OverlayUI");
             instanceField = overlayClass.getField("INSTANCE");
             registerWindowMethod = overlayClass.getMethod("registerWindow", String.class, Table.class);
             getOpenMethod = overlayClass.getMethod("getOpen");
             toggleMethod = overlayClass.getMethod("toggle");
-            resolved = true;
+            initMethod = optionalMethod(overlayClass, "init");
+            isAttachedMethod = optionalMethod(overlayClass, "isAttached");
+            state = State.UNRESOLVED;
             if (!resolvedLogged) {
                 resolvedLogged = true;
                 Log.info("Neon OverlayUI integration: resolved " + overlayClass.getName() + " with loader " + overlayClass.getClassLoader() + ".");
@@ -104,6 +171,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             return true;
         } catch (ClassNotFoundException notFound) {
             lastMissingAt = now;
+            state = State.UNAVAILABLE_CLASS;
             if (!missingLogged) {
                 missingLogged = true;
                 Log.info("Neon OverlayUI integration: mindustryX.features.ui.OverlayUI not found; install OverlayCompatBridge in this launcher mod directory or use MindustryX to enable overlay windows.");
@@ -111,20 +179,69 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             }
             return false;
         } catch (Throwable t) {
-            disable("Neon OverlayUI integration: symbols resolve failed; disabling integration.", t);
+            markRetryableFailure();
+            Log.err("Neon OverlayUI integration: symbols resolve failed; keeping integration retryable.", unwrapReflectionFailure(t));
             return false;
         }
     }
 
-    private void disable(String message, Throwable t) {
-        if (!available) return;
-        available = false;
-        resolved = false;
-        instanceField = null;
-        registerWindowMethod = null;
-        getOpenMethod = null;
-        toggleMethod = null;
-        Log.err(message, t);
+    private boolean isSafeToBindNow() {
+        return !Vars.headless
+            && Core.graphics != null
+            && Core.scene != null
+            && Vars.ui != null
+            && Vars.ui.hudGroup != null
+            && Vars.ui.hudfrag != null
+            && Vars.state != null;
+    }
+
+    private boolean shouldRetryNow() {
+        if (state == State.UNAVAILABLE_CLASS) return true;
+        if (state == State.UNRESOLVED || state == State.DEFERRED) return true;
+        return System.currentTimeMillis() >= nextRetryAt;
+    }
+
+    private void replayPendingWindows() {
+        for (PendingWindow pending : pendingWindows.values()) {
+            if (pending.handle.window != null) continue;
+            Object window = invoke(registerWindowMethod, overlayInstance, pending.name, pending.table);
+            if (window == null) {
+                throw new IllegalStateException("OverlayUI returned null window for " + pending.name);
+            }
+            if (pending.availability != null) {
+                invokeIfPresent(window, "setAvailability", Prov.class, pending.availability);
+            }
+            Log.info("Neon OverlayUI integration: registered window '" + pending.name + "' via " + window.getClass().getName() + ".");
+            pending.handle.bind(window);
+            realWindowsByName.put(pending.name, pending.handle);
+            pending.handle.applyPendingState();
+        }
+    }
+
+    private void reconcileOpenStateAfterBind() {
+        Object open = invoke(getOpenMethod, overlayInstance);
+        if (open instanceof Boolean && ((Boolean)open) != shadowOpen) {
+            invoke(toggleMethod, overlayInstance);
+        }
+    }
+
+    private void syncShadowOpen() {
+        Object open = invoke(getOpenMethod, overlayInstance);
+        if (open instanceof Boolean) {
+            shadowOpen = (Boolean)open;
+        }
+    }
+
+    private void markRetryableFailure() {
+        state = State.RETRYABLE_FAILURE;
+        nextRetryAt = System.currentTimeMillis() + bindRetryMillis;
+    }
+
+    private Throwable unwrapReflectionFailure(Throwable failure) {
+        if (failure instanceof InvocationTargetException && ((InvocationTargetException)failure).getCause() != null) {
+            return ((InvocationTargetException)failure).getCause();
+        }
+        return failure;
     }
 
     private static void logLoadedModSnapshot() {
@@ -135,10 +252,11 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             }
 
             Mods.LoadedMod bridge = Vars.mods.locateMod("overlay-compat-bridge");
+            if (bridge == null) bridge = Vars.mods.locateMod("overlay-compat-bridge-dev");
             if (bridge == null) {
-                Log.info("Neon OverlayUI integration: Vars.mods.locateMod('overlay-compat-bridge') = null.");
+                Log.info("Neon OverlayUI integration: Vars.mods.locateMod('overlay-compat-bridge'/'overlay-compat-bridge-dev') = null.");
             } else {
-                Log.info("Neon OverlayUI integration: located overlay-compat-bridge: " + describeMod(bridge));
+                Log.info("Neon OverlayUI integration: located overlay bridge: " + describeMod(bridge));
             }
 
             StringBuilder related = new StringBuilder();
@@ -198,50 +316,128 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         }
     }
 
-    private static Object invokeNoArg(Object target, String methodName) {
-        if (target == null) return null;
+    private static Method optionalMethod(Class<?> type, String methodName) {
         try {
-            Method m = target.getClass().getMethod(methodName);
-            return m.invoke(target);
-        } catch (Throwable ignored) {
+            return type.getMethod(methodName);
+        } catch (NoSuchMethodException ignored) {
             return null;
         }
     }
 
-    private static void invokeBool(Object target, String methodName, boolean value) {
-        if (target == null) return;
+    private Object invoke(Method method, Object target, Object... args) {
         try {
-            Method m = target.getClass().getMethod(methodName, boolean.class);
-            m.invoke(target, value);
-        } catch (Throwable ignored) {
+            return method.invoke(target, args);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Cannot access MindustryX OverlayUI method: " + method.getName(), e);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException)cause;
+            if (cause instanceof Error) throw (Error)cause;
+            throw new IllegalStateException("MindustryX OverlayUI method failed: " + method.getName(), cause);
         }
     }
 
-    private static class WindowHandle implements OverlayWindowHandle {
-        private final Object window;
+    private Method windowMethod(Object target, String name, Class<?>... parameters) {
+        try {
+            return target.getClass().getMethod(name, parameters);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("MindustryX OverlayUI method missing: " + name, e);
+        }
+    }
 
-        private WindowHandle(Object window) {
+    private final class PendingWindow {
+        private final String name;
+        private Table table;
+        private Prov<Boolean> availability;
+        private final WindowHandle handle;
+
+        private PendingWindow(String name, Table table, Prov<Boolean> availability) {
+            this.name = name;
+            this.table = table;
+            this.availability = availability;
+            this.handle = new WindowHandle(this);
+        }
+    }
+
+    private final class WindowHandle implements OverlayWindowHandle {
+        private final PendingWindow pending;
+        private Object window;
+        private Boolean autoHeight;
+        private Boolean resizable;
+        private Boolean enabled;
+        private Boolean pinned;
+
+        private WindowHandle(PendingWindow pending) {
+            this.pending = pending;
+        }
+
+        private void bind(Object window) {
             this.window = window;
+        }
+
+        private void ensureWindowMethods() {
+            if (window == null) return;
+            if (windowSetAvailabilityMethod == null) {
+                windowSetAvailabilityMethod = windowMethod(window, "setAvailability", Prov.class);
+                windowSetAutoHeightMethod = windowMethod(window, "setAutoHeight", boolean.class);
+                windowSetResizableMethod = windowMethod(window, "setResizable", boolean.class);
+                windowGetDataMethod = windowMethod(window, "getData");
+            }
+        }
+
+        private void ensureDataMethods(Object data) {
+            if (dataSetEnabledMethod == null) {
+                dataSetEnabledMethod = windowMethod(data, "setEnabled", boolean.class);
+                dataSetPinnedMethod = windowMethod(data, "setPinned", boolean.class);
+                dataGetEnabledMethod = windowMethod(data, "getEnabled");
+            }
+        }
+
+        private void applyPendingState() {
+            if (window == null) return;
+            ensureWindowMethods();
+            if (pending.availability != null && windowSetAvailabilityMethod != null) {
+                invoke(windowSetAvailabilityMethod, window, pending.availability);
+            }
+            if (autoHeight != null && windowSetAutoHeightMethod != null) {
+                invoke(windowSetAutoHeightMethod, window, autoHeight);
+            }
+            if (resizable != null && windowSetResizableMethod != null) {
+                invoke(windowSetResizableMethod, window, resizable);
+            }
+            if (enabled != null || pinned != null) {
+                Object data = invoke(windowGetDataMethod, window);
+                ensureDataMethods(data);
+                if (enabled != null) invoke(dataSetEnabledMethod, data, enabled);
+                if (pinned != null) invoke(dataSetPinnedMethod, data, pinned);
+            }
         }
 
         @Override
         public void configure(boolean autoHeight, boolean resizable) {
-            invokeBool(window, "setAutoHeight", autoHeight);
-            invokeBool(window, "setResizable", resizable);
+            this.autoHeight = autoHeight;
+            this.resizable = resizable;
+            tryBindOrInit("configure:" + pending.name);
+            applyPendingState();
         }
 
         @Override
         public void setEnabledAndPinned(boolean enabled, boolean pinned) {
-            Object data = invokeNoArg(window, "getData");
-            invokeBool(data, "setEnabled", enabled);
-            invokeBool(data, "setPinned", pinned);
+            this.enabled = enabled;
+            this.pinned = pinned;
+            tryBindOrInit("setEnabledAndPinned:" + pending.name);
+            applyPendingState();
         }
 
         @Override
         public Boolean getEnabled() {
-            Object data = invokeNoArg(window, "getData");
-            Object enabled = invokeNoArg(data, "getEnabled");
-            return enabled instanceof Boolean ? (Boolean)enabled : null;
+            tryBindOrInit("getEnabled:" + pending.name);
+            if (window == null) return enabled;
+            ensureWindowMethods();
+            Object data = invoke(windowGetDataMethod, window);
+            ensureDataMethods(data);
+            Object value = invoke(dataGetEnabledMethod, data);
+            return value instanceof Boolean ? (Boolean)value : null;
         }
 
         @Override

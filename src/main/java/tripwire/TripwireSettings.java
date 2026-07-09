@@ -3,8 +3,6 @@ package tripwire;
 import arc.Core;
 import arc.graphics.Color;
 import arc.math.Mathf;
-import bektools.ui.RbmStyle;
-import mindustry.gen.Icon;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
 public final class TripwireSettings {
@@ -30,27 +28,24 @@ public final class TripwireSettings {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        if (!TripwireMod.bekBundled) {
-            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.tripwire", "Tripwire"), Icon.map));
-        }
-        table.pref(new RbmStyle.SubHeaderSetting("Detection"));
+        section(table, "tripwire-section-detection");
         migrateDetectionInterval();
-        table.pref(new RbmStyle.IconSliderSetting(detectInterval, 150, 100, 200, 10, Icon.refreshSmall, i -> i + "ms", null));
-        table.pref(new RbmStyle.IconCheckSetting(chatAlert, true, Icon.chatSmall, null));
-        table.pref(new RbmStyle.IconSliderSetting(chatBatchDelay, defaultChatBatchDelayIndex, 0, chatBatchDelayMillis.length - 1, 1, Icon.refreshSmall, TripwireSettings::formatChatBatchDelay, null));
-        table.pref(new RbmStyle.IconCheckSetting(toastAlert, true, Icon.infoSmall, null));
+        table.sliderPref(detectInterval, 150, 100, 200, 10, i -> i + "ms");
+        table.checkPref(chatAlert, true);
+        table.sliderPref(chatBatchDelay, defaultChatBatchDelayIndex, 0, chatBatchDelayMillis.length - 1, 1, TripwireSettings::formatChatBatchDelay);
+        table.checkPref(toastAlert, true);
 
-        table.pref(new RbmStyle.SubHeaderSetting("Display"));
-        table.pref(new RbmStyle.IconCheckSetting(showFences, true, Icon.gridSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(showMinimap, true, Icon.mapSmall, null));
-        table.pref(new RbmStyle.IconSliderSetting(lineWidth, 2, 1, 8, 1, Icon.pencilSmall, i -> i + "px", null));
-        table.pref(new RbmStyle.IconSliderSetting(iconSize, 24, 8, 48, 1, Icon.resizeSmall, i -> i + "px", null));
+        section(table, "tripwire-section-display");
+        table.checkPref(showFences, true);
+        table.checkPref(showMinimap, true);
+        table.sliderPref(lineWidth, 2, 1, 8, 1, i -> i + "px");
+        table.sliderPref(iconSize, 24, 8, 48, 1, i -> i + "px");
 
-        table.pref(new RbmStyle.SubHeaderSetting("Color"));
-        table.pref(new RbmStyle.IconCheckSetting(overrideColor, false, Icon.effectSmall, null));
-        table.pref(new RbmStyle.IconSliderSetting(colorR, 255, 0, 255, 1, Icon.effectSmall, String::valueOf, null));
-        table.pref(new RbmStyle.IconSliderSetting(colorG, 220, 0, 255, 1, Icon.effectSmall, String::valueOf, null));
-        table.pref(new RbmStyle.IconSliderSetting(colorB, 64, 0, 255, 1, Icon.effectSmall, String::valueOf, null));
+        section(table, "tripwire-section-color");
+        table.checkPref(overrideColor, false);
+        table.sliderPref(colorR, 255, 0, 255, 1, String::valueOf);
+        table.sliderPref(colorG, 220, 0, 255, 1, String::valueOf);
+        table.sliderPref(colorB, 64, 0, 255, 1, String::valueOf);
     }
 
     private static void section(SettingsMenuDialog.SettingsTable table, String key) {

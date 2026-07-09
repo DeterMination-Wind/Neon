@@ -1,10 +1,13 @@
 package tripwire;
 
 import arc.Core;
+import arc.graphics.Color;
 import arc.math.geom.Vec2;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
+import arc.util.Strings;
 import arc.util.Time;
+import mindustry.game.Team;
 import mindustry.gen.Call;
 import mindustry.gen.Player;
 import mindustry.gen.Unit;
@@ -33,15 +36,17 @@ public final class TripwireAlert {
         int tileX = (int)(x / tilesize);
         int tileY = (int)(y / tilesize);
         String unitName = unit.type.localizedName;
-        String message = Core.bundle.format("tripwire.alert.crossed", tileX, tileY, unitName);
+        String teamName = teamDisplayName(unit.team);
+        String coloredTeamName = coloredTeamName(unit.team);
+        String message = Core.bundle.format("tripwire.alert.crossed", tileX, tileY, coloredTeamName, unitName);
         String markerMessage = Core.bundle.format("tripwire.alert.marker", tileX, tileY);
         if (TripwireSettings.toastAlert()) {
             ui.announce(message, 4f);
         }
         if (!markWithMindustryX(markerMessage, tileX, tileY)) {
-            markWithVanillaPing(x, y, Core.bundle.format("tripwire.alert.ping", unitName));
+            markWithVanillaPing(x, y, Core.bundle.format("tripwire.alert.ping", coloredTeamName, unitName));
         }
-        queueChatAlert(tileX, tileY, unitName);
+        queueChatAlert(tileX, tileY, teamName, coloredTeamName, unitName);
     }
 
     private static boolean markWithMindustryX(String markerMessage, int tileX, int tileY) {
@@ -81,13 +86,13 @@ public final class TripwireAlert {
         }
     }
 
-    private static void queueChatAlert(int tileX, int tileY, String unitName) {
+    private static void queueChatAlert(int tileX, int tileY, String teamName, String coloredTeamName, String unitName) {
         if (!TripwireSettings.chatAlert()) return;
 
-        String key = tileX + "|" + tileY + "|" + unitName;
+        String key = tileX + "|" + tileY + "|" + teamName + "|" + unitName;
         AlertStack stack = queuedAlerts.get(key);
         if (stack == null) {
-            stack = new AlertStack(tileX, tileY, unitName);
+            stack = new AlertStack(tileX, tileY, teamName, coloredTeamName, unitName);
             queuedAlerts.put(key, stack);
             alertOrder.add(stack);
         }
@@ -107,7 +112,7 @@ public final class TripwireAlert {
         for (int i = 0; i < alertOrder.size; i++) {
             AlertStack stack = alertOrder.get(i);
             if (i > 0) builder.append('\n');
-            builder.append(Core.bundle.format("tripwire.alert.chat", stack.tileX, stack.tileY, stack.unitName, stack.count));
+            builder.append(Core.bundle.format("tripwire.alert.chat", stack.tileX, stack.tileY, stack.coloredTeamName, stack.unitName, stack.count));
         }
 
         String message = builder.toString();
@@ -121,15 +126,32 @@ public final class TripwireAlert {
         }
     }
 
+    private static String teamDisplayName(Team team) {
+        if (team == null) return "Unknown";
+        String localized = team.localized();
+        if (localized != null && !localized.isEmpty()) return localized;
+        return Strings.capitalize(team.name == null ? "unknown" : team.name);
+    }
+
+    private static String coloredTeamName(Team team) {
+        String teamName = teamDisplayName(team);
+        Color color = team == null || team.color == null ? Color.white : team.color;
+        return "[#" + color.toString() + "]<" + teamName + ">[]";
+    }
+
     private static class AlertStack {
         final int tileX;
         final int tileY;
+        final String teamName;
+        final String coloredTeamName;
         final String unitName;
         int count;
 
-        AlertStack(int tileX, int tileY, String unitName) {
+        AlertStack(int tileX, int tileY, String teamName, String coloredTeamName, String unitName) {
             this.tileX = tileX;
             this.tileY = tileY;
+            this.teamName = teamName;
+            this.coloredTeamName = coloredTeamName;
             this.unitName = unitName;
         }
     }

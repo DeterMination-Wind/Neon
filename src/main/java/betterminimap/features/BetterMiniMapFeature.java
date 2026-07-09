@@ -20,7 +20,6 @@ import arc.struct.ObjectSet;
 import arc.struct.Seq;
 import arc.util.Interval;
 import arc.util.Tmp;
-import bektools.ui.RbmStyle;
 import betterminimap.BetterMiniMapMod;
 import betterminimap.GithubUpdateCheck;
 import mindustry.game.EventType;
@@ -144,38 +143,41 @@ public class BetterMiniMapFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
+        table.checkPref(keyEnabled, false);
+        table.checkPref(keyUnitsEnabled, true);
+        table.checkPref(keyBuildingsEnabled, true);
+
+        table.checkPref(keyShowEnemyUnits, true);
+        table.checkPref(keyShowFriendlyUnits, true);
+
+        table.checkPref(keyShowEnemyBuildings, true);
+        table.checkPref(keyShowFriendlyBuildings, true);
+        table.checkPref(keyTintBuildingIcons, true);
+
+        table.sliderPref(keyUnitScale, 100, 10, 1000, 5, i -> i + "%");
+        table.sliderPref(keyUnitAlpha, 90, 10, 100, 5, i -> i + "%");
+        table.sliderPref(keyUnitClusterPx, 12, 2, 80, 1, i -> i + "px");
+        table.sliderPref(keyBuildingScale, 120, 10, 1000, 5, i -> i + "%");
+        table.sliderPref(keyIconAlpha, 90, 10, 100, 5, i -> i + "%");
+        table.sliderPref(keyIconBgAlpha, 35, 0, 100, 5, i -> i + "%");
         if (!BetterMiniMapMod.bekBundled) {
-            table.pref(new RbmStyle.HeaderSetting(Core.bundle.get("settings.betterminimap", "Better Minimap"), Icon.map));
+            table.checkPref(GithubUpdateCheck.enabledKey(), true);
+            table.checkPref(GithubUpdateCheck.showDialogKey(), true);
         }
-        table.pref(new RbmStyle.SubHeaderSetting("Basic"));
-        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, false, Icon.eyeSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyUnitsEnabled, true, Icon.unitsSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyBuildingsEnabled, true, Icon.homeSmall, null));
 
-        table.pref(new RbmStyle.SubHeaderSetting("Units"));
-        table.pref(new RbmStyle.IconCheckSetting(keyShowEnemyUnits, true, Icon.warningSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyShowFriendlyUnits, true, Icon.playersSmall, null));
-        table.pref(new RbmStyle.IconSliderSetting(keyUnitScale, 100, 10, 1000, 5, Icon.resizeSmall, i -> i + "%", null));
-        table.pref(new RbmStyle.IconSliderSetting(keyUnitAlpha, 90, 10, 100, 5, Icon.imageSmall, i -> i + "%", null));
-        table.pref(new RbmStyle.IconSliderSetting(keyUnitClusterPx, 12, 2, 80, 1, Icon.gridSmall, i -> i + "px", null));
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("mmplus-units-filter") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t) {
+                t.button(title, BetterMiniMapFeature::showUnitFilterDialog).growX().margin(14f).pad(6f).row();
+            }
+        });
 
-        table.pref(new RbmStyle.SubHeaderSetting("Buildings"));
-        table.pref(new RbmStyle.IconCheckSetting(keyShowEnemyBuildings, true, Icon.warningSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyShowFriendlyBuildings, true, Icon.homeSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyTintBuildingIcons, true, Icon.effectSmall, null));
-        table.pref(new RbmStyle.IconSliderSetting(keyBuildingScale, 120, 10, 1000, 5, Icon.resizeSmall, i -> i + "%", null));
-        table.pref(new RbmStyle.IconSliderSetting(keyIconAlpha, 90, 10, 100, 5, Icon.imageSmall, i -> i + "%", null));
-        table.pref(new RbmStyle.IconSliderSetting(keyIconBgAlpha, 35, 0, 100, 5, Icon.imageSmall, i -> i + "%", null));
-
-        table.pref(new RbmStyle.SubHeaderSetting("Filters"));
-        table.pref(new RbmStyle.ActionButtonSetting("mmplus-units-filter", Icon.unitsSmall, BetterMiniMapFeature::showUnitFilterDialog));
-        table.pref(new RbmStyle.ActionButtonSetting("mmplus-blocks-filter", Icon.filterSmall, BetterMiniMapFeature::showBlockFilterDialog));
-
-        if (!BetterMiniMapMod.bekBundled) {
-            table.pref(new RbmStyle.SubHeaderSetting("Update"));
-            table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refreshSmall, null));
-            table.pref(new RbmStyle.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
-        }
+        table.pref(new SettingsMenuDialog.SettingsTable.Setting("mmplus-blocks-filter") {
+            @Override
+            public void add(SettingsMenuDialog.SettingsTable t) {
+                t.button(title, BetterMiniMapFeature::showBlockFilterDialog).growX().margin(14f).pad(6f).row();
+            }
+        });
 
         ensureDefaultFilterLists();
         refreshSettings();

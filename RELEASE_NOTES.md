@@ -1,5 +1,23 @@
 # Neon Release Notes
 
+## v10.1.0
+
+### 中文
+
+- 同步并合并最近一批子模组改动，更新了 PatchViewer、PinyinSearchSupport、Tripwire、BetterPolyAi 等聚合模块，并刷新 Neon 内部锁文件记录。
+- 统一 Neon 聚合设置页样式，收紧多处设置面板布局与控件表现，减少不同子模组混搭时的视觉割裂。
+- 升级到 Mindustry v159 发布基线，修复文件选择器、世界标签显示与 StealthPath 威胁模型在 v159 下的编译兼容问题。
+- 移除 Neon 对 OverlayCompatBridge 的模组依赖声明；Neon 不再把它标记为软依赖，但仍保留运行时兼容探测逻辑。
+
+### English
+
+- Synced and merged the latest bundled submod updates, including PatchViewer, PinyinSearchSupport, Tripwire, BetterPolyAi, and refreshed Neon's internal lockfile state.
+- Unified the Neon aggregate settings style and tightened several settings panels so the bundled modules feel more consistent inside one UI.
+- Moved the release baseline to Mindustry v159 and fixed the compile compatibility issues around file choosers, world labels, and the StealthPath threat model.
+- Removed Neon's declared OverlayCompatBridge mod dependency; Neon no longer advertises it as a soft dependency while keeping runtime compatibility detection in place.
+
+---
+
 ## v10.0.2
 
 ### 中文

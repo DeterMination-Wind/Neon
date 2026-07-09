@@ -5,6 +5,7 @@ import arc.files.Fi;
 import arc.graphics.Color;
 import arc.scene.ui.CheckBox;
 import arc.scene.ui.ScrollPane;
+import arc.scene.ui.TextButton;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
@@ -12,7 +13,6 @@ import arc.struct.Seq;
 import arc.util.Log;
 import arc.util.OS;
 import arc.util.Strings;
-import bektools.ui.RbmStyle;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.mod.Mods;
@@ -94,13 +94,13 @@ public final class ModUpdateCenter{
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table){
         applyDefaults();
-        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.refreshSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyShowDialog, true, Icon.infoSmall, null));
-        table.pref(new RbmStyle.IconCheckSetting(keyUseMirror, false, Icon.linkSmall, null));
-        table.pref(new RbmStyle.IconSliderSetting(keyIntervalHours, 6, 1, 48, 1, Icon.refreshSmall, v -> (int)v + "h", null));
+        table.checkPref(keyEnabled, true);
+        table.checkPref(keyShowDialog, true);
+        table.checkPref(keyUseMirror, false);
+        table.sliderPref(keyIntervalHours, 6, 1, 48, 1, v -> (int)v + "h");
 
-        table.pref(new RbmStyle.ActionButtonSetting("mu-open-center", Icon.list, () -> showCenter(true)));
-        table.pref(new RbmStyle.ActionButtonSetting("mu-open-blacklist", Icon.cancel, ModUpdateCenter::showBlacklistDialog));
+        table.pref(new ButtonSetting("mu-open-center", () -> showCenter(true)));
+        table.pref(new ButtonSetting("mu-open-blacklist", ModUpdateCenter::showBlacklistDialog));
     }
 
     public static void checkOnceAtStartup(){
@@ -657,4 +657,18 @@ public final class ModUpdateCenter{
         boolean get(T value);
     }
 
+    private static class ButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final Runnable action;
+
+        public ButtonSetting(String name, Runnable action){
+            super(name);
+            this.action = action;
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            TextButton b = table.button(title, action).growX().margin(14f).pad(6f).center().get();
+            b.getLabel().setWrap(true);
+        }
+    }
 }

@@ -2,18 +2,11 @@ package advancedreplace
 
 import arc.Core
 import arc.Events
-import arc.graphics.Color
 import arc.input.KeyCode
 import arc.math.geom.Bresenham2
 import arc.math.geom.Point2
 import arc.scene.event.InputEvent
 import arc.scene.event.InputListener
-import arc.scene.event.Touchable
-import arc.scene.style.Drawable
-import arc.scene.style.TextureRegionDrawable
-import arc.scene.ui.Label
-import arc.scene.ui.Slider
-import arc.scene.ui.layout.Table
 import arc.struct.IntSeq
 import arc.util.Log
 import arc.util.Strings
@@ -24,11 +17,9 @@ import mindustry.editor.EditorTool
 import mindustry.editor.MapView
 import mindustry.game.EventType
 import mindustry.gen.Icon
-import mindustry.gen.Tex
 import mindustry.gen.TileOp
 import mindustry.gen.TileOpData
 import mindustry.mod.Mod
-import mindustry.ui.Styles
 import mindustry.ui.dialogs.SettingsMenuDialog
 import mindustry.world.Block
 import mindustry.world.Tile
@@ -136,48 +127,9 @@ private object AdvancedReplaceFeature {
     }
 
     fun buildSettings(table: SettingsMenuDialog.SettingsTable) {
-        table.pref(DeltaSliderSetting())
-    }
-
-    private class DeltaSliderSetting : SettingsMenuDialog.SettingsTable.Setting(deltaSettingKey) {
-        override fun add(table: SettingsMenuDialog.SettingsTable) {
-            val slider = Slider(0f, 500f, 1f, false)
-            slider.setValue(Core.settings.getInt(name, 0).toFloat())
-
-            val value = Label("", Styles.outlineLabel)
-            val content = Table()
-            content.left()
-            content.image(Icon.settingsSmall).size(20f).padRight(8f)
-            content.add(title, Styles.outlineLabel).left().growX().minWidth(0f).wrap()
-            content.add(value).padLeft(10f).right()
-            content.margin(3f, 10f, 3f, 10f)
-            content.touchable = Touchable.disabled
-
-            slider.changed {
-                val current = slider.value.toInt()
-                Core.settings.put(name, current)
-                value.setText("ΔE00 ${Strings.fixed(current / 10f, 1)}")
-            }
-            slider.change()
-
-            val root = table.table(cardBackground()) { row ->
-                row.left().margin(6f)
-                row.stack(slider, content).growX().height(42f)
-            }.width(rowWidth()).left().padTop(6f).get()
-            addDesc(root)
-            table.row()
+        table.sliderPref(deltaSettingKey, 0, 0, 500, 1) { value ->
+            "ΔE00 ${Strings.fixed(value / 10f, 1)}"
         }
-    }
-
-    private fun rowWidth(): Float {
-        val pref = min(Core.graphics.width - 56f, 980f)
-        val content = max(420f, min(Core.graphics.width - 56f, 960f))
-        return max(320f, min(pref - 72f, content))
-    }
-
-    private fun cardBackground(): Drawable {
-        val base = Tex.whiteui ?: Tex.pane
-        return if (base is TextureRegionDrawable) base.tint(Color.valueOf("223246")) else base
     }
 
     private fun patchToolAltModes(tool: EditorTool, vararg keys: String) {

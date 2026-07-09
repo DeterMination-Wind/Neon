@@ -1,11 +1,11 @@
 {
-  name: "Neon-dev"
+  name: "Neon"
   displayName: "Neon / 氖"
   author: "DeterMination (BEK)"
   repo: "DeterMination-Wind/Neon"
-  description: "A bundled toolkit with 19 client modules, now including ForeignServerTranslator, Tripwire, BetterPolyAi, and AdvancedReplace in Neon unified settings. / 辅助模组十九合一，现并入 ForeignServerTranslator、Tripwire、BetterPolyAi 与 AdvancedReplace 并统一到 Neon 设置入口。"
-  version: "0.0.0"
-  minGameVersion: 154
+  description: "All-in-one QoL toolkit: map, minimap, radial build, pinyin search, hotkey, tripwire alert, screenshot, projector overlay, logistics monitor, player database, patch viewer, custom marker, server translator, poly AI, advanced replace, mod updater. / 全能辅助模组集：地图编辑、小地图、圆盘菜单、拼音搜索、快捷键、地理围栏、截图、投影覆盖、物流监控、玩家数据库、补丁查看器、自定义标记、服务器翻译、Poly AI、高级替换、模组更新。"
+  version: "10.1.0"
+  minGameVersion: 159
   hidden: true
   java: true
   main: "bektools.BekToolsMod"

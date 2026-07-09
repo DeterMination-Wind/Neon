@@ -3,29 +3,44 @@ package mdtxcompat;
 import mindustry.Vars;
 import mindustry.mod.Mods;
 
+import java.util.LinkedHashSet;
+
 public final class LegacyMindustryXGuard {
     public static final String MINIMUM_VERSION = "2026.04.03.B439";
+    private static final String[] MINDUSTRYX_MOD_NAMES = {"mindustryx", "mdtx"};
+    private static final String[] MINDUSTRYX_MARKER_CLASSES = {"mindustryX.VarsX", "mindustryX.loader.Main"};
 
     private LegacyMindustryXGuard() {
     }
 
     public static boolean isMindustryXRuntime() {
-        return locateMindustryX() != null
-            || classExists("mindustryX.VarsX", runtimeClassLoader())
-            || classExists("mindustryX.loader.Main", runtimeClassLoader())
-            || classExists("mindustryX.VarsX", LegacyMindustryXGuard.class.getClassLoader())
-            || classExists("mindustryX.loader.Main", LegacyMindustryXGuard.class.getClassLoader());
+        if ("1".equals(System.getProperty("mdtx.loader"))) return true;
+        if (System.getProperty("MDTX-loaded") != null) return true;
+        if (locateMindustryX() != null) return true;
+
+        for (String marker : MINDUSTRYX_MARKER_CLASSES) {
+            for (ClassLoader loader : mindustryXRuntimeClassLoaders()) {
+                if (classExists(marker, loader)) return true;
+            }
+        }
+        return false;
     }
 
     public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
-        if (isMindustryXRuntime()) {
+        ClassNotFoundException last = null;
+        Iterable<ClassLoader> loaders = isMindustryXRuntime()
+            ? mindustryXRuntimeClassLoaders()
+            : overlayUiClassLoaders();
+
+        for (ClassLoader loader : loaders) {
             try {
-                return Class.forName(name, false, runtimeClassLoader());
-            } catch (ClassNotFoundException ignored) {
+                return Class.forName(name, false, loader);
+            } catch (ClassNotFoundException e) {
+                last = e;
             }
         }
 
-        return Class.forName(name, false, LegacyMindustryXGuard.class.getClassLoader());
+        throw last == null ? new ClassNotFoundException(name) : last;
     }
 
     public static ClassLoader runtimeClassLoader() {
@@ -51,9 +66,37 @@ public final class LegacyMindustryXGuard {
 
     private static Mods.LoadedMod locateMindustryX() {
         if (Vars.mods == null) return null;
-        Mods.LoadedMod mod = Vars.mods.locateMod("mindustryx");
-        if (mod != null) return mod;
-        return Vars.mods.locateMod("mdtx");
+        try {
+            for (String name : MINDUSTRYX_MOD_NAMES) {
+                Mods.LoadedMod mod = Vars.mods.locateMod(name);
+                if (mod != null) return mod;
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static LinkedHashSet<ClassLoader> mindustryXRuntimeClassLoaders() {
+        LinkedHashSet<ClassLoader> loaders = new LinkedHashSet<>();
+        addLoader(loaders, Thread.currentThread().getContextClassLoader());
+
+        Mods.LoadedMod mindustryX = locateMindustryX();
+        if (mindustryX != null) addLoader(loaders, mindustryX.loader);
+
+        addLoader(loaders, runtimeClassLoader());
+        addLoader(loaders, Vars.class.getClassLoader());
+        addLoader(loaders, ClassLoader.getSystemClassLoader());
+        return loaders;
+    }
+
+    private static LinkedHashSet<ClassLoader> overlayUiClassLoaders() {
+        LinkedHashSet<ClassLoader> loaders = mindustryXRuntimeClassLoaders();
+        addLoader(loaders, LegacyMindustryXGuard.class.getClassLoader());
+        return loaders;
+    }
+
+    private static void addLoader(LinkedHashSet<ClassLoader> loaders, ClassLoader loader) {
+        if (loader != null) loaders.add(loader);
     }
 
     private static boolean classExists(String name, ClassLoader loader) {

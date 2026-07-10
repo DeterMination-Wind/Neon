@@ -2,7 +2,6 @@ package betterlogisticsspeed.features;
 
 import arc.Core;
 import arc.Events;
-import arc.func.Prov;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -24,7 +23,6 @@ import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
 import arc.struct.Seq;
 import arc.util.Align;
-import arc.util.Log;
 import arc.util.Scaling;
 import arc.util.Strings;
 import arc.util.Time;
@@ -43,6 +41,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
 import mindustry.world.meta.StatUnit;
 import mindustry.world.modules.ItemModule;
+import mdtxcompat.OverlayUiBridge;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -93,6 +92,8 @@ public class LongWindowFlowFeature {
     private static BuildFlowTracker trackedTracker;
 
     private static final Seq<MarkedNode> markedNodes = new Seq<>();
+    private static OverlayUiBridge overlayUi = OverlayUiBridge.autoDetect();
+    private static OverlayUiBridge.OverlayWindowHandle overlayWindow;
     private static Table overlayTable;
     private static boolean overlayRegistered;
     private static boolean overlayDirty = true;
@@ -155,12 +156,16 @@ public class LongWindowFlowFeature {
         Events.run(EventType.Trigger.uiDrawEnd, LongWindowFlowFeature::updateDisplay);
     }
 
+    public static void configureOverlayUi(OverlayUiBridge value) {
+        overlayUi = value == null ? OverlayUiBridge.UNSUPPORTED : value;
+    }
+
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
         table.checkPref(keyEnabled, true);
         table.sliderPref(keyWindowSeconds, 10, 2, 60, 1, i -> i + "s");
         table.checkPref(keyShowTotal, true);
         table.sliderPref(keyDecimals, 1, 1, 2, 1, String::valueOf);
-        if (!OverlayCompat.hasOverlayUI()) {
+        if (!overlayUi.isSupported()) {
             table.row();
             table.add(Core.bundle.get("bls.overlay.missing")).width(520f).left().wrap().padTop(8f);
         }
@@ -454,14 +459,16 @@ public class LongWindowFlowFeature {
         nextOverlayRegisterAttemptMs = now + 1000L;
 
         ensureOverlayTable();
-        overlayRegistered = OverlayCompat.tryRegister(
-            overlayWindowName,
-            overlayTable,
-            () -> state != null && state.isGame() && enabled,
-            true,
-            true
-        );
-        if (!overlayRegistered && !OverlayCompat.hasOverlayUI()) {
+        if (overlayWindow == null) {
+            overlayWindow = overlayUi.registerWindow(
+                overlayWindowName,
+                overlayTable,
+                () -> state != null && state.isGame() && enabled
+            );
+            overlayWindow.configure(true, true);
+        }
+        overlayRegistered = overlayUi.isSupported();
+        if (!overlayRegistered) {
             clearMarkedNodes();
         }
     }
@@ -1301,58 +1308,4 @@ public class LongWindowFlowFeature {
         }
     }
 
-    private static class OverlayCompat {
-        private static boolean loggedFailure;
-
-        static boolean hasOverlayUI() {
-            return classExists("mindustryX.features.ui.OverlayUI");
-        }
-
-        static boolean isMindustryX() {
-            return classExists("mindustryX.VarsX") || classExists("mindustryX.loader.Main");
-        }
-
-        private static boolean classExists(String name) {
-            try {
-                Class.forName(name, false, OverlayCompat.class.getClassLoader());
-                return true;
-            } catch (ClassNotFoundException | LinkageError ignored) {
-                return false;
-            }
-        }
-
-        static boolean tryRegister(String name, Table table, Prov<Boolean> availability, boolean autoHeight, boolean resizable) {
-            if (headless || Core.scene == null || table == null) return false;
-
-            try {
-                Class<?> overlayClass = Class.forName("mindustryX.features.ui.OverlayUI", true, OverlayCompat.class.getClassLoader());
-                Object overlay = overlayClass.getField("INSTANCE").get(null);
-
-                try {
-                    Method init = overlayClass.getMethod("init");
-                    init.invoke(overlay);
-                } catch (NoSuchMethodException ignored) {
-                }
-
-                Method register = overlayClass.getMethod("registerWindow", String.class, Table.class);
-                Object window = register.invoke(overlay, name, table);
-                if (window == null) return false;
-
-                Class<?> windowClass = window.getClass();
-                windowClass.getMethod("setAvailability", Prov.class).invoke(window, availability);
-                windowClass.getMethod("setAutoHeight", boolean.class).invoke(window, autoHeight);
-                windowClass.getMethod("setResizable", boolean.class).invoke(window, resizable);
-
-                return true;
-            } catch (ClassNotFoundException | NoClassDefFoundError missing) {
-                return false;
-            } catch (Throwable error) {
-                if (!loggedFailure) {
-                    loggedFailure = true;
-                    Log.err("[betterLogisticsSpeed] OverlayUI compatibility registration failed.", error);
-                }
-                return false;
-            }
-        }
-    }
 }

@@ -33,6 +33,7 @@ import arc.util.pooling.Pools;
 import bektools.profiler.NeonProfiler;
 import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.MarkerBridge;
+import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.gen.Call;
@@ -374,7 +375,7 @@ public class CustomMarkerFeature {
     }
 
     private static boolean hasStoredOverlayWindowState(String windowName) {
-        return Core.settings != null && Core.settings.has("overlayUI." + windowName);
+        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private static void removeFallbackOverlayHost() {

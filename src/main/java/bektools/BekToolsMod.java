@@ -112,6 +112,7 @@ public class BekToolsMod extends Mod{
         BetterScreenShotFeature.configureOverlayUi(overlayUi);
         CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
         NeonProfilerFeature.configureOverlayUi(overlayUi);
+        BetterLogisticsSpeedMod.configureOverlayUi(overlayUi);
         NeonProfilerFeature.init();
 
         pgmm = pgmmSupplier.get();

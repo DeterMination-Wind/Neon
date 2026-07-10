@@ -4,7 +4,7 @@
   "author": "DeterMination (BEK)",
   "repo": "DeterMination-Wind/Neon",
   "description": "All-in-one QoL toolkit: map editing, minimap, radial build, pinyin search, stealth path, tripwire alert, screenshot, projector overlay, logistics monitor, hotkeys, player database, patch viewer, marker, server translator, poly AI, advanced replace, mod updater. / 全能辅助模组集：地图编辑、小地图、圆盘菜单、拼音搜索、偷袭小道、地理围栏、截图、投影覆盖、物流监控、快捷键、玩家数据库、补丁查看器、自定义标记、服务器翻译、Poly AI、高级替换、模组更新。",
-  "version": "10.1.0",
+  "version": "10.1.1",
   "minGameVersion": 159,
   "hidden": true,
   "java": true,

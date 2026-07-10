@@ -29,6 +29,7 @@ import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonValue;
 import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -1564,7 +1565,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private boolean hasStoredOverlayWindowState(String windowName){
-        return Core.settings != null && Core.settings.has("overlayUI." + windowName);
+        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private boolean compactUi(){

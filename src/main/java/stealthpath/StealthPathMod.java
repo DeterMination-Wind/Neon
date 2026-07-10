@@ -32,6 +32,7 @@ import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
 import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.*;
 import mindustry.game.Team;
@@ -6030,7 +6031,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private boolean hasStoredOverlayWindowState(String windowName){
-        return Core.settings != null && Core.settings.has("overlayUI." + windowName);
+        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){

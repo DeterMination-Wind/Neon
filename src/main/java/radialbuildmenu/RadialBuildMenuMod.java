@@ -33,6 +33,7 @@ import arc.util.Time;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.Jformat;
 import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.WorldLoadEvent;
@@ -2610,7 +2611,7 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
     }
 
     private static boolean hasStoredOverlayWindowState(String windowName){
-        return Core.settings != null && Core.settings.has("overlayUI." + windowName);
+        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private Table buildMobileToggleContent(){

@@ -32,6 +32,7 @@ import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Tmp;
 import arc.util.serialization.Json;
+import mdtxcompat.OverlaySettingsCompat;
 import mindustry.Vars;
 import mindustry.gen.Icon;
 import mindustry.gen.Tex;
@@ -181,11 +182,14 @@ public class OverlayUI {
 
     public static class WindowSetting {
         private final String name;
+        private final String storageName;
         private WindowData value;
         private boolean changed;
 
-        public WindowSetting(String name) {
-            this.name = name;
+        public WindowSetting(String windowName) {
+            this.name = OverlaySettingsCompat.nativeKey(windowName);
+            this.storageName = OverlaySettingsCompat.embeddedKey(windowName);
+            OverlaySettingsCompat.migrateLegacyEmbeddedWindow(windowName);
             this.value = load();
         }
 
@@ -238,12 +242,12 @@ public class OverlayUI {
         }
 
         private WindowData load() {
-            if (Core.settings == null || !Core.settings.has(name)) {
+            if (Core.settings == null || !Core.settings.has(storageName)) {
                 return new WindowData();
             }
 
             try {
-                Object raw = Core.settings.get(name, (Object) null);
+                Object raw = Core.settings.get(storageName, (Object) null);
                 if (raw == null) return new WindowData();
 
                 String rawStr;
@@ -259,7 +263,7 @@ public class OverlayUI {
                 WindowData data = json.fromJson(WindowData.class, rawStr);
                 return data == null ? new WindowData() : data;
             } catch (Throwable t) {
-                Log.err("[Neon Embedded Overlay] failed to load window setting: @", name);
+                Log.err("[Neon Embedded Overlay] failed to load window setting: @", storageName);
                 Log.err(t);
                 return new WindowData();
             }
@@ -268,9 +272,9 @@ public class OverlayUI {
         private void save(WindowData data) {
             if (Core.settings == null) return;
             try {
-                Core.settings.put(name, json.toJson(data));
+                Core.settings.put(storageName, json.toJson(data));
             } catch (Throwable t) {
-                Log.err("[Neon Embedded Overlay] failed to save window setting: @", name);
+                Log.err("[Neon Embedded Overlay] failed to save window setting: @", storageName);
                 Log.err(t);
             }
         }
@@ -376,7 +380,7 @@ public class OverlayUI {
 
         public Window(String name, Table table) {
             this.table = table;
-            this.data = new WindowSetting("overlayUI." + name);
+            this.data = new WindowSetting(name);
             this.adsorption = new AdsorptionSystem.Element(name);
             this.name = name;
             settings.add(data);

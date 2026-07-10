@@ -2,6 +2,7 @@ package betterlogisticsspeed;
 
 import arc.Events;
 import betterlogisticsspeed.features.LongWindowFlowFeature;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -16,6 +17,10 @@ public class BetterLogisticsSpeedMod extends Mod {
 
     public static void bekBuildSettings(SettingsMenuDialog.SettingsTable table) {
         LongWindowFlowFeature.buildSettings(table);
+    }
+
+    public static void configureOverlayUi(OverlayUiBridge overlayUi) {
+        LongWindowFlowFeature.configureOverlayUi(overlayUi);
     }
 
     @Override

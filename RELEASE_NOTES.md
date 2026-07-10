@@ -1,5 +1,23 @@
 # Neon Release Notes
 
+## v10.1.1
+
+### 中文
+
+- 修复 MindustryX 端 OverlayUI 注册卡在 pending 队列、窗口不会再次回放的问题；现在只要原生 `OverlayUI` 单例可用，就会立即注册并恢复已等待的窗口。
+- 修复部分旧存档/旧配置里 `overlayUI.*` 设置值类型不一致导致的启动闪退；Neon 会在启动时修复嵌入式窗口设置，并避免把原生 MindustryX 的字符串状态误当成二进制数据。
+- 修复 PowerGridMinimap 的 `PowerTableOverlay` 在非主线程构造时触发的 UI 初始化报错，降低 X 端启动期的崩溃风险。
+- 这次版本主要面向 MindustryX OverlayUI 稳定性修复，原版客户端继续使用 Neon 内置 overlay 兼容层。
+
+### English
+
+- Fixed the MindustryX OverlayUI registration path so pending windows are replayed as soon as the native `OverlayUI` singleton becomes available instead of waiting for an extra HUD/state gate.
+- Fixed startup crashes caused by mismatched `overlayUI.*` setting value types in older saves/configs; Neon now repairs embedded window settings at startup and avoids treating native MindustryX string state as binary data.
+- Fixed the `PowerTableOverlay` UI initialization error caused by constructing it off the main thread, reducing startup crash risk on X builds.
+- This release is primarily a MindustryX OverlayUI stability pass, while vanilla clients continue using Neon's built-in overlay compatibility layer.
+
+---
+
 ## v10.1.0
 
 ### 中文

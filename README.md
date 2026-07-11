@@ -1,4 +1,10 @@
 # Neon / 氖 (Mindustry Mod)
+<h1 align="center">
+  <a href="https://github.com/DeterMination-Wind/Neon/releases/latest"><img src="https://img.shields.io/github/v/release/DeterMination-Wind/Neon?display_name=release&label=Latest%20Release&color=green"></a>
+  <a href="https://github.com/DeterMination-Wind/Neon/releases"><img src="https://img.shields.io/github/downloads/DeterMination-Wind/Neon/total?label=Downloads&color=blue"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/DeterMination-Wind/Neon?label=License"></a>
+  <a href="https://github.com/DeterMination-Wind/Neon"><img src="https://img.shields.io/github/stars/DeterMination-Wind/Neon?style=flat&label=Star%20this%20mod!&color=yellow"></a>
+</h1>
 
 - [中文](#中文)
 - [English](#english)

@@ -15,22 +15,12 @@ public final class LegacyMindustryXGuard {
 
     public static boolean isMindustryXRuntime() {
         if ("1".equals(System.getProperty("mdtx.loader"))) return true;
-        if (System.getProperty("MDTX-loaded") != null) return true;
-        if (locateMindustryX() != null) return true;
-
-        for (String marker : MINDUSTRYX_MARKER_CLASSES) {
-            for (ClassLoader loader : mindustryXRuntimeClassLoaders()) {
-                if (classExists(marker, loader)) return true;
-            }
-        }
-        return false;
+        return System.getProperty("MDTX-loaded") != null;
     }
 
     public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
         ClassNotFoundException last = null;
-        Iterable<ClassLoader> loaders = isMindustryXRuntime()
-            ? mindustryXRuntimeClassLoaders()
-            : overlayUiClassLoaders();
+        Iterable<ClassLoader> loaders = compatibleMindustryXClassLoaders();
 
         for (ClassLoader loader : loaders) {
             try {
@@ -53,8 +43,7 @@ public final class LegacyMindustryXGuard {
     }
 
     public static void rejectLegacyMindustryX(String modName) {
-        Mods.LoadedMod mindustryX = locateMindustryX();
-        if (mindustryX == null) return;
+        if (!isMindustryXRuntime()) return;
 
         throw new IllegalStateException(
             modName
@@ -93,6 +82,26 @@ public final class LegacyMindustryXGuard {
         LinkedHashSet<ClassLoader> loaders = mindustryXRuntimeClassLoaders();
         addLoader(loaders, LegacyMindustryXGuard.class.getClassLoader());
         return loaders;
+    }
+
+    private static LinkedHashSet<ClassLoader> compatibleMindustryXClassLoaders() {
+        LinkedHashSet<ClassLoader> candidates = overlayUiClassLoaders();
+        LinkedHashSet<ClassLoader> loaders = new LinkedHashSet<>();
+
+        // Prefer loaders that actually expose MindustryX marker classes, but keep every
+        // candidate for OverlayCompatBridge and other compatibility implementations.
+        for (ClassLoader loader : candidates) {
+            if (hasMindustryXMarker(loader)) addLoader(loaders, loader);
+        }
+        loaders.addAll(candidates);
+        return loaders;
+    }
+
+    private static boolean hasMindustryXMarker(ClassLoader loader) {
+        for (String marker : MINDUSTRYX_MARKER_CLASSES) {
+            if (classExists(marker, loader)) return true;
+        }
+        return false;
     }
 
     private static void addLoader(LinkedHashSet<ClassLoader> loaders, ClassLoader loader) {

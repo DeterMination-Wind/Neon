@@ -43,10 +43,37 @@ import stealthpath.StealthPathMod;
 import tripwire.TripwireMod;
 import whousesthisbuilding.WhoUsesThisBuildingMod;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import static mindustry.Vars.ui;
 
 public class BekToolsMod extends Mod{
-    private static final String spdbUnavailableMessage = "当前运行环境缺少 SPDB 所需的 Java/SQLite 组件，Neon 已跳过该模块以避免整体加载失败。";
+    private static final String moduleFailureMessage = "@bektools.module.failed";
+
+    private static final String modulePgmm = "pgmm";
+    private static final String moduleStealthPath = "sp";
+    private static final String moduleCustomMarker = "cm";
+    private static final String moduleScreenshot = "bss";
+    private static final String moduleRadialBuildMenu = "rbm";
+    private static final String moduleBetterMiniMap = "bmm";
+    private static final String moduleServerPlayerDatabase = "spdb";
+    private static final String moduleBetterMapEditor = "bme";
+    private static final String moduleBetterProjectorOverlay = "bpo";
+    private static final String moduleBetterLogisticsSpeed = "bls";
+    private static final String moduleBetterHotKey = "bhk";
+    private static final String moduleModUpdater = "mu";
+    private static final String moduleWhoUsesThisBuilding = "wutb";
+    private static final String modulePatchViewer = "pv";
+    private static final String modulePinyinSearchSupport = "pss";
+    private static final String moduleForeignServerTranslator = "fst";
+    private static final String moduleTripwire = "tw";
+    private static final String moduleBetterPolyAi = "bpa";
+    private static final String moduleAdvancedReplace = "ar";
+    private static final String moduleProfiler = "profiler";
+    private static final String moduleUsageReporter = "usage-reporter";
+
+    private final Map<String, Throwable> moduleFailures = new LinkedHashMap<>();
 
     private final PowerGridMinimapMod pgmm;
     private final StealthPathMod stealthPath;
@@ -91,84 +118,128 @@ public class BekToolsMod extends Mod{
         ModSupplier<BetterProjectorOverlayMod> betterProjectorOverlaySupplier,
         ModSupplier<BetterHotKeyMod> betterHotKeySupplier
     ){
-        PowerGridMinimapMod.bekBundled = true;
-        StealthPathMod.bekBundled = true;
-        RadialBuildMenuMod.bekBundled = true;
-        BetterMiniMapMod.bekBundled = true;
-        BetterMapEditorMod.bekBundled = true;
-        ServerPlayerDataBaseMod.bekBundled = true;
-        BetterProjectorOverlayMod.bekBundled = true;
-        BetterLogisticsSpeedMod.bekBundled = true;
-        BetterHotKeyMod.bekBundled = true;
-        ModUpdaterMod.bekBundled = true;
-        WhoUsesThisBuildingMod.bekBundled = true;
-        PatchViewerMod.bekBundled = true;
-        PinyinSearchSupportMod.bekBundled = true;
-        ForeignServerTranslatorMod.bekBundled = true;
-        TripwireMod.bekBundled = true;
-        BetterPolyAiMod.bekBundled = true;
-        AdvancedReplaceMod.bekBundled = true;
+        markBundled(modulePgmm, () -> PowerGridMinimapMod.bekBundled = true);
+        markBundled(moduleStealthPath, () -> StealthPathMod.bekBundled = true);
+        markBundled(moduleRadialBuildMenu, () -> RadialBuildMenuMod.bekBundled = true);
+        markBundled(moduleBetterMiniMap, () -> BetterMiniMapMod.bekBundled = true);
+        markBundled(moduleBetterMapEditor, () -> BetterMapEditorMod.bekBundled = true);
+        markBundled(moduleServerPlayerDatabase, () -> ServerPlayerDataBaseMod.bekBundled = true);
+        markBundled(moduleBetterProjectorOverlay, () -> BetterProjectorOverlayMod.bekBundled = true);
+        markBundled(moduleBetterLogisticsSpeed, () -> BetterLogisticsSpeedMod.bekBundled = true);
+        markBundled(moduleBetterHotKey, () -> BetterHotKeyMod.bekBundled = true);
+        markBundled(moduleModUpdater, () -> ModUpdaterMod.bekBundled = true);
+        markBundled(moduleWhoUsesThisBuilding, () -> WhoUsesThisBuildingMod.bekBundled = true);
+        markBundled(modulePatchViewer, () -> PatchViewerMod.bekBundled = true);
+        markBundled(modulePinyinSearchSupport, () -> PinyinSearchSupportMod.bekBundled = true);
+        markBundled(moduleForeignServerTranslator, () -> ForeignServerTranslatorMod.bekBundled = true);
+        markBundled(moduleTripwire, () -> TripwireMod.bekBundled = true);
+        markBundled(moduleBetterPolyAi, () -> BetterPolyAiMod.bekBundled = true);
+        markBundled(moduleAdvancedReplace, () -> AdvancedReplaceMod.bekBundled = true);
 
-        BetterScreenShotFeature.configureOverlayUi(overlayUi);
-        CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
-        NeonProfilerFeature.configureOverlayUi(overlayUi);
-        BetterLogisticsSpeedMod.configureOverlayUi(overlayUi);
-        NeonProfilerFeature.init();
-
-        pgmm = pgmmSupplier.get();
-        stealthPath = stealthPathSupplier.get();
-        radialBuildMenu = radialBuildMenuSupplier.get();
-        betterMiniMap = new BetterMiniMapMod();
-        betterMiniMap.init();
-        ServerPlayerDataBaseMod spdb = null;
-        try{
-            spdb = serverPlayerDataBaseSupplier.get();
-        }catch(Throwable t){
-            Log.err("Neon: failed to initialize bundled ServerPlayerDataBase module; continuing without it.", t);
-        }
-        serverPlayerDataBase = spdb;
-        betterMapEditor = new BetterMapEditorMod();
-        betterMapEditor.init();
-        betterProjectorOverlay = betterProjectorOverlaySupplier.get();
-        betterProjectorOverlay.init();
-        betterLogisticsSpeed = new BetterLogisticsSpeedMod();
-        betterLogisticsSpeed.init();
-        betterHotKey = betterHotKeySupplier.get();
-        betterHotKey.init();
-        modUpdater = new ModUpdaterMod();
-        modUpdater.init();
-        whoUsesThisBuilding = new WhoUsesThisBuildingMod();
-        whoUsesThisBuilding.init();
-        patchViewer = new PatchViewerMod();
-        patchViewer.init();
-        pinyinSearchSupport = new PinyinSearchSupportMod();
-        pinyinSearchSupport.init();
-        foreignServerTranslator = new ForeignServerTranslatorMod();
-        foreignServerTranslator.init();
-        tripwire = new TripwireMod();
-        betterPolyAi = new BetterPolyAiMod();
-        betterPolyAi.init();
-        advancedReplace = new AdvancedReplaceMod();
-        advancedReplace.init();
-        postHogUsageReporter = new PostHogUsageReporter(getClass());
-        CustomMarkerFeature.init();
-        BetterScreenShotFeature.init();
-
-        Events.on(ClientLoadEvent.class, e -> {
-            try{
-                postHogUsageReporter.onClientLoad();
-            }catch(Throwable t){
-                Log.err("Neon: failed to initialize usage reporter; continuing with settings registration.", t);
-            }
-            try{
-                registerSettings();
-            }catch(Throwable t){
-                Log.err("Neon: failed to register unified settings.", t);
-            }
+        pgmm = initializeModule(modulePgmm, pgmmSupplier);
+        stealthPath = initializeModule(moduleStealthPath, stealthPathSupplier);
+        radialBuildMenu = initializeModule(moduleRadialBuildMenu, radialBuildMenuSupplier);
+        betterMiniMap = initializeModule(moduleBetterMiniMap, () -> {
+            BetterMiniMapMod mod = new BetterMiniMapMod();
+            mod.init();
+            return mod;
         });
+        serverPlayerDataBase = initializeModule(moduleServerPlayerDatabase, serverPlayerDataBaseSupplier);
+        betterMapEditor = initializeModule(moduleBetterMapEditor, () -> {
+            BetterMapEditorMod mod = new BetterMapEditorMod();
+            mod.init();
+            return mod;
+        });
+        betterProjectorOverlay = initializeModule(moduleBetterProjectorOverlay, () -> {
+            BetterProjectorOverlayMod mod = betterProjectorOverlaySupplier.get();
+            mod.init();
+            return mod;
+        });
+        betterLogisticsSpeed = initializeModule(moduleBetterLogisticsSpeed, () -> {
+            BetterLogisticsSpeedMod.configureOverlayUi(overlayUi);
+            BetterLogisticsSpeedMod mod = new BetterLogisticsSpeedMod();
+            mod.init();
+            return mod;
+        });
+        betterHotKey = initializeModule(moduleBetterHotKey, () -> {
+            BetterHotKeyMod mod = betterHotKeySupplier.get();
+            mod.init();
+            return mod;
+        });
+        modUpdater = initializeModule(moduleModUpdater, () -> {
+            ModUpdaterMod mod = new ModUpdaterMod();
+            mod.init();
+            return mod;
+        });
+        whoUsesThisBuilding = initializeModule(moduleWhoUsesThisBuilding, () -> {
+            WhoUsesThisBuildingMod mod = new WhoUsesThisBuildingMod();
+            mod.init();
+            return mod;
+        });
+        patchViewer = initializeModule(modulePatchViewer, () -> {
+            PatchViewerMod mod = new PatchViewerMod();
+            mod.init();
+            return mod;
+        });
+        pinyinSearchSupport = initializeModule(modulePinyinSearchSupport, PinyinSearchSupportMod::new);
+        foreignServerTranslator = initializeModule(moduleForeignServerTranslator, () -> {
+            ForeignServerTranslatorMod mod = new ForeignServerTranslatorMod();
+            mod.init();
+            return mod;
+        });
+        tripwire = initializeModule(moduleTripwire, TripwireMod::new);
+        betterPolyAi = initializeModule(moduleBetterPolyAi, () -> {
+            BetterPolyAiMod mod = new BetterPolyAiMod();
+            mod.init();
+            return mod;
+        });
+        advancedReplace = initializeModule(moduleAdvancedReplace, () -> {
+            AdvancedReplaceMod mod = new AdvancedReplaceMod();
+            mod.init();
+            return mod;
+        });
+        postHogUsageReporter = initializeModule(moduleUsageReporter, () -> new PostHogUsageReporter(getClass()));
+
+        // Global UI/event features are initialized only after every bundled module has
+        // been isolated, so a later module failure cannot leave a profiler ghost window.
+        initializeFeature(moduleCustomMarker, () -> {
+            CustomMarkerFeature.configureCompat(overlayUi, markerBridge);
+            CustomMarkerFeature.init();
+        });
+        initializeFeature(moduleScreenshot, () -> {
+            BetterScreenShotFeature.configureOverlayUi(overlayUi);
+            BetterScreenShotFeature.init();
+        });
+        initializeFeature(moduleProfiler, () -> {
+            NeonProfilerFeature.configureOverlayUi(overlayUi);
+            NeonProfilerFeature.init();
+        });
+
+        try{
+            Events.on(ClientLoadEvent.class, e -> {
+                if(postHogUsageReporter != null){
+                    try{
+                        postHogUsageReporter.onClientLoad();
+                    }catch(Throwable t){
+                        recordModuleFailure(moduleUsageReporter, t);
+                    }
+                }
+                try{
+                    registerSettings();
+                }catch(Throwable t){
+                    Log.err("Neon: failed to register unified settings.", t);
+                }
+            });
+        }catch(Throwable t){
+            Log.err("Neon: failed to register the client-load entry point; bundled modules remain isolated.", t);
+        }
     }
 
     private static OverlayUiBridge vanillaOverlayUi(){
+        // An injected MindustryX runtime must select mainX. If an older loader enters
+        // the vanilla main class, keep the original upgrade/backtrack error instead of
+        // swallowing it as an individual bundled-module failure.
+        LegacyMindustryXGuard.rejectLegacyMindustryX("Neon");
         return OverlayUiBridge.autoDetect();
     }
 
@@ -177,15 +248,64 @@ public class BekToolsMod extends Mod{
         T get();
     }
 
+    private void markBundled(String moduleId, Runnable action){
+        if(isModuleFailed(moduleId)) return;
+        try{
+            action.run();
+        }catch(Throwable t){
+            recordModuleFailure(moduleId, t);
+        }
+    }
+
+    private <T> T initializeModule(String moduleId, ModSupplier<T> initializer){
+        if(isModuleFailed(moduleId)) return null;
+        try{
+            T module = initializer.get();
+            if(module == null){
+                throw new IllegalStateException("module initializer returned null");
+            }
+            return module;
+        }catch(Throwable t){
+            recordModuleFailure(moduleId, t);
+            return null;
+        }
+    }
+
+    private void initializeFeature(String moduleId, Runnable initializer){
+        if(isModuleFailed(moduleId)) return;
+        try{
+            initializer.run();
+        }catch(Throwable t){
+            recordModuleFailure(moduleId, t);
+        }
+    }
+
+    private void recordModuleFailure(String moduleId, Throwable failure){
+        if(moduleFailures.containsKey(moduleId)) return;
+        moduleFailures.put(moduleId, failure);
+        Log.err("Neon: bundled module '" + moduleId + "' failed; continuing without it.", failure);
+    }
+
+    private boolean isModuleFailed(String moduleId){
+        return moduleFailures.containsKey(moduleId);
+    }
+
+    private void registerModuleCommands(String moduleId, boolean available, Runnable registration){
+        if(!available || isModuleFailed(moduleId)) return;
+        try{
+            registration.run();
+        }catch(Throwable t){
+            recordModuleFailure(moduleId, t);
+        }
+    }
+
     @Override
     public void registerClientCommands(CommandHandler handler){
-        NeonProfilerFeature.registerClientCommands(handler);
-        pgmm.registerClientCommands(handler);
-        stealthPath.registerClientCommands(handler);
-        radialBuildMenu.registerClientCommands(handler);
-        if(serverPlayerDataBase != null){
-            serverPlayerDataBase.registerClientCommands(handler);
-        }
+        registerModuleCommands(moduleProfiler, !isModuleFailed(moduleProfiler), () -> NeonProfilerFeature.registerClientCommands(handler));
+        registerModuleCommands(modulePgmm, pgmm != null, () -> pgmm.registerClientCommands(handler));
+        registerModuleCommands(moduleStealthPath, stealthPath != null, () -> stealthPath.registerClientCommands(handler));
+        registerModuleCommands(moduleRadialBuildMenu, radialBuildMenu != null, () -> radialBuildMenu.registerClientCommands(handler));
+        registerModuleCommands(moduleServerPlayerDatabase, serverPlayerDataBase != null, () -> serverPlayerDataBase.registerClientCommands(handler));
     }
 
     private void registerSettings(){
@@ -193,36 +313,54 @@ public class BekToolsMod extends Mod{
         if(settingsRegistered) return;
 
         ui.settings.addCategory("@bektools.category", Icon.settings, table -> {
-            addGroup(table, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, pgmm::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, stealthPath::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, radialBuildMenu::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings);
-            if(serverPlayerDataBase != null){
-                addGroup(table, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, serverPlayerDataBase::bekBuildSettings);
-            }else{
-                addGroup(table, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, st -> {
-                    st.pref(new RbmStyle.SubHeaderSetting(spdbUnavailableMessage));
-                });
-            }
-            addGroup(table, Core.bundle.get("bektools.section.bme", "Better Map Editor"), Icon.map, st -> {
+            addModuleGroup(table, modulePgmm, pgmm != null, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, st -> pgmm.bekBuildSettings(st));
+            addModuleGroup(table, moduleStealthPath, stealthPath != null, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, st -> stealthPath.bekBuildSettings(st));
+            addModuleGroup(table, moduleCustomMarker, !isModuleFailed(moduleCustomMarker), Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings);
+            addModuleGroup(table, moduleScreenshot, !isModuleFailed(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings);
+            addModuleGroup(table, moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, st -> radialBuildMenu.bekBuildSettings(st));
+            addModuleGroup(table, moduleBetterMiniMap, betterMiniMap != null, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings);
+            addModuleGroup(table, moduleServerPlayerDatabase, serverPlayerDataBase != null, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, st -> serverPlayerDataBase.bekBuildSettings(st));
+            addModuleGroup(table, moduleBetterMapEditor, betterMapEditor != null, Core.bundle.get("bektools.section.bme", "Better Map Editor"), Icon.map, st -> {
                 st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.bme.none"));
             });
-            addGroup(table, Core.bundle.get("bektools.section.bpo", "Better Projector Overlay"), Icon.power, BetterProjectorOverlayMod::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.bls", "Better Logistics Speed"), Icon.rightOpen, BetterLogisticsSpeedMod::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, betterHotKey::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, whoUsesThisBuilding::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, patchViewer::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, pinyinSearchSupport::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.fst", "Foreign Server Translator"), Icon.chat, foreignServerTranslator::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, tripwire::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, betterPolyAi::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, advancedReplace::bekBuildSettings);
-            addGroup(table, Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
+            addModuleGroup(table, moduleBetterProjectorOverlay, betterProjectorOverlay != null, Core.bundle.get("bektools.section.bpo", "Better Projector Overlay"), Icon.power, BetterProjectorOverlayMod::bekBuildSettings);
+            addModuleGroup(table, moduleBetterLogisticsSpeed, betterLogisticsSpeed != null, Core.bundle.get("bektools.section.bls", "Better Logistics Speed"), Icon.rightOpen, BetterLogisticsSpeedMod::bekBuildSettings);
+            addModuleGroup(table, moduleBetterHotKey, betterHotKey != null, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, st -> betterHotKey.bekBuildSettings(st));
+            addModuleGroup(table, moduleModUpdater, modUpdater != null, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings);
+            addModuleGroup(table, moduleWhoUsesThisBuilding, whoUsesThisBuilding != null, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, st -> whoUsesThisBuilding.bekBuildSettings(st));
+            addModuleGroup(table, modulePatchViewer, patchViewer != null, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, st -> patchViewer.bekBuildSettings(st));
+            addModuleGroup(table, modulePinyinSearchSupport, pinyinSearchSupport != null, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, st -> pinyinSearchSupport.bekBuildSettings(st));
+            addModuleGroup(table, moduleForeignServerTranslator, foreignServerTranslator != null, Core.bundle.get("bektools.section.fst", "Foreign Server Translator"), Icon.chat, st -> foreignServerTranslator.bekBuildSettings(st));
+            addModuleGroup(table, moduleTripwire, tripwire != null, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, st -> tripwire.bekBuildSettings(st));
+            addModuleGroup(table, moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, st -> betterPolyAi.bekBuildSettings(st));
+            addModuleGroup(table, moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, st -> advancedReplace.bekBuildSettings(st));
+            addModuleGroup(table, moduleProfiler, !isModuleFailed(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
         });
         settingsRegistered = true;
+    }
+
+    private void addModuleGroup(SettingsMenuDialog.SettingsTable table, String moduleId, boolean available, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){
+        if(!available || isModuleFailed(moduleId)){
+            addGroup(table, title, icon, this::addFailurePlaceholder);
+            return;
+        }
+
+        addGroup(table, title, icon, nested -> {
+            if(isModuleFailed(moduleId)){
+                addFailurePlaceholder(nested);
+                return;
+            }
+            try{
+                builder.get(nested);
+            }catch(Throwable t){
+                recordModuleFailure(moduleId, t);
+                addFailurePlaceholder(nested);
+            }
+        });
+    }
+
+    private void addFailurePlaceholder(SettingsMenuDialog.SettingsTable table){
+        table.pref(new RbmStyle.SubHeaderSetting(moduleFailureMessage));
     }
 
     private static void addGroup(SettingsMenuDialog.SettingsTable table, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){

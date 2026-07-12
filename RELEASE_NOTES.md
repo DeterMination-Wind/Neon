@@ -1,5 +1,23 @@
 # Neon Release Notes
 
+## v10.1.2
+
+### 中文
+
+- 修复 Steam / 原版 Mindustry v159.3 中仅因安装了名称为 `mindustryx` 或 `mdtx` 的模组描述符，就把 Neon 误判为旧版 MindustryX 并中止加载的问题；现在仅以实际加载器注入信号判断 MindustryX 运行时。
+- 聚合子模块改为独立初始化和失败隔离：单个模块的构造、初始化、命令或设置失败不会再让整个 Neon 从模组列表和设置中消失；失败模块会在 Neon 设置页显示日志提示。
+- 将性能分析器等全局 Overlay/UI 注册延后到聚合入口已确认可继续运行之后，避免加载失败时残留脱离模组生命周期的窗口。
+- 同步 Power Grid Minimap v1.18.2，修复 MI2U 非正方形小地图、缩放和异常视口矩形下的电网叠加层偏移、裁剪或不显示问题。
+
+### English
+
+- Fixed Neon being mistaken for legacy MindustryX on Steam / vanilla Mindustry v159.3 merely because a mod descriptor named `mindustryx` or `mdtx` was installed. Runtime detection now relies only on actual loader-injection signals.
+- Bundled modules now initialize independently. A constructor, initialization, command, or settings failure in one module no longer removes all of Neon from the mod list and settings; the failed module shows a log hint in Neon settings.
+- Delayed global Overlay/UI registration, including the profiler, until the aggregate entry has safely continued, preventing orphaned windows after a failed load.
+- Synced Power Grid Minimap v1.18.2, fixing shifted, clipped, or invisible grid overlays on MI2U minimaps with non-square layouts, zoom changes, or malformed viewport rectangles.
+
+---
+
 ## v10.1.1
 
 ### 中文

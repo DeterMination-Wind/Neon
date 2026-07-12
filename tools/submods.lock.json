@@ -4,11 +4,11 @@
   "mods": {
     "pgmm": {
       "sourceKind": "git",
-      "syncedHead": "78b2ab22476d2c73581c18aded0f10779b131060",
-      "workspaceHeadAtSync": "78b2ab22476d2c73581c18aded0f10779b131060",
-      "workspaceDirtyAtSync": true,
+      "syncedHead": "515a6917b9242b14c008eec182cf27818a44c811",
+      "workspaceHeadAtSync": "515a6917b9242b14c008eec182cf27818a44c811",
+      "workspaceDirtyAtSync": false,
       "upstreamRef": "origin/main",
-      "upstreamHeadAtSync": "78b2ab22476d2c73581c18aded0f10779b131060",
+      "upstreamHeadAtSync": "515a6917b9242b14c008eec182cf27818a44c811",
       "aheadOfUpstreamAtSync": 0,
       "behindUpstreamAtSync": 0,
       "repoUrl": null,

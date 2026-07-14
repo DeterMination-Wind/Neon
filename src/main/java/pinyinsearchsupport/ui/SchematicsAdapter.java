@@ -1,7 +1,6 @@
 package pinyinsearchsupport.ui;
 
 import arc.scene.Element;
-import arc.scene.Group;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Cell;
@@ -30,8 +29,12 @@ public final class SchematicsAdapter{
     }
 
     public static boolean filter(TextField field, String query, MatchEngine.MatchOptions opts){
+        return filter(field, query, opts, ScopeTree.capture(field));
+    }
+
+    static boolean filter(TextField field, String query, MatchEngine.MatchOptions opts, ScopeTree.Context context){
         Target target = find(field);
-        if(target == null || query == null || query.isEmpty()) return false;
+        if(target == null || query == null || query.isEmpty() || context == null || !context.isActive(field)) return false;
 
         String previousSearch = null;
         Seq<Schematic> candidates;
@@ -42,7 +45,8 @@ public final class SchematicsAdapter{
             target.rebuild.run();
 
             candidates = candidates(target);
-            scope = locateResults(field, candidates.size);
+            ScopeTree located = ScopeTree.locate(field, context);
+            scope = located == null ? null : new ResultScope(located);
             if(scope == null || !scope.isValid()){
                 Log.warn("[PinyinSearchSupport] schematics results table not found");
                 return false;
@@ -169,61 +173,6 @@ public final class SchematicsAdapter{
         return Math.max(1, cols);
     }
 
-    private static ResultScope locateResults(TextField field, int expectedCards){
-        Element cursor = field.parent;
-        ResultScope best = null;
-        int bestScore = Integer.MIN_VALUE;
-        for(int depth = 0; depth < 16 && cursor != null; depth++){
-            if(cursor instanceof Group){
-                Seq<ScrollPane> panes = new Seq<ScrollPane>();
-                collectPanes(cursor, panes);
-                for(int i = 0; i < panes.size; i++){
-                    ScrollPane pane = panes.get(i);
-                    if(!(pane.getWidget() instanceof Table)) continue;
-                    if(pane.getHeight() > 0f && pane.getHeight() < 80f) continue;
-
-                    Table table = (Table)pane.getWidget();
-                    int score = countDescendants(table);
-                    int cellCount = table.getCells().size;
-                    if(expectedCards > 0){
-                        score += Math.max(0, 500 - Math.abs(cellCount - expectedCards) * 20);
-                    }else if(cellCount <= 1){
-                        score += 500;
-                    }
-                    if(pane.getHeight() >= 80f) score += 1000;
-
-                    if(score > bestScore){
-                        bestScore = score;
-                        best = new ResultScope(pane, table);
-                    }
-                }
-            }
-            cursor = cursor.parent;
-        }
-        return best;
-    }
-
-    private static void collectPanes(Element root, Seq<ScrollPane> out){
-        if(root instanceof ScrollPane) out.add((ScrollPane)root);
-        if(root instanceof Group){
-            Seq<Element> children = ((Group)root).getChildren();
-            for(int i = 0; i < children.size; i++){
-                collectPanes(children.get(i), out);
-            }
-        }
-    }
-
-    private static int countDescendants(Element root){
-        if(root == null) return 0;
-        if(!(root instanceof Group)) return 1;
-        int count = 1;
-        Seq<Element> children = ((Group)root).getChildren();
-        for(int i = 0; i < children.size; i++){
-            count += countDescendants(children.get(i));
-        }
-        return count;
-    }
-
     private static boolean ensure(){
         if(unavailable) return false;
         if(searchFieldField != null && searchTextField != null && rebuildPaneField != null
@@ -264,16 +213,19 @@ public final class SchematicsAdapter{
     }
 
     private static final class ResultScope{
+        final ScopeTree owner;
         final ScrollPane pane;
         final Table table;
 
-        ResultScope(ScrollPane pane, Table table){
-            this.pane = pane;
-            this.table = table;
+        ResultScope(ScopeTree owner){
+            this.owner = owner;
+            this.pane = owner.primaryPane();
+            this.table = owner.primaryTable();
         }
 
         boolean isValid(){
-            return pane != null && pane.getScene() != null
+            return owner != null && owner.isValid()
+                && pane != null && pane.getScene() != null
                 && table != null && table.getScene() != null;
         }
     }

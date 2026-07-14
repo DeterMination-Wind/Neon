@@ -118,6 +118,8 @@ public class BekToolsMod extends Mod{
         ModSupplier<BetterProjectorOverlayMod> betterProjectorOverlaySupplier,
         ModSupplier<BetterHotKeyMod> betterHotKeySupplier
     ){
+        DataImagePackerCompat.installHooks();
+
         markBundled(modulePgmm, () -> PowerGridMinimapMod.bekBundled = true);
         markBundled(moduleStealthPath, () -> StealthPathMod.bekBundled = true);
         markBundled(moduleRadialBuildMenu, () -> RadialBuildMenuMod.bekBundled = true);

@@ -1,8 +1,11 @@
 package pinyinsearchsupport.ui;
 
+import arc.Core;
 import arc.scene.Element;
 import arc.scene.Group;
+import arc.scene.Scene;
 import arc.scene.ui.Button;
+import arc.scene.ui.Dialog;
 import arc.scene.ui.Image;
 import arc.scene.ui.Label;
 import arc.scene.ui.ScrollPane;
@@ -11,19 +14,24 @@ import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Log;
+import mindustry.Vars;
 import pinyinsearchsupport.match.MatchEngine;
 
 public final class ScopeTree{
     public enum LayoutMode{ LIST, GRID, SECTIONED }
 
+    private final TextField field;
+    private final Context context;
     private final Seq<SubScope> scopes;
 
-    private ScopeTree(Seq<SubScope> scopes){
+    private ScopeTree(TextField field, Context context, Seq<SubScope> scopes){
+        this.field = field;
+        this.context = context;
         this.scopes = scopes;
     }
 
     public boolean isValid(){
-        if(scopes == null || scopes.isEmpty()) return false;
+        if(context == null || !context.isActive(field) || scopes == null || scopes.isEmpty()) return false;
         for(int i = 0; i < scopes.size; i++){
             if(!scopes.get(i).isValid()) return false;
         }
@@ -31,53 +39,35 @@ public final class ScopeTree{
     }
 
     public static ScopeTree locate(TextField field){
-        if(field == null || field.getScene() == null) return null;
+        return locate(field, capture(field));
+    }
 
-        // Walk up to find a dialog root that contains at least one ScrollPane with a Table widget
-        Group dialogRoot = null;
-        Group cursor = field.parent;
-        for(int depth = 0; depth < 12 && cursor != null; depth++){
-            if(hasQualifyingScrollPane(cursor)){
-                dialogRoot = cursor;
-                break;
-            }
-            cursor = cursor.parent;
-        }
-        if(dialogRoot == null) return null;
+    static ScopeTree locate(TextField field, Context context){
+        if(context == null || !context.isActive(field)) return null;
 
-        // BFS collect all ScrollPanes under dialogRoot
         Seq<ScrollPane> allPanes = new Seq<>();
-        collectScrollPanes(dialogRoot, allPanes);
+        collectScrollPanes(context.root, context.root, allPanes);
 
-        // Filter: widget must be Table with >= 2 cells; skip horizontal chip rows
-        Seq<ScrollPane> candidates = new Seq<>();
+        Candidate best = null;
+        boolean ambiguous = false;
         for(int i = 0; i < allPanes.size; i++){
             ScrollPane sp = allPanes.get(i);
-            Element w = sp.getWidget();
-            if(!(w instanceof Table)) continue;
-            Table t = (Table)w;
-            if(t.getCells().size < 2) continue;
-            // Skip horizontal chip/filter rows without excluding real result
-            // panes that happen to disable Y scrolling before layout.
-            if(sp.getHeight() > 0f && sp.getHeight() < 80f) continue;
-            candidates.add(sp);
+            Candidate candidate = candidate(field, context, sp);
+            if(candidate == null) continue;
+
+            if(best == null || candidate.score.compareTo(best.score) < 0){
+                best = candidate;
+                ambiguous = false;
+            }else if(candidate.score.compareTo(best.score) == 0){
+                ambiguous = true;
+            }
         }
 
-        if(candidates.isEmpty()) return null;
-
-        // Sort by descendant count descending, take top 3
-        candidates.sort((a, b) -> countDescendants(b.getWidget()) - countDescendants(a.getWidget()));
-        int take = Math.min(3, candidates.size);
+        if(best == null || ambiguous) return null;
 
         Seq<SubScope> scopes = new Seq<>();
-        for(int i = 0; i < take; i++){
-            ScrollPane sp = candidates.get(i);
-            Table t = (Table)sp.getWidget();
-            LayoutMode mode = detectMode(t);
-            scopes.add(new SubScope(sp, t, mode));
-        }
-
-        return new ScopeTree(scopes);
+        scopes.add(new SubScope(field, context, best.pane, best.table, detectMode(best.table)));
+        return new ScopeTree(field, context, scopes);
     }
 
     public void postFilter(String query, MatchEngine.MatchOptions opts){
@@ -90,32 +80,110 @@ public final class ScopeTree{
 
     // ---- helpers ----
 
-    private static boolean hasQualifyingScrollPane(Group root){
+    static Context capture(TextField field){
+        if(field == null || field.getScene() == null || field.parent == null) return null;
+
+        Scene scene = field.getScene();
+        Group originalParent = field.parent;
+        Group boundary = globalBoundaryOf(field);
+        Group cursor = originalParent;
+        for(int depth = 0; depth < 32 && cursor != null; depth++){
+            if(cursor instanceof Dialog){
+                return new Context(scene, cursor, (Dialog)cursor, originalParent, boundary);
+            }
+            if(cursor == scene.root || cursor == boundary) break;
+            cursor = cursor.parent;
+        }
+
+        // Global UI groups are hard boundaries, not blanket exclusion zones.
+        // A strict local descendant may own a search field and result pane,
+        // but the boundary itself can never become the inferred scope.
+        cursor = originalParent;
+        for(int depth = 0; depth < 32 && cursor != null && cursor != scene.root && cursor != boundary; depth++){
+            Context context = new Context(scene, cursor, null, originalParent, boundary);
+            if(hasQualifyingScrollPane(field, context)){
+                return context;
+            }
+            cursor = cursor.parent;
+        }
+        return null;
+    }
+
+    ScrollPane primaryPane(){
+        return scopes == null || scopes.isEmpty() ? null : scopes.first().pane;
+    }
+
+    Table primaryTable(){
+        return scopes == null || scopes.isEmpty() ? null : scopes.first().table;
+    }
+
+    private static boolean hasQualifyingScrollPane(TextField field, Context context){
         Seq<ScrollPane> panes = new Seq<>();
-        collectScrollPanes(root, panes);
+        collectScrollPanes(context.root, context.root, panes);
         for(int i = 0; i < panes.size; i++){
-            ScrollPane sp = panes.get(i);
-            Element w = sp.getWidget();
-            if(w instanceof Table && ((Table)w).getCells().size >= 4) return true;
+            if(candidate(field, context, panes.get(i)) != null) return true;
         }
         return false;
     }
 
-    private static void collectScrollPanes(Element root, Seq<ScrollPane> out){
-        if(root instanceof ScrollPane) out.add((ScrollPane)root);
-        if(root instanceof Group){
-            Seq<Element> ch = ((Group)root).getChildren();
-            for(int i = 0; i < ch.size; i++) collectScrollPanes(ch.get(i), out);
+    private static void collectScrollPanes(Element root, Element current, Seq<ScrollPane> out){
+        if(current != root){
+            if(current instanceof Dialog) return;
+            if(current instanceof Group && isGlobalUiGroup((Group)current)) return;
+        }
+        if(current instanceof ScrollPane) out.add((ScrollPane)current);
+        if(current instanceof Group){
+            Seq<Element> ch = ((Group)current).getChildren();
+            for(int i = 0; i < ch.size; i++) collectScrollPanes(root, ch.get(i), out);
         }
     }
 
-    private static int countDescendants(Element root){
-        if(root == null) return 0;
-        if(!(root instanceof Group)) return 1;
-        int count = 1;
-        Seq<Element> ch = ((Group)root).getChildren();
-        for(int i = 0; i < ch.size; i++) count += countDescendants(ch.get(i));
-        return count;
+    private static Candidate candidate(TextField field, Context context, ScrollPane pane){
+        if(field == null || context == null || pane == null || pane.getScene() != context.scene) return null;
+        if(!context.owns(field) || !context.owns(pane)) return null;
+        Element widget = pane.getWidget();
+        if(!(widget instanceof Table)) return null;
+
+        Table table = (Table)widget;
+        if(table.getScene() != context.scene || table.getCells().isEmpty()) return null;
+        if(pane.getHeight() > 0f && pane.getHeight() < 80f) return null;
+        if(field.isDescendantOf(pane) || field.isDescendantOf(table)) return null;
+        if(!context.owns(table)) return null;
+        if(!hasActor(table)) return null;
+
+        StructuralScore score = StructuralScore.between(field, pane, context.root);
+        return score == null ? null : new Candidate(pane, table, score);
+    }
+
+    private static boolean hasActor(Table table){
+        Seq<Cell> cells = table.getCells();
+        for(int i = 0; i < cells.size; i++){
+            if(cells.get(i).get() != null) return true;
+        }
+        return false;
+    }
+
+    private static boolean isGlobalUiGroup(Group group){
+        return Vars.ui != null && (group == Vars.ui.menuGroup || group == Vars.ui.hudGroup);
+    }
+
+    private static Group globalBoundaryOf(Element element){
+        Element cursor = element;
+        while(cursor != null){
+            if(cursor instanceof Group && isGlobalUiGroup((Group)cursor)) return (Group)cursor;
+            cursor = cursor.parent;
+        }
+        return null;
+    }
+
+    private static boolean visibleThrough(Element element, Element root){
+        Element cursor = element;
+        while(cursor != null){
+            if(!cursor.visible) return false;
+            if(cursor == root) return true;
+            cursor = cursor.parent;
+        }
+        return false;
     }
 
     private static LayoutMode detectMode(Table t){
@@ -148,20 +216,154 @@ public final class ScopeTree{
 
     // ---- SubScope ----
 
+    static final class Context{
+        final Scene scene;
+        final Group root;
+        final Dialog dialog;
+        final Group originalParent;
+        final Group boundary;
+
+        Context(Scene scene, Group root, Dialog dialog, Group originalParent, Group boundary){
+            this.scene = scene;
+            this.root = root;
+            this.dialog = dialog;
+            this.originalParent = originalParent;
+            this.boundary = boundary;
+        }
+
+        boolean owns(Element element){
+            if(element == null || scene == null || root == null) return false;
+            if(element.getScene() != scene || root.getScene() != scene) return false;
+            if(root == scene.root || isGlobalUiGroup(root) || !element.isDescendantOf(root)) return false;
+
+            if(boundary != null){
+                if(!isGlobalUiGroup(boundary) || boundary.getScene() != scene) return false;
+                return root != boundary && root.isDescendantOf(boundary) && element.isDescendantOf(boundary);
+            }
+
+            return globalBoundaryOf(root) == null && globalBoundaryOf(element) == null;
+        }
+
+        boolean isActive(TextField field){
+            if(field == null || scene == null || root == null || originalParent == null) return false;
+            if(Core.scene != scene || field.parent != originalParent || !owns(field)) return false;
+            if(!visibleThrough(field, root)) return false;
+
+            Element keyboard = scene.getKeyboardFocus();
+            Element scroll = scene.getScrollFocus();
+            if(dialog != null){
+                if(!dialog.isShown()) return false;
+                return keyboard != null && keyboard.isDescendantOf(dialog)
+                    || scroll != null && scroll.isDescendantOf(dialog);
+            }
+
+            return keyboard != null && keyboard.isDescendantOf(root);
+        }
+    }
+
+    private static final class Candidate{
+        final ScrollPane pane;
+        final Table table;
+        final StructuralScore score;
+
+        Candidate(ScrollPane pane, Table table, StructuralScore score){
+            this.pane = pane;
+            this.table = table;
+            this.score = score;
+        }
+    }
+
+    private static final class StructuralScore implements Comparable<StructuralScore>{
+        final int fieldDepth;
+        final int totalDepth;
+        final int directionPenalty;
+        final int siblingGap;
+
+        StructuralScore(int fieldDepth, int totalDepth, int directionPenalty, int siblingGap){
+            this.fieldDepth = fieldDepth;
+            this.totalDepth = totalDepth;
+            this.directionPenalty = directionPenalty;
+            this.siblingGap = siblingGap;
+        }
+
+        static StructuralScore between(Element field, Element pane, Group root){
+            Element common = field;
+            int fieldDepth = 0;
+            while(common != null && !pane.isDescendantOf(common)){
+                common = common.parent;
+                fieldDepth++;
+            }
+            if(common == null || !common.isDescendantOf(root)) return null;
+
+            int paneDepth = 0;
+            Element cursor = pane;
+            while(cursor != null && cursor != common){
+                cursor = cursor.parent;
+                paneDepth++;
+            }
+            if(cursor != common) return null;
+
+            int directionPenalty = 0;
+            int siblingGap = 0;
+            if(common instanceof Group){
+                Element fieldBranch = branchBelow(field, common);
+                Element paneBranch = branchBelow(pane, common);
+                if(fieldBranch != null && paneBranch != null && fieldBranch != paneBranch){
+                    Seq<Element> children = ((Group)common).getChildren();
+                    int fieldIndex = children.indexOf(fieldBranch, true);
+                    int paneIndex = children.indexOf(paneBranch, true);
+                    if(fieldIndex >= 0 && paneIndex >= 0){
+                        directionPenalty = paneIndex >= fieldIndex ? 0 : 1;
+                        siblingGap = Math.abs(paneIndex - fieldIndex);
+                    }
+                }
+            }
+
+            return new StructuralScore(fieldDepth, fieldDepth + paneDepth, directionPenalty, siblingGap);
+        }
+
+        private static Element branchBelow(Element element, Element ancestor){
+            Element cursor = element;
+            Element branch = element;
+            while(cursor != null && cursor != ancestor){
+                branch = cursor;
+                cursor = cursor.parent;
+            }
+            return cursor == ancestor ? branch : null;
+        }
+
+        @Override
+        public int compareTo(StructuralScore other){
+            int result = Integer.compare(fieldDepth, other.fieldDepth);
+            if(result != 0) return result;
+            result = Integer.compare(totalDepth, other.totalDepth);
+            if(result != 0) return result;
+            result = Integer.compare(directionPenalty, other.directionPenalty);
+            if(result != 0) return result;
+            return Integer.compare(siblingGap, other.siblingGap);
+        }
+    }
+
     private static final class SubScope{
+        final TextField field;
+        final Context context;
         final ScrollPane pane;
         final Table table;
         final LayoutMode mode;
 
-        SubScope(ScrollPane pane, Table table, LayoutMode mode){
+        SubScope(TextField field, Context context, ScrollPane pane, Table table, LayoutMode mode){
+            this.field = field;
+            this.context = context;
             this.pane = pane;
             this.table = table;
             this.mode = mode;
         }
 
         boolean isValid(){
-            return pane != null && pane.getScene() != null
-                && table != null && table.getScene() != null;
+            return context != null && context.isActive(field)
+                && pane != null && context.owns(pane)
+                && table != null && context.owns(table)
+                && !field.isDescendantOf(table);
         }
 
         void filter(String query, MatchEngine.MatchOptions opts){
@@ -186,6 +388,9 @@ public final class ScopeTree{
         }
 
         private int filterTable(Table target, LayoutMode layout, String query, MatchEngine.MatchOptions opts){
+            if(target == null || target == context.root || field.isDescendantOf(target)) return 0;
+            if(target == table && !context.owns(target)) return 0;
+
             Seq<Cell> cells = target.getCells();
             if(cells.isEmpty()) return 0;
 

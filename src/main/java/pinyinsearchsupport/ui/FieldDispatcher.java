@@ -168,11 +168,13 @@ public final class FieldDispatcher{
             fireVanilla(field);
             return;
         }
+        final ScopeTree.Context context = ScopeTree.capture(field);
         int delay = Math.max(0, Core.settings.getInt(PinyinSearchSupportMod.keyDelayMs, PinyinSearchSupportMod.defaultDelayMs));
         if(delay <= 0){
-            runFilter(field);
+            runFilter(field, context);
             return;
         }
+        final String scheduledText = field.getText();
         final FieldDispatcher self = this;
         Timer.Task t = Timer.schedule(new Timer.Task(){
             @Override
@@ -183,8 +185,13 @@ public final class FieldDispatcher{
                     public void run(){
                         if(debounces.get(field) != taskRef) return;
                         debounces.remove(field);
-                        if(field.getScene() == null) return;
-                        self.runFilter(field);
+                        String currentText = field.getText();
+                        boolean sameText = scheduledText == null ? currentText == null : scheduledText.equals(currentText);
+                        if(!sameText || context == null || !context.isActive(field)){
+                            self.fireVanilla(field);
+                            return;
+                        }
+                        self.runFilter(field, context);
                     }
                 });
             }
@@ -192,7 +199,7 @@ public final class FieldDispatcher{
         debounces.put(field, t);
     }
 
-    private void runFilter(TextField field){
+    private void runFilter(TextField field, ScopeTree.Context context){
         Seq<ChangeListener> list = vanillas.get(field);
         if(list == null || list.isEmpty()) return;
 
@@ -200,6 +207,11 @@ public final class FieldDispatcher{
         if(typed == null) typed = "";
 
         if(typed.isEmpty() || !shouldUsePinyinSearch(typed) || isModsSearchField(field)){
+            fireListeners(field, list);
+            return;
+        }
+
+        if(context == null || !context.isActive(field)){
             fireListeners(field, list);
             return;
         }
@@ -217,15 +229,9 @@ public final class FieldDispatcher{
         }
 
         if(SchematicsAdapter.isSchematicsSearch(field)){
-            if(!SchematicsAdapter.filter(field, typed, opts)){
+            if(!SchematicsAdapter.filter(field, typed, opts, context)){
                 fireListeners(field, list);
             }
-            return;
-        }
-
-        ScopeTree scope = ScopeTree.locate(field);
-        if(scope == null || !scope.isValid()){
-            fireListeners(field, list);
             return;
         }
 
@@ -240,15 +246,22 @@ public final class FieldDispatcher{
             FieldTextProxy.swap(field, prev != null ? prev : typed);
         }
 
-        if(!scope.isValid()){
-            scope = ScopeTree.locate(field);
+        if(!context.isActive(field)){
+            fireListeners(field, list);
+            return;
         }
-        if(scope == null || !scope.isValid()) return;
+
+        ScopeTree scope = ScopeTree.locate(field, context);
+        if(scope == null || !scope.isValid()){
+            fireListeners(field, list);
+            return;
+        }
 
         try{
             scope.postFilter(typed, opts);
         }catch(Throwable t){
             Log.warn("[PinyinSearchSupport] post filter failed: @", t.getMessage());
+            fireListeners(field, list);
         }
     }
 

@@ -2450,8 +2450,8 @@ public class PatchViewerMod extends Mod{
                 inset.add("[lightgray]" + label + ":[] ").top().left();
                 if(blockRow) inset.row();
                 float valueWidth = rowValueWidth(label, contentWidth, kind);
-                if(row == null && currentRow != null){
-                    renderSnapshotRow(inset, currentRow, valueWidth);
+                if(row == null && source != null){
+                    renderSnapshotRow(inset, source, valueWidth);
                 }else if(isBuildCostDiffRow(row)){
                     renderBuildCostDiff(inset, row.buildCostBefore, row.buildCostAfter, valueWidth);
                 }else if(row != null && row.nativeWidgetDiff){

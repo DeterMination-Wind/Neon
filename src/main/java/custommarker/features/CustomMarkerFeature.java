@@ -33,7 +33,6 @@ import arc.util.pooling.Pools;
 import bektools.profiler.NeonProfiler;
 import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.MarkerBridge;
-import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.gen.Call;
@@ -149,7 +148,6 @@ public class CustomMarkerFeature {
             nativeMarkers.tryInit();
             vanillaPingMarkers.tryInit();
             ensureUiAttached();
-            syncOverlayButtonWindow(true);
         });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
@@ -318,7 +316,6 @@ public class CustomMarkerFeature {
             removeFallbackOverlayHost();
 
             if (xOverlayWindow == null) {
-                boolean hadStoredState = hasStoredOverlayWindowState(overlayWindowName);
                 xOverlayWindow = xOverlayUi.registerWindow(
                     overlayWindowName,
                     createOverlayButtonContent(),
@@ -326,16 +323,12 @@ public class CustomMarkerFeature {
                 );
                 if (xOverlayWindow != null) {
                     xOverlayWindow.configure(true, false);
-                }
-                if (hadStoredState) {
-                    Boolean visible = xOverlayWindow == null ? null : xOverlayWindow.getEnabled();
+                    Boolean visible = xOverlayWindow.getEnabled();
                     if (visible != null) {
                         overlayWindowVisible = visible;
                         lastOverlayVisible = visible;
                         Core.settings.put(keyOverlayWindowVisible, visible);
                     }
-                } else {
-                    syncOverlayButtonWindow(true);
                 }
             }
             return;
@@ -369,13 +362,6 @@ public class CustomMarkerFeature {
         if (xChatListWindow != null) {
             xChatListWindow.configure(false, true);
         }
-        if (xChatListWindow != null && !hasStoredOverlayWindowState(chatListWindowName)) {
-            xChatListWindow.setEnabledAndPinned(true, false);
-        }
-    }
-
-    private static boolean hasStoredOverlayWindowState(String windowName) {
-        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private static void removeFallbackOverlayHost() {

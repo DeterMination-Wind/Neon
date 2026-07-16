@@ -29,7 +29,6 @@ import arc.util.serialization.Json;
 import arc.util.serialization.JsonReader;
 import arc.util.serialization.JsonValue;
 import mdtxcompat.LegacyMindustryXGuard;
-import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
@@ -1547,9 +1546,6 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(overlayQueryWindow == null){
             overlayQueryWindow = overlayUI.registerWindow(overlayQueryWindowName, overlayQueryContent.root, () -> Vars.state.isGame());
             if(overlayQueryWindow != null) overlayQueryWindow.configure(false, true);
-            if(overlayQueryWindow != null && !hasStoredOverlayWindowState(overlayQueryWindowName)){
-                overlayQueryWindow.setEnabledAndPinned(true, false);
-            }
         }
 
         if(debugContent == null){
@@ -1558,14 +1554,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(overlayDebugWindow == null){
             overlayDebugWindow = overlayUI.registerWindow(overlayDebugWindowName, debugContent.root, () -> Vars.state.isGame());
             if(overlayDebugWindow != null) overlayDebugWindow.configure(false, true);
-            if(overlayDebugWindow != null && !hasStoredOverlayWindowState(overlayDebugWindowName)){
-                overlayDebugWindow.setEnabledAndPinned(false, false);
-            }
         }
-    }
-
-    private boolean hasStoredOverlayWindowState(String windowName){
-        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private boolean compactUi(){

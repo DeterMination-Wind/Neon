@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "10.1.3"
+version = "10.2.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -100,8 +100,8 @@ tasks.named("test").configure{
 
 jar{
     // A Mindustry Java mod is a zip/jar archive with classes + resources.
-    // Use .zip extension for distribution.
-    archiveFileName = "Neon.zip"
+    // Keep the desktop-only intermediate separate from the merged release zip.
+    archiveFileName = "Neon-desktop.zip"
     from(projectDir){
         include "mod.json"
         include "mod.hjson"

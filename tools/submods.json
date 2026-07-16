@@ -179,6 +179,19 @@
       "bundlesDir": "src/main/resources/bundles",
       "injectBekHooks": false,
       "allowNoGit": true
+    },
+    {
+      "id": "random",
+      "name": "Random",
+      "localPath": "../Random",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/random",
+      "extraJavaDirs": [
+        "src/main/java/mindustry/ui/dialogs"
+      ],
+      "mainClassFile": "RandomMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
     }
   ]
 }

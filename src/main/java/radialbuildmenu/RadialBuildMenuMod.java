@@ -33,7 +33,6 @@ import arc.util.Time;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.Jformat;
 import mdtxcompat.LegacyMindustryXGuard;
-import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.WorldLoadEvent;
@@ -2583,10 +2582,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     xMobileToggleWindow = xOverlayUi.registerWindow(mobileWindowName, content, () -> state != null && state.isGame());
                     if(xMobileToggleWindow != null && xMobileToggleWindow.asElement() != null){
                         xMobileToggleWindow.configure(false, true);
-                        // Auto-enable only on first registration; afterwards keep OverlayUI's persisted visibility.
-                        if(!hasStoredOverlayWindowState(mobileWindowName)){
-                            xMobileToggleWindow.setEnabledAndPinned(true, false);
-                        }
                         return;
                     }
                 }catch(Throwable t){
@@ -2608,10 +2603,6 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
             content.setPosition(Core.graphics.getWidth() / 2f, Core.graphics.getHeight() / 2f, Align.center);
             content.toFront();
         });
-    }
-
-    private static boolean hasStoredOverlayWindowState(String windowName){
-        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private Table buildMobileToggleContent(){

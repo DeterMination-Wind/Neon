@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-07-14T03:54:24Z",
+  "generatedAtUtc": "2026-07-16T09:44:02Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -222,6 +222,19 @@
       "repoUrl": null,
       "branch": null,
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\AdvancedReplace"
+    },
+    "random": {
+      "sourceKind": "git",
+      "syncedHead": "15d87f94ae345fc2e702869584fefc2eff7443e8",
+      "workspaceHeadAtSync": "15d87f94ae345fc2e702869584fefc2eff7443e8",
+      "workspaceDirtyAtSync": true,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "15d87f94ae345fc2e702869584fefc2eff7443e8",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\Random"
     }
   }
 }

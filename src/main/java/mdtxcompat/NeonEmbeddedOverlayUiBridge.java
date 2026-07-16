@@ -41,12 +41,17 @@ final class NeonEmbeddedOverlayUiBridge implements OverlayUiBridge {
     public OverlayWindowHandle registerWindow(String name, Table table, Prov<Boolean> availability) {
         if (!ensureReady()) return NO_WINDOW;
         try {
+            boolean hasStoredState = OverlaySettingsCompat.hasStoredWindowState(name);
             OverlayUI.Window window = OverlayUI.INSTANCE.registerWindow(name, table);
             if (availability != null) {
                 window.setAvailability(availability);
             }
+            WindowHandle handle = new WindowHandle(window);
+            if (!hasStoredState) {
+                handle.applyDefaultHiddenState();
+            }
             Log.info("Neon OverlayUI integration: registered embedded window '" + name + "'.");
-            return new WindowHandle(window);
+            return handle;
         } catch (Throwable t) {
             disable("Neon OverlayUI integration: embedded registerWindow failed for '" + name + "'; disabling integration.", t);
             return NO_WINDOW;
@@ -97,6 +102,10 @@ final class NeonEmbeddedOverlayUiBridge implements OverlayUiBridge {
 
         private WindowHandle(OverlayUI.Window window) {
             this.window = window;
+        }
+
+        private void applyDefaultHiddenState() {
+            window.getData().setEnabled(false);
         }
 
         @Override

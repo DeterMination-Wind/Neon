@@ -38,6 +38,7 @@ import patchviewer.PatchViewerMod;
 import pinyinsearchsupport.PinyinSearchSupportMod;
 import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
+import random.RandomMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
 import stealthpath.StealthPathMod;
 import tripwire.TripwireMod;
@@ -70,6 +71,7 @@ public class BekToolsMod extends Mod{
     private static final String moduleTripwire = "tw";
     private static final String moduleBetterPolyAi = "bpa";
     private static final String moduleAdvancedReplace = "ar";
+    private static final String moduleRandom = "random";
     private static final String moduleProfiler = "profiler";
     private static final String moduleUsageReporter = "usage-reporter";
 
@@ -92,6 +94,7 @@ public class BekToolsMod extends Mod{
     private final TripwireMod tripwire;
     private final BetterPolyAiMod betterPolyAi;
     private final AdvancedReplaceMod advancedReplace;
+    private final RandomMod random;
     private final PostHogUsageReporter postHogUsageReporter;
     private boolean settingsRegistered;
 
@@ -137,6 +140,7 @@ public class BekToolsMod extends Mod{
         markBundled(moduleTripwire, () -> TripwireMod.bekBundled = true);
         markBundled(moduleBetterPolyAi, () -> BetterPolyAiMod.bekBundled = true);
         markBundled(moduleAdvancedReplace, () -> AdvancedReplaceMod.bekBundled = true);
+        markBundled(moduleRandom, () -> RandomMod.bekBundled = true);
 
         pgmm = initializeModule(modulePgmm, pgmmSupplier);
         stealthPath = initializeModule(moduleStealthPath, stealthPathSupplier);
@@ -197,6 +201,11 @@ public class BekToolsMod extends Mod{
         });
         advancedReplace = initializeModule(moduleAdvancedReplace, () -> {
             AdvancedReplaceMod mod = new AdvancedReplaceMod();
+            mod.init();
+            return mod;
+        });
+        random = initializeModule(moduleRandom, () -> {
+            RandomMod mod = new RandomMod();
             mod.init();
             return mod;
         });

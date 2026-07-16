@@ -32,7 +32,6 @@ import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
 import mdtxcompat.LegacyMindustryXGuard;
-import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.*;
 import mindustry.game.Team;
@@ -5982,7 +5981,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowMode, true)
                     );
                     if(xModeWindow != null) xModeWindow.configure(false, true);
-                    if(enabled && showMode && !hasStoredOverlayWindowState(overlayWindowModeName) && xModeWindow != null) xModeWindow.setEnabledAndPinned(true, false);
                 }
                 if(xDamageWindow == null){
                     try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
@@ -5992,7 +5990,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowDamage, true)
                     );
                     if(xDamageWindow != null) xDamageWindow.configure(false, true);
-                    if(enabled && showDamage && !hasStoredOverlayWindowState(overlayWindowDamageName) && xDamageWindow != null) xDamageWindow.setEnabledAndPinned(true, false);
                 }
                 if(xControlsWindow == null){
                     try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
@@ -6002,7 +5999,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowControls, true)
                     );
                     if(xControlsWindow != null) xControlsWindow.configure(false, true);
-                    if(enabled && showControls && !hasStoredOverlayWindowState(overlayWindowControlsName) && xControlsWindow != null) xControlsWindow.setEnabledAndPinned(true, false);
                 }
                 if(xHoverDpsWindow == null){
                     try{ overlayHoverDpsContent.remove(); }catch(Throwable ignored){}
@@ -6012,7 +6008,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyDebugHoverTurretDps, false)
                     );
                     if(xHoverDpsWindow != null) xHoverDpsWindow.configure(false, true);
-                    if(enabled && showHoverDps && !hasStoredOverlayWindowState(overlayWindowHoverDpsName) && xHoverDpsWindow != null) xHoverDpsWindow.setEnabledAndPinned(true, false);
                 }
                 return;
             }catch(Throwable ignored){
@@ -6028,10 +6023,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
         syncFallbackHud(overlayDamageContent, "sp-ov-dmg", 8f, -84f, enabled && showDamage);
         syncFallbackHud(overlayControlsContent, "sp-ov-ctl", 8f, -152f, enabled && showControls);
         syncFallbackHudRight(overlayHoverDpsContent, "sp-ov-hover", -8f, -8f, enabled && showHoverDps);
-    }
-
-    private boolean hasStoredOverlayWindowState(String windowName){
-        return OverlaySettingsCompat.hasStoredWindowState(windowName);
     }
 
     private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){

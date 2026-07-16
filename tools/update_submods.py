@@ -805,6 +805,65 @@ def merge_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
         write_text(target_dir / name, "\n".join(lines) + "\n")
 
 
+def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
+    """Incrementally merge selected child bundles without reading other workspaces."""
+    target_dir = ROOT / "src/main/resources/bundles"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    bundle_names: set[str] = set()
+    for sm, repo_dir in mods:
+        bundles = repo_join(repo_dir, _source_bundles_dir(sm))
+        for p in bundles.glob("bundle*.properties"):
+            bundle_names.add(p.name)
+
+    for name in sorted(bundle_names):
+        target_path = target_dir / name
+        existing_text = read_text(target_path) if target_path.exists() else ""
+        merged: Dict[str, str] = parse_properties(existing_text)
+        origins: Dict[str, str] = {key: "existing" for key in merged}
+        collisions: List[str] = []
+
+        for sm, repo_dir in mods:
+            src_path = repo_join(repo_dir, _source_bundles_dir(sm)) / name
+            if not src_path.exists():
+                continue
+            props = parse_properties(read_text(src_path))
+            for key, value in props.items():
+                if key in merged and merged[key] != value:
+                    collisions.append(f"{name}: key '{key}' differs between {origins[key]} and {sm.id}")
+                else:
+                    merged[key] = value
+                    origins[key] = sm.id
+
+        if collisions:
+            msg = "\n".join(collisions[:50])
+            raise RuntimeError(f"Bundle merge collisions detected for {name}:\n{msg}")
+
+        bek_extra = TOOLS / "bektools-bundles" / name
+        if bek_extra.exists():
+            extra = parse_properties(read_text(bek_extra))
+            for key, value in extra.items():
+                merged[key] = value
+                origins[key] = "bek"
+
+        source_ids: List[str] = []
+        for line in existing_text.splitlines():
+            if line.startswith("# Sources:"):
+                source_ids = [part.strip() for part in line[len("# Sources:"):].split("+") if part.strip()]
+                break
+        for sm, _ in mods:
+            if sm.id not in source_ids:
+                source_ids.append(sm.id)
+
+        header = [
+            "# Auto-merged for Neon",
+            f"# Sources: {' + '.join(source_ids)}",
+            "",
+        ]
+        lines = header + [f"{key}={merged[key]}" for key in sorted(merged.keys())]
+        write_text(target_path, "\n".join(lines) + "\n")
+
+
 def copy_java(mod: SubMod, repo_dir: Path) -> None:
     source_pairs: List[Tuple[Path, Path]] = []
     if mod.java_package_dir is not None:
@@ -894,16 +953,32 @@ def main(argv: List[str]) -> int:
     ap = argparse.ArgumentParser(description="Sync Neon with local sub-mod checkouts.")
     ap.add_argument("--check", action="store_true", help="Only check for updates; do not write files.")
     ap.add_argument("--force", action="store_true", help="Force rewrite even if lock matches.")
+    ap.add_argument(
+        "--only",
+        nargs="+",
+        metavar="ID",
+        help="Only sync the selected child IDs; unselected workspaces and lock entries are preserved.",
+    )
     args = ap.parse_args(argv)
 
     mods = load_config()
+    known_ids = {mod.id for mod in mods}
+    selected_ids = set(args.only or [])
+    unknown_ids = selected_ids - known_ids
+    if unknown_ids:
+        raise ValueError(f"Unknown --only child ID(s): {', '.join(sorted(unknown_ids))}")
+
+    selected_mods = [mod for mod in mods if not selected_ids or mod.id in selected_ids]
+    if not selected_mods:
+        raise ValueError("--only selected no child modules.")
+
     lock = load_lock()
     lock_mods: dict = lock.get("mods", {})
 
     updated_any = False
     resolved: List[Tuple[SubMod, Path, SourceState]] = []
 
-    for sm in mods:
+    for sm in selected_mods:
         repo_dir = resolve_local_repo(sm)
         state = source_state(sm, repo_dir)
         resolved.append((sm, repo_dir, state))
@@ -924,10 +999,12 @@ def main(argv: List[str]) -> int:
     if args.check:
         return 0
 
-    # Always regenerate bundles when writing, to keep deterministic output.
-    merge_bundles([(sm, repo_dir) for (sm, repo_dir, _state) in resolved])
+    if selected_ids:
+        merge_selected_bundles([(sm, repo_dir) for (sm, repo_dir, _state) in resolved])
+    else:
+        merge_bundles([(sm, repo_dir) for (sm, repo_dir, _state) in resolved])
 
-    # Update lock file.
+    # Update only selected lock entries. Unselected child snapshots remain untouched.
     for sm, _repo_dir, state in resolved:
         lock_mods[sm.id] = {
             "sourceKind": state.source_kind,
@@ -946,7 +1023,7 @@ def main(argv: List[str]) -> int:
     save_lock(lock)
 
     print("Wrote:")
-    for sm in mods:
+    for sm in selected_mods:
         if sm.java_package_dir is not None:
             print(f"  - {sm.java_package_dir.as_posix()}/ (java package)")
         for extra in sm.extra_java_dirs:

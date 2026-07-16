@@ -160,11 +160,13 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         }
         for (PendingWindow pending : pendingWindows.values()) {
             if (pending.handle.window == null) {
+                boolean hasStoredState = OverlaySettingsCompat.hasStoredWindowState(pending.name);
                 Object window = invoke(registerWindowMethod, overlayInstance, pending.name, pending.table);
                 if (window == null) {
                     throw new IllegalStateException("OverlayUI returned null window for " + pending.name);
                 }
                 pending.handle.bind(window);
+                pending.handle.applyDefaultHiddenState(!hasStoredState);
                 Log.info("Neon OverlayUI integration: registered window '" + pending.name + "' via " + window.getClass().getName() + ".");
             }
             pending.handle.applyPendingState();
@@ -305,6 +307,15 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
 
         private void bind(Object window) {
             this.window = window;
+        }
+
+        private void applyDefaultHiddenState(boolean noStoredState) {
+            if (!noStoredState || window == null) return;
+
+            ensureWindowMethods();
+            Object data = invoke(windowGetDataMethod, window);
+            ensureDataMethods(data);
+            invoke(dataSetEnabledMethod, data, false);
         }
 
         private void ensureWindowMethods() {

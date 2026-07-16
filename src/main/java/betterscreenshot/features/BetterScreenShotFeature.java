@@ -17,7 +17,6 @@ import arc.util.Strings;
 import bektools.ui.RbmStyle;
 import bektools.profiler.NeonProfiler;
 import betterscreenshot.core.Screenshot;
-import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.graphics.Pal;
@@ -189,9 +188,6 @@ public class BetterScreenShotFeature {
                 xWindow = xOverlayUi.registerWindow(overlayWindowName, panel, () -> state != null && state.isGame());
                 if (xWindow != null && xWindow.asElement() != null) {
                     xWindow.configure(false, true);
-                    if (!OverlaySettingsCompat.hasStoredWindowState(overlayWindowName) && enabled) {
-                        xWindow.setEnabledAndPinned(true, true);
-                    }
                     lastOverlayEnabled = enabled;
                 }
             }

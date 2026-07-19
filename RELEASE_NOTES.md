@@ -1,13 +1,13 @@
-# Neon v10.2.0
+# Neon v10.3.0
 
 ## 中文
 
-- 新增 Random 聚合模块：可在 Neon 菜单中启用下一局的随机文本与贴图效果，并保持数据库与内容窗口的兼容包装。
-- OverlayUI 窗口首次注册时默认关闭；已有窗口状态继续保留，用户仍可从 OverlayUI 管理面板手动开启并持久化。
-- 改进 Neon 子模组选择性同步工具，支持在不触碰其他本地工作区的情况下合并指定子模组。
+- 设置界面新增“反馈问题”按钮：简体中文和繁体中文用户跳转到 QQ 反馈群，其他语言用户跳转到 Discord 反馈频道。
+- 改进模组更新中心的失败检查处理，网络不可用或仓库不可达时不再用错误信息打断更新列表。
+- 修复拼音搜索筛选蓝图时恢复被原生标签筛选排除的蓝图，并增加对应回归测试。
 
 ## English
 
-- Adds the bundled Random module: enable randomized text and textures for the next world from the Neon menu, with compatibility-preserving database and content-dialog wrappers.
-- OverlayUI windows now start disabled on first registration; existing window states are preserved, and users can still enable and persist them from the OverlayUI manager.
-- Improves the Neon submodule sync tool with selective merging that leaves unrelated local workspaces untouched.
+- Adds a "Report an issue" button to the settings page. Simplified and Traditional Chinese users are sent to QQ, while other locales are sent to the Discord feedback channel.
+- Improves update-center failure handling so unavailable networks or repositories no longer interrupt the update list with error text.
+- Fixes pinyin schematic filtering so schematics excluded by native tag filters are not restored, with a regression test added.

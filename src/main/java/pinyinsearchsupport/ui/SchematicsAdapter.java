@@ -17,7 +17,6 @@ public final class SchematicsAdapter{
     private static volatile Field searchFieldField;
     private static volatile Field searchTextField;
     private static volatile Field rebuildPaneField;
-    private static volatile Field selectedTagsField;
     private static volatile Field firstSchematicField;
     private static volatile boolean unavailable;
 
@@ -37,14 +36,13 @@ public final class SchematicsAdapter{
         if(target == null || query == null || query.isEmpty() || context == null || !context.isActive(field)) return false;
 
         String previousSearch = null;
-        Seq<Schematic> candidates;
+        Seq<Card> candidates;
         ResultScope scope;
         try{
             previousSearch = (String)searchTextField.get(target.dialog);
             searchTextField.set(target.dialog, "");
             target.rebuild.run();
 
-            candidates = candidates(target);
             ScopeTree located = ScopeTree.locate(field, context);
             scope = located == null ? null : new ResultScope(located);
             if(scope == null || !scope.isValid()){
@@ -52,6 +50,7 @@ public final class SchematicsAdapter{
                 return false;
             }
 
+            candidates = visibleCards(scope.table);
             applyFilter(scope, candidates, query, opts, target);
         }catch(Throwable t){
             Log.warn("[PinyinSearchSupport] schematics rebuild adapter failed: @", t.getMessage());
@@ -82,37 +81,60 @@ public final class SchematicsAdapter{
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private static Seq<Schematic> candidates(Target target) throws IllegalAccessException{
-        Seq<Schematic> out = new Seq<Schematic>();
-        Seq<String> selected = (Seq<String>)selectedTagsField.get(target.dialog);
-        boolean hasTags = selected != null && selected.any();
-
-        Seq<Schematic> all = Vars.schematics.all();
-        for(int i = 0; i < all.size; i++){
-            Schematic schematic = all.get(i);
-            if(schematic == null) continue;
-            if(hasTags && (schematic.labels == null || !schematic.labels.containsAll(selected))) continue;
-            out.add(schematic);
+    static Seq<Schematic> visibleCandidates(Table table){
+        Seq<Card> cards = visibleCards(table);
+        Seq<Schematic> out = new Seq<Schematic>(cards.size);
+        for(int i = 0; i < cards.size; i++){
+            out.add(cards.get(i).schematic);
         }
         return out;
     }
 
-    private static void applyFilter(ResultScope scope, Seq<Schematic> candidates, String query,
+    private static Seq<Card> visibleCards(Table table){
+        Seq<Card> out = new Seq<Card>();
+        if(table == null) return out;
+
+        Seq<Cell> cells = table.getCells();
+        for(int i = 0; i < cells.size; i++){
+            Cell<?> cell = cells.get(i);
+            Element actor = cell.get();
+            Schematic schematic = schematicOf(actor);
+            if(schematic != null){
+                out.add(new Card(schematic, actor, CellSnapshot.capture(cell), cell.isEndRow()));
+            }
+        }
+        return out;
+    }
+
+    private static Schematic schematicOf(Element root){
+        if(root == null) return null;
+        if("SchematicImage".equals(root.getClass().getSimpleName())){
+            try{
+                Field field = root.getClass().getDeclaredField("schematic");
+                field.setAccessible(true);
+                Object value = field.get(root);
+                if(value instanceof Schematic) return (Schematic)value;
+            }catch(Throwable ignored){}
+        }
+        if(root instanceof arc.scene.Group){
+            Seq<Element> children = ((arc.scene.Group)root).getChildren();
+            for(int i = 0; i < children.size; i++){
+                Schematic schematic = schematicOf(children.get(i));
+                if(schematic != null) return schematic;
+            }
+        }
+        return null;
+    }
+
+    private static void applyFilter(ResultScope scope, Seq<Card> candidates, String query,
                                     MatchEngine.MatchOptions opts, Target target) throws IllegalAccessException{
         Table table = scope.table;
         float scrollY = scope.pane.getScrollY();
 
-        Seq<Cell> cells = table.getCells();
-        int available = Math.min(candidates.size, cells.size);
-        Element[] actors = new Element[available];
-        CellSnapshot[] snapshots = new CellSnapshot[available];
+        int available = candidates.size;
         boolean[] endRows = new boolean[available];
         for(int i = 0; i < available; i++){
-            Cell<?> cell = cells.get(i);
-            actors[i] = cell.get();
-            snapshots[i] = CellSnapshot.capture(cell);
-            endRows[i] = cell.isEndRow();
+            endRows[i] = candidates.get(i).endRow;
         }
 
         int columns = detectColumns(endRows, available);
@@ -123,15 +145,14 @@ public final class SchematicsAdapter{
         Schematic first = null;
         int col = 0;
         for(int i = 0; i < candidates.size; i++){
-            Schematic schematic = candidates.get(i);
+            Card card = candidates.get(i);
+            Schematic schematic = card.schematic;
             if(schematic == null || !MatchEngine.accepts(schematic.name(), query, opts)) continue;
             if(first == null) first = schematic;
             matches++;
 
-            if(i >= available || actors[i] == null) continue;
-
-            Cell<?> cell = table.add(actors[i]);
-            if(snapshots[i] != null) snapshots[i].applyTo(cell);
+            Cell<?> cell = table.add(card.actor);
+            if(card.snapshot != null) card.snapshot.applyTo(cell);
             cell.colspan(1);
             col++;
             displayed++;
@@ -144,8 +165,6 @@ public final class SchematicsAdapter{
 
         if(matches == 0){
             table.add("@none.found").padLeft(54f).padTop(10f);
-        }else if(displayed != matches){
-            Log.warn("[PinyinSearchSupport] schematics card count mismatch: matched @, displayed @", matches, displayed);
         }
 
         firstSchematicField.set(target.dialog, first);
@@ -176,16 +195,15 @@ public final class SchematicsAdapter{
     private static boolean ensure(){
         if(unavailable) return false;
         if(searchFieldField != null && searchTextField != null && rebuildPaneField != null
-            && selectedTagsField != null && firstSchematicField != null) return true;
+            && firstSchematicField != null) return true;
         synchronized(SchematicsAdapter.class){
             if(searchFieldField != null && searchTextField != null && rebuildPaneField != null
-                && selectedTagsField != null && firstSchematicField != null) return true;
+                && firstSchematicField != null) return true;
             try{
                 Class<?> type = Vars.ui.schematics.getClass();
                 searchFieldField = field(type, "searchField");
                 searchTextField = field(type, "search");
                 rebuildPaneField = field(type, "rebuildPane");
-                selectedTagsField = field(type, "selectedTags");
                 firstSchematicField = field(type, "firstSchematic");
                 return true;
             }catch(Throwable t){
@@ -209,6 +227,20 @@ public final class SchematicsAdapter{
         Target(Object dialog, Runnable rebuild){
             this.dialog = dialog;
             this.rebuild = rebuild;
+        }
+    }
+
+    private static final class Card{
+        final Schematic schematic;
+        final Element actor;
+        final CellSnapshot snapshot;
+        final boolean endRow;
+
+        Card(Schematic schematic, Element actor, CellSnapshot snapshot, boolean endRow){
+            this.schematic = schematic;
+            this.actor = actor;
+            this.snapshot = snapshot;
+            this.endRow = endRow;
         }
     }
 

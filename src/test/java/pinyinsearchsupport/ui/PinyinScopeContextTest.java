@@ -23,8 +23,11 @@ import arc.scene.ui.TextField;
 import arc.scene.ui.TextField.TextFieldStyle;
 import arc.scene.ui.layout.Table;
 import arc.scene.ui.layout.WidgetGroup;
+import arc.struct.Seq;
+import arc.struct.StringMap;
 import mindustry.Vars;
 import mindustry.core.UI;
+import mindustry.game.Schematic;
 import pinyinsearchsupport.match.MatchEngine;
 import sun.misc.Unsafe;
 
@@ -59,6 +62,7 @@ public final class PinyinScopeContextTest{
             testSceneRootIsNeverAScope();
             testLocalGlobalUiScope();
             testGlobalUiGroupsAreNeverScopes();
+            testSchematicCandidatesRespectNativeFiltering();
         }finally{
             Core.graphics = originalGraphics;
             Core.app = originalApp;
@@ -201,6 +205,29 @@ public final class PinyinScopeContextTest{
         check(ScopeTree.capture(field) == null, "menuGroup was accepted as a search scope");
     }
 
+    private static void testSchematicCandidatesRespectNativeFiltering(){
+        Schematic included = schematic("目标蓝图");
+        Schematic filteredOut = schematic("目标蓝图");
+        Table nativeResults = new Table();
+        Table card = new Table();
+        card.add(new SchematicImage(included));
+        nativeResults.add(card);
+
+        Seq<Schematic> candidates = SchematicsAdapter.visibleCandidates(nativeResults);
+        check(candidates.size == 1 && candidates.first() == included,
+            "schematic candidates did not come from native result cards");
+        check(candidates.first() != filteredOut,
+            "a schematic removed by native filtering was restored");
+        check(MatchEngine.accepts(candidates.first().name(), "mubiao", new MatchEngine.MatchOptions(true, true, true)),
+            "the retained schematic did not match its pinyin query");
+    }
+
+    private static Schematic schematic(String name){
+        StringMap tags = new StringMap();
+        tags.put("name", name);
+        return new Schematic(new Seq<Schematic.Stile>(), tags, 1, 1);
+    }
+
     private static UI installUi(Fixture fixture){
         UI ui;
         try{
@@ -288,6 +315,14 @@ public final class PinyinScopeContextTest{
             style.font = font;
             style.fontColor = Color.white;
             return new Label(text, style);
+        }
+    }
+
+    private static final class SchematicImage extends Element{
+        private final Schematic schematic;
+
+        SchematicImage(Schematic schematic){
+            this.schematic = schematic;
         }
     }
 }

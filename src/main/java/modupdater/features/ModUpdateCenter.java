@@ -55,7 +55,7 @@ public final class ModUpdateCenter{
         public boolean blacklisted;
         public boolean noRepo;
         public boolean expanded;
-        public String error = "";
+        public boolean checkFailed;
         public int compareLatest;
         public GithubReleaseClient.ReleaseInfo latest;
         public GithubReleaseClient.ReleaseInfo selected;
@@ -164,17 +164,15 @@ public final class ModUpdateCenter{
             return;
         }
 
-        Seq<ModEntry> updatable = selectEntries(e -> e.hasUpdate() && !e.blacklisted && !e.noRepo && e.error.isEmpty());
-        Seq<ModEntry> upToDate = selectEntries(e -> !e.hasUpdate() && !e.blacklisted && !e.noRepo && e.error.isEmpty());
+        Seq<ModEntry> updatable = selectEntries(e -> e.hasUpdate() && !e.blacklisted && !e.noRepo && !e.checkFailed);
+        Seq<ModEntry> upToDate = selectEntries(e -> !e.hasUpdate() && !e.blacklisted && !e.noRepo && !e.checkFailed);
         Seq<ModEntry> blacklisted = selectEntries(e -> e.blacklisted);
         Seq<ModEntry> noRepo = selectEntries(e -> e.noRepo && !e.blacklisted);
-        Seq<ModEntry> errored = selectEntries(e -> !e.error.isEmpty() && !e.blacklisted && !e.noRepo);
 
         addGroup("mu.group.updatable", updatable);
         addGroup("mu.group.uptodate", upToDate);
         addGroup("mu.group.blacklisted", blacklisted);
         addGroup("mu.group.norepo", noRepo);
-        addGroup("mu.group.error", errored);
     }
 
     private static void addGroup(String titleKey, Seq<ModEntry> entries){
@@ -251,10 +249,6 @@ public final class ModUpdateCenter{
                 }
             }).left().row();
 
-            if(!e.error.isEmpty()){
-                card.add("[scarlet]" + e.error).wrap().width(730f).padTop(4f).row();
-            }
-
             if(!e.releases.isEmpty()){
                 addReleaseSection(card, e, false);
                 addReleaseSection(card, e, true);
@@ -302,7 +296,6 @@ public final class ModUpdateCenter{
     private static String statusText(ModEntry e){
         if(e.blacklisted) return "[scarlet]" + Core.bundle.get("mu.status.blacklisted") + "[]";
         if(e.noRepo) return "[lightgray]" + Core.bundle.get("mu.status.norepo") + "[]";
-        if(!e.error.isEmpty()) return "[scarlet]" + Core.bundle.get("mu.status.error") + "[]";
         if(e.hasUpdate()) return "[accent]" + Core.bundle.get("mu.status.update") + "[]";
         return "[green]" + Core.bundle.get("mu.status.latest") + "[]";
     }
@@ -386,7 +379,9 @@ public final class ModUpdateCenter{
             }
             done.run();
         }, err -> {
-            entry.error = friendlyError(err);
+            // Network failures are expected for offline or unavailable repositories.
+            // Keep the entry out of update results without surfacing the exception.
+            entry.checkFailed = true;
             done.run();
         });
     }
@@ -445,7 +440,7 @@ public final class ModUpdateCenter{
 
     private static boolean hasUpdates(Seq<ModEntry> entries){
         for(ModEntry e : entries){
-            if(e.hasUpdate() && !e.blacklisted && e.error.isEmpty() && !e.noRepo){
+            if(e.hasUpdate() && !e.blacklisted && !e.checkFailed && !e.noRepo){
                 return true;
             }
         }
@@ -462,7 +457,7 @@ public final class ModUpdateCenter{
     private static void updateAll(){
         Seq<ModEntry> all = new Seq<ModEntry>();
         for(ModEntry e : lastEntries){
-            if(e.hasUpdate() && !e.blacklisted && !e.noRepo && e.error.isEmpty()){
+            if(e.hasUpdate() && !e.blacklisted && !e.noRepo && !e.checkFailed){
                 all.add(e);
             }
         }
@@ -594,13 +589,6 @@ public final class ModUpdateCenter{
         String n = Strings.stripColors(mod.meta.displayName == null ? mod.meta.name : mod.meta.displayName);
         if(n == null || n.isEmpty()) n = mod.name;
         return n == null || n.isEmpty() ? "unknown" : n;
-    }
-
-    private static String friendlyError(Throwable t){
-        if(t == null) return Core.bundle.get("mu.error.unknown");
-        String msg = t.getMessage();
-        if(msg == null || msg.trim().isEmpty()) msg = t.getClass().getSimpleName();
-        return msg;
     }
 
     private static String buildDownloadUrl(String original, boolean mirror){

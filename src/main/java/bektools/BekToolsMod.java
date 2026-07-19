@@ -46,11 +46,14 @@ import whousesthisbuilding.WhoUsesThisBuildingMod;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Locale;
 
 import static mindustry.Vars.ui;
 
 public class BekToolsMod extends Mod{
     private static final String moduleFailureMessage = "@bektools.module.failed";
+    private static final String feedbackDiscordUrl = "https://discord.com/channels/391020510269669376/1467903894716940522";
+    private static final String feedbackChineseUrl = "https://qm.qq.com/q/wkddSGW1J8";
 
     private static final String modulePgmm = "pgmm";
     private static final String moduleStealthPath = "sp";
@@ -346,8 +349,35 @@ public class BekToolsMod extends Mod{
             addModuleGroup(table, moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, st -> betterPolyAi.bekBuildSettings(st));
             addModuleGroup(table, moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, st -> advancedReplace.bekBuildSettings(st));
             addModuleGroup(table, moduleProfiler, !isModuleFailed(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings);
+            table.pref(new FeedbackSetting());
         });
         settingsRegistered = true;
+    }
+
+    private static void openFeedback(){
+        String locale = Core.settings.getString("locale", "default");
+        if(locale == null || locale.isEmpty() || "default".equalsIgnoreCase(locale)){
+            locale = Locale.getDefault().toString();
+        }
+        Core.app.openURI(locale.toLowerCase(Locale.ROOT).startsWith("zh") ? feedbackChineseUrl : feedbackDiscordUrl);
+    }
+
+    private static class FeedbackSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private Button feedbackButton;
+
+        FeedbackSetting(){
+            super(null);
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            Core.app.post(() -> {
+                if(feedbackButton != null && feedbackButton.parent == table) return;
+                table.row();
+                feedbackButton = table.button("@bektools.feedback", BekToolsMod::openFeedback)
+                    .margin(14f).width(240f).pad(6f).get();
+            });
+        }
     }
 
     private void addModuleGroup(SettingsMenuDialog.SettingsTable table, String moduleId, boolean available, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){

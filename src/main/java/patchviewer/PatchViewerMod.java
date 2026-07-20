@@ -31,7 +31,6 @@ import arc.util.Log;
 import arc.util.Scaling;
 import arc.util.Strings;
 import arc.util.Time;
-import arc.util.Align;
 import mindustry.Vars;
 import mindustry.ctype.Content;
 import mindustry.ctype.ContentType;
@@ -53,7 +52,6 @@ import mindustry.ui.dialogs.ContentInfoDialog;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
 import mindustry.world.Tile;
-import mindustry.world.blocks.units.Reconstructor;
 import mindustry.world.meta.Stat;
 import mindustry.world.meta.StatCat;
 import mindustry.world.meta.StatValue;
@@ -97,6 +95,7 @@ public class PatchViewerMod extends Mod{
     private static final String quickBuildInfoName = "patchviewer-quick-build-info";
     private static final String iconTokenPrefix = "<patchviewer-icon:";
     private static final float defaultUnitStatIconSize = 40f;
+    private static final float compactComponentGap = 5f;
     private static final Pattern numberPattern = Pattern.compile("-?\\d+(?:\\.\\d+)?");
     private static boolean settingsAdded;
     private static boolean keybindsRegistered;
@@ -109,6 +108,7 @@ public class PatchViewerMod extends Mod{
     private Table quickHud;
     private ScrollPane quickHudPane;
     private UnlockableContent lastQuickHudContent;
+    private float lastQuickHudWidth = -1f;
     private Table lastBuildInfoRoot;
     private boolean baselineCaptured;
     private boolean placementReflectReady;
@@ -385,12 +385,13 @@ public class PatchViewerMod extends Mod{
         if(quickHud == null || quickHudPane == null) return;
         applyQuickHudBackground();
 
-        if(lastQuickHudContent != content){
+        float width = readQuickHudWidth();
+        if(lastQuickHudContent != content || Math.abs(lastQuickHudWidth - width) > 0.5f){
             rebuildQuickHudContent(content, compact);
             lastQuickHudContent = content;
+            lastQuickHudWidth = width;
         }
 
-        float width = readQuickHudWidth();
         float margin = 8f;
         float mouseX = Core.input.mouseX();
         float mouseY = Core.input.mouseY();
@@ -487,27 +488,61 @@ public class PatchViewerMod extends Mod{
 
     private void addCompactLines(Table table, CompactDiff compact, float width, boolean withHeaders){
         if(compact == null) return;
-        for(String line : compact.added){
-            addCompactLine(table, line, width, false);
-        }
-        if(!compact.modified.isEmpty()){
-            if(withHeaders) addCompactHeader(table, bundle("patchviewer.quick.modified", "Modified"), width);
-            for(String line : compact.modified){
-                addCompactLine(table, line, width, true);
+        boolean addedHeader = false;
+        boolean modifiedHeader = false;
+        boolean removedHeader = false;
+        for(CompactChange change : compact.ordered){
+            if(change == null) continue;
+            if(withHeaders){
+                if(change.bucket == CompactBucket.ADDED && !addedHeader){
+                    addCompactHeader(table, bundle("patchviewer.quick.added", "Added"), width);
+                    addedHeader = true;
+                }else if(change.bucket == CompactBucket.MODIFIED && !modifiedHeader){
+                    addCompactHeader(table, bundle("patchviewer.quick.modified", "Modified"), width);
+                    modifiedHeader = true;
+                }else if(change.bucket == CompactBucket.REMOVED && !removedHeader){
+                    addCompactHeader(table, bundle("patchviewer.quick.removed", "Removed"), width);
+                    removedHeader = true;
+                }
             }
+            addCompactChangeLine(table, change, width);
         }
-        if(!compact.removed.isEmpty()){
-            if(withHeaders) addCompactHeader(table, bundle("patchviewer.quick.removed", "Removed"), width);
-            for(String line : compact.removed){
-                addCompactLine(table, line, width, true);
-            }
+    }
+
+    private void addCompactChangeLine(Table table, CompactChange change, float width){
+        if(table == null || change == null) return;
+        if(renderCompactStackDiff(table, change, width)) return;
+        String markup = compactChangeMarkup(change);
+        if(markup == null || markup.isEmpty()) return;
+        addCompactLine(table, markup, width, change.bucket == CompactBucket.MODIFIED);
+    }
+
+    private String compactChangeMarkup(CompactChange change){
+        if(change == null) return null;
+        String label = escape(change.label == null ? "" : change.label);
+        String left = change.before;
+        String right = change.after;
+        String separator = compactValueOnOwnLine(change.kind) ? ":\n" : ": ";
+        String modifiedSeparator = compactValueOnOwnLine(change.kind) ? ": []\n" : ": []";
+        if(change.bucket == CompactBucket.ADDED){
+            return addedColorTag() + "+[]" + label + separator + addedColorTag() + escape(formatCompactValue(right, change.kind)) + "[]";
         }
+        if(change.bucket == CompactBucket.REMOVED){
+            return removedColorTag() + label + separator + removedColorTag() + escape(formatCompactValue(left, change.kind)) + "[]";
+        }
+        String oldValue = formatCompactValue(left, change.kind);
+        String newValue = formatCompactValue(right, change.kind);
+        return "[lightgray]" + label + modifiedSeparator
+            + modifiedOldColorTag() + escape(oldValue) + breakArrow(oldValue, newValue, change.kind)
+            + modifiedNewColorTag() + escape(newValue) + "[]";
     }
 
     private void addCompactHeader(Table table, String text, float width){
         Label label = new Label("[accent]" + escape(text) + "[]", Styles.outlineLabel);
         label.setFontScale(1.35f);
-        table.add(label).left().width(width).padTop(8f).row();
+        label.setWrap(true);
+        label.setEllipsis(false);
+        table.add(label).left().width(width).growX().fillX().padTop(8f).row();
     }
 
     private void addCompactLine(Table table, String text, float width, boolean allowWrapByArrow){
@@ -533,12 +568,35 @@ public class PatchViewerMod extends Mod{
             .replaceAll("[ \\t]{2,}", " ")
             .trim();
         if(Strings.stripColors(cleaned).isEmpty()) return "";
-        if(!allowWrapByArrow || !shouldPreBreakCompactArrow(cleaned, width)) return cleaned;
-        return cleaned.replace(" -> ", " ->\n");
+        return allowWrapByArrow ? breakCompactArrows(cleaned, width) : cleaned;
+    }
+
+    private String breakCompactArrows(String text, float width){
+        if(text == null || text.indexOf("->") < 0) return text;
+        StringBuilder out = new StringBuilder();
+        int start = 0;
+        while(start < text.length()){
+            int end = text.indexOf('\n', start);
+            if(end < 0) end = text.length();
+            String line = text.substring(start, end);
+            int arrow = line.indexOf("->");
+            if(arrow > 0 && shouldPreBreakCompactArrow(line, width)){
+                int breakAt = arrow;
+                while(breakAt > 0 && Character.isWhitespace(line.charAt(breakAt - 1))){
+                    breakAt--;
+                }
+                out.append(line, 0, breakAt).append('\n').append(line.substring(breakAt));
+            }else{
+                out.append(line);
+            }
+            if(end < text.length()) out.append('\n');
+            start = end + 1;
+        }
+        return out.toString();
     }
 
     private boolean shouldPreBreakCompactArrow(String text, float width){
-        if(text == null || !text.contains(" -> ") || text.indexOf('\n') >= 0) return false;
+        if(text == null || text.indexOf("->") < 0) return false;
         return compactVisibleUnits(text) > Math.max(38f, width / 7f);
     }
 
@@ -624,21 +682,24 @@ public class PatchViewerMod extends Mod{
             if(amount != null){
                 Element stackView = compactStackView(match.content, amount.amountText, activeColor);
                 addCompactElement(table, stackView, width, usedWidth, rowHasContent, 4f, added ? 2f : 0f);
-                if(amount.suffix != null && !amount.suffix.isEmpty()){
-                    addCompactTextSegment(table, amount.suffix, width, activeColor, false, usedWidth, rowHasContent);
-                }
                 added = true;
                 index = amount.end;
                 continue;
             }
 
-            Image image = new Image(match.content.uiIcon);
-            image.setScaling(Scaling.fit);
-            image.setColor(Color.white);
-            image.update(() -> image.setColor(Color.white));
-            addCompactImage(table, image, width, usedWidth, rowHasContent, keepPlainIconsInline ? 5f : 3f, added ? 2f : 0f, !keepPlainIconsInline, keepPlainIconsInline ? 24f : 16f);
-            added = true;
             int consumedLabel = consumeIconLabelTail(text, match.end, match.content);
+            if(consumedLabel != match.end){
+                Element iconView = compactNamedIconView(match.content, activeColor, keepPlainIconsInline ? 24f : 16f);
+                addCompactElement(table, iconView, width, usedWidth, rowHasContent, keepPlainIconsInline ? 5f : 3f, added ? 2f : 0f, !keepPlainIconsInline);
+            }else{
+                Image image = new Image(match.content.uiIcon);
+                image.setScaling(Scaling.fit);
+                image.setColor(Color.white);
+                image.update(() -> image.setColor(Color.white));
+                float iconSize = compactIconSize(match.content, keepPlainIconsInline ? 24f : 16f);
+                addCompactImage(table, image, width, usedWidth, rowHasContent, keepPlainIconsInline ? 5f : 3f, added ? 2f : 0f, !keepPlainIconsInline, iconSize);
+            }
+            added = true;
             index = consumedLabel == match.end ? match.end : consumedLabel;
         }
         if(!added){
@@ -671,7 +732,19 @@ public class PatchViewerMod extends Mod{
         String markup = (activeColor == null ? "" : activeColor) + text;
         Label label = new Label(markup);
         label.setWrap(wrap);
+        label.setEllipsis(false);
         if(!wrap && usedWidth != null && rowHasContent != null){
+            if(shouldWrapCompactTextSegment(label, visible, width, usedWidth[0])){
+                if(rowHasContent[0]){
+                    table.row();
+                }
+                label.setWrap(true);
+                table.add(label).left().top().growX().fillX().width(Math.max(1f, width - 4f));
+                table.row();
+                usedWidth[0] = 0f;
+                rowHasContent[0] = false;
+                return true;
+            }
             addCompactElement(table, label, width, usedWidth, rowHasContent, 0f, 0f, !isArrowSegment(visible));
             return true;
         }
@@ -680,6 +753,12 @@ public class PatchViewerMod extends Mod{
             cell.growX().fillX().width(Math.max(1f, width - 20f));
         }
         return true;
+    }
+
+    private boolean shouldWrapCompactTextSegment(Label label, String visible, float width, float usedWidth){
+        if(label == null || visible == null || isArrowSegment(visible)) return false;
+        float availableWidth = Math.max(1f, width - 4f - Math.max(0f, usedWidth));
+        return visible.indexOf('\n') >= 0 || compactElementWidth(label) > availableWidth;
     }
 
     private void addCompactElement(Table table, Element element, float width, float[] usedWidth, boolean[] rowHasContent, float padRight, float padLeft){
@@ -733,24 +812,85 @@ public class PatchViewerMod extends Mod{
         return text != null && Strings.stripColors(text).trim().equals("->");
     }
 
+    private float compactIconSize(UnlockableContent content, float fallbackSize){
+        return content instanceof UnitType
+            ? calcUnitStatIconSize((UnitType)content)
+            : fallbackSize;
+    }
+
     private Element compactStackView(UnlockableContent content, String amountText, String amountColorTag){
         if(content == null) return new Table();
+        Element out;
+        boolean perSecond = compactAmountPerSecond(amountText);
+        float amount = compactAmountValue(amountText);
+        if(content instanceof mindustry.type.Liquid){
+            out = StatValues.displayLiquid((mindustry.type.Liquid)content, amount, perSecond);
+        }else if(content instanceof mindustry.type.Item){
+            int rounded = Math.max(0, Math.round(amount));
+            mindustry.type.Item item = (mindustry.type.Item)content;
+            out = perSecond
+                ? StatValues.displayItem(item, rounded, 60f, true)
+                : StatValues.displayItem(item, rounded, true);
+        }else{
+            Table named = new Table();
+            named.left().top();
+            Image image = new Image(content.uiIcon);
+            image.setScaling(Scaling.fit);
+            image.setColor(Color.white);
+            named.add(image).size(compactIconSize(content, 24f)).scaling(Scaling.fit).top();
+            if(amountText != null && !amountText.isEmpty()){
+                named.add((amountColorTag == null ? "" : amountColorTag) + escape(formatCompactStackAmount(amountText)) + "[]", Styles.outlineLabel).padLeft(3f).top();
+            }
+            named.add(content.localizedName).padLeft(4f).top();
+            out = named;
+        }
+        colorStackAmountLabels(out, amountColorTag);
+        return out;
+    }
+
+    private Element compactNamedIconView(UnlockableContent content, String colorTag, float size){
         Table out = new Table();
-        out.center();
+        out.left().top();
         Image image = new Image(content.uiIcon);
         image.setScaling(Scaling.fit);
         image.setColor(Color.white);
-        out.add(image).size(24f).scaling(Scaling.fit).center();
-        out.row();
-
-        if(amountText != null && !amountText.isEmpty()){
-            Label label = new Label((amountColorTag == null ? "" : amountColorTag) + escape(formatCompactStackAmount(amountText)) + "[]", Styles.outlineLabel);
-            label.setFontScale(1f);
-            label.setAlignment(Align.center);
-            out.add(label).center().width(42f).height(16f).padTop(-3f);
+        out.add(image).size(compactIconSize(content, size)).scaling(Scaling.fit).top();
+        if(content.localizedName != null && !content.localizedName.isEmpty()){
+            Label name = new Label((colorTag == null ? "" : colorTag) + escape(content.localizedName) + "[]", Styles.outlineLabel);
+            name.setWrap(true);
+            name.setEllipsis(false);
+            out.add(name).padLeft(4f).top();
         }
-
         return out;
+    }
+
+    private boolean compactAmountPerSecond(String text){
+        if(text == null) return false;
+        String normalized = text.toLowerCase(Locale.ROOT);
+        return normalized.contains("/s") || normalized.contains("/秒");
+    }
+
+    private float compactAmountValue(String text){
+        if(text == null || text.isEmpty()) return 0f;
+        String value = text;
+        int slash = value.indexOf('/');
+        if(slash >= 0) value = value.substring(0, slash);
+        float multiplier = 1f;
+        if(value.endsWith("k") || value.endsWith("K")){
+            multiplier = 1000f;
+            value = value.substring(0, value.length() - 1);
+        }else if(value.endsWith("M")){
+            multiplier = 1_000_000f;
+            value = value.substring(0, value.length() - 1);
+        }else if(value.endsWith("B")){
+            multiplier = 1_000_000_000f;
+            value = value.substring(0, value.length() - 1);
+        }
+        try{
+            return Float.parseFloat(value.trim()) * multiplier;
+        }catch(Throwable ignored){
+            return 0f;
+        }
     }
 
     private String formatCompactStackAmount(String text){
@@ -809,15 +949,18 @@ public class PatchViewerMod extends Mod{
                 return new StackAmount(amountText + directRate.suffix, directRate.end, "");
             }
 
-            int end = consumeContentName(text, i, content);
-            if(end != i){
+            CompactAmountSuffix amountSuffix = consumeCompactAmountSuffix(text, i);
+            int valueEnd = amountSuffix == null ? i : amountSuffix.end;
+            if(amountSuffix != null) amountText += amountSuffix.suffix;
+            int end = consumeContentName(text, valueEnd, content);
+            if(end != valueEnd){
                 RateAmount rateAmount = consumeRateAmount(text, end, content);
                 if(rateAmount != null){
                     return new StackAmount(rateAmount.amountText + rateAmount.suffix, rateAmount.end, "");
                 }
                 return new StackAmount(amountText, end, "");
             }
-            return new StackAmount(amountText, i, "");
+            return new StackAmount(amountText, valueEnd, "");
         }catch(Throwable ignored){
             return null;
         }
@@ -908,6 +1051,36 @@ public class PatchViewerMod extends Mod{
         return i == numberStart ? -1 : i;
     }
 
+    private CompactAmountSuffix consumeCompactAmountSuffix(String text, int start){
+        if(text == null) return null;
+        int i = Math.max(0, start);
+        while(i < text.length() && text.charAt(i) == '['){
+            int close = text.indexOf(']', i + 1);
+            if(close < 0) break;
+            i = close + 1;
+        }
+
+        String[][] candidates = {
+            {"k", "k"}, {"K", "k"}, {"M", "M"}, {"B", "B"},
+            {"千", "k"}, {"万", "k"}, {"百万", "M"}, {"亿", "B"}
+        };
+        if(Core.bundle != null){
+            candidates = new String[][]{
+                {Core.bundle.get("unit.thousands", "k"), "k"},
+                {Core.bundle.get("unit.millions", "M"), "M"},
+                {Core.bundle.get("unit.billions", "B"), "B"},
+                {"k", "k"}, {"K", "k"}, {"M", "M"}, {"B", "B"},
+                {"千", "k"}, {"万", "k"}, {"百万", "M"}, {"亿", "B"}
+            };
+        }
+        for(String[] candidate : candidates){
+            if(candidate[0] != null && !candidate[0].isEmpty() && text.startsWith(candidate[0], i)){
+                return new CompactAmountSuffix(candidate[1], skipCompactNoise(text, i + candidate[0].length()));
+            }
+        }
+        return null;
+    }
+
     private RateAmount consumeRateAmount(String text, int start, UnlockableContent content){
         if(text == null) return null;
         int numberStart = skipCompactNoise(text, start);
@@ -926,6 +1099,8 @@ public class PatchViewerMod extends Mod{
         int suffixEnd = suffixStart;
         if(suffixEnd < text.length() && text.charAt(suffixEnd) == '秒'){
             suffixEnd++;
+        }else if(suffixEnd + 3 <= text.length() && text.regionMatches(true, suffixEnd, "sec", 0, 3)){
+            suffixEnd += 3;
         }else if(suffixEnd < text.length() && (text.charAt(suffixEnd) == 's' || text.charAt(suffixEnd) == 'S')){
             suffixEnd++;
         }else{
@@ -992,6 +1167,7 @@ public class PatchViewerMod extends Mod{
     private void hideQuickHud(){
         if(quickHudPane != null) quickHudPane.visible = false;
         lastQuickHudContent = null;
+        lastQuickHudWidth = -1f;
     }
 
     private void hideInjectedRows(Table root){
@@ -1192,6 +1368,20 @@ public class PatchViewerMod extends Mod{
 
     private void normalizeUnitIconLinks(Element element){
         if(element == null || Vars.content == null) return;
+        if(element instanceof Table){
+            Seq<Cell> cells = ((Table)element).getCells();
+            for(int i = 0; i < cells.size; i++){
+                Element child = cells.get(i).get();
+                if(child instanceof Image){
+                    UnitType unit = unitTypeForImage((Image)child);
+                    if(unit != null){
+                        cells.get(i).size(calcUnitStatIconSize(unit)).scaling(Scaling.fit);
+                    }
+                }
+                normalizeUnitIconLinks(child);
+            }
+            return;
+        }
         if(element instanceof Image){
             Image image = (Image)element;
             UnitType unit = unitTypeForImage(image);
@@ -1209,18 +1399,6 @@ public class PatchViewerMod extends Mod{
             Seq<Element> children = ((Group)element).getChildren();
             for(int i = 0; i < children.size; i++){
                 normalizeUnitIconLinks(children.get(i));
-            }
-        }
-        if(element instanceof Table){
-            Seq<Cell> cells = ((Table)element).getCells();
-            for(int i = 0; i < cells.size; i++){
-                Element child = cells.get(i).get();
-                if(child instanceof Image){
-                    UnitType unit = unitTypeForImage((Image)child);
-                    if(unit != null){
-                        cells.get(i).size(calcUnitStatIconSize(unit)).scaling(Scaling.fit);
-                    }
-                }
             }
         }
     }
@@ -1248,37 +1426,8 @@ public class PatchViewerMod extends Mod{
     }
 
     private float calcUnitStatIconSize(UnitType unit){
-        if(unit == null || unit.uiIcon == null) return defaultUnitStatIconSize;
-        UnitType root = firstTierUnit(unit);
-        float rootSize = regionMax(root == null ? null : root.uiIcon);
-        float currentSize = regionMax(unit.uiIcon);
-        if(rootSize <= 0f || currentSize <= 0f) return defaultUnitStatIconSize;
-        return Mathf.clamp(defaultUnitStatIconSize * rootSize / currentSize, 16f, defaultUnitStatIconSize);
-    }
-
-    private UnitType firstTierUnit(UnitType unit){
-        UnitType current = unit;
-        for(int guard = 0; guard < 16; guard++){
-            UnitType previous = null;
-            for(Block block : Vars.content.blocks()){
-                if(!(block instanceof Reconstructor)) continue;
-                Reconstructor reconstructor = (Reconstructor)block;
-                for(UnitType[] upgrade : reconstructor.upgrades){
-                    if(upgrade != null && upgrade.length >= 2 && upgrade[1] == current){
-                        previous = upgrade[0];
-                        break;
-                    }
-                }
-                if(previous != null) break;
-            }
-            if(previous == null) return current;
-            current = previous;
-        }
-        return current;
-    }
-
-    private float regionMax(TextureRegion region){
-        return region == null ? 0f : Math.max(region.width, region.height);
+        // Match the fixed 40px unit cell used by the vanilla unit production displays.
+        return defaultUnitStatIconSize;
     }
 
     private Table simplifyRenderedTable(Table table){
@@ -2000,35 +2149,59 @@ public class PatchViewerMod extends Mod{
             return;
         }
 
-        boolean[] usedRight = new boolean[right.size];
-        StringBuilder out = new StringBuilder();
-        for(CompactStackItem item : left){
-            int same = findCompactStackItem(right, usedRight, item, true);
-            if(same >= 0){
-                usedRight[same] = true;
-                continue;
-            }
-            int changed = findCompactStackItem(right, usedRight, item, false);
-            if(changed >= 0){
-                usedRight[changed] = true;
-                appendCompactStackChange(out, modifiedOldColorTag() + item.markup() + "[] " + arrowColor + "-> []" + modifiedNewColorTag() + right.get(changed).markup() + "[]");
-            }else{
-                appendCompactStackChange(out, removedColorTag() + item.markup() + "[]");
-            }
-        }
-        for(int i = 0; i < right.size; i++){
-            if(!usedRight[i]){
-                appendCompactStackChange(out, addedColorTag() + right.get(i).markup() + "[]");
-            }
-        }
-        if(out.length() == 0) return;
-        compact.modified.add("[lightgray]" + escape(label == null ? "" : label) + ":[]\n" + out);
+        Seq<CompactStackChange> changes = buildCompactStackChanges(left, right);
+        if(changes.isEmpty()) return;
+        CompactChange change = new CompactChange(label, before, after, RowKind.STACK_LIST, compactStackBucket(changes));
+        change.stackChanges = changes;
+        addCompactChange(compact, change);
     }
 
-    private void appendCompactStackChange(StringBuilder out, String text){
-        if(out == null || text == null || text.isEmpty()) return;
-        if(out.length() > 0) out.append(' ');
-        out.append(text);
+    private Seq<CompactStackChange> buildCompactStackChanges(String before, String after){
+        return buildCompactStackChanges(parseCompactStackItems(before), parseCompactStackItems(after));
+    }
+
+    private Seq<CompactStackChange> buildCompactStackChanges(Seq<CompactStackItem> left, Seq<CompactStackItem> right){
+        Seq<CompactStackChange> changes = new Seq<>();
+        boolean[] usedLeft = new boolean[left == null ? 0 : left.size];
+        if(right != null){
+            for(CompactStackItem item : right){
+                if(item == null) continue;
+                int same = findCompactStackItem(left, usedLeft, item, true);
+                if(same >= 0){
+                    usedLeft[same] = true;
+                    continue;
+                }
+                int changed = findCompactStackItem(left, usedLeft, item, false);
+                if(changed >= 0){
+                    usedLeft[changed] = true;
+                    changes.add(new CompactStackChange(left.get(changed), item, CompactBucket.MODIFIED));
+                }else{
+                    changes.add(new CompactStackChange(null, item, CompactBucket.ADDED));
+                }
+            }
+        }
+        if(left != null){
+            for(int i = 0; i < left.size; i++){
+                if(!usedLeft[i] && left.get(i) != null){
+                    changes.add(new CompactStackChange(left.get(i), null, CompactBucket.REMOVED));
+                }
+            }
+        }
+        return changes;
+    }
+
+    private CompactBucket compactStackBucket(Seq<CompactStackChange> changes){
+        boolean added = false;
+        boolean modified = false;
+        boolean removed = false;
+        for(CompactStackChange change : changes){
+            if(change == null) continue;
+            added |= change.bucket == CompactBucket.ADDED;
+            modified |= change.bucket == CompactBucket.MODIFIED;
+            removed |= change.bucket == CompactBucket.REMOVED;
+        }
+        if(modified || (added && removed)) return CompactBucket.MODIFIED;
+        return added ? CompactBucket.ADDED : CompactBucket.REMOVED;
     }
 
     private int findCompactStackItem(Seq<CompactStackItem> items, boolean[] used, CompactStackItem needle, boolean requireSameAmount){
@@ -2121,17 +2294,23 @@ public class PatchViewerMod extends Mod{
         String leftCompare = normalizeText(left);
         String rightCompare = normalizeText(right);
         if(leftCompare == null ? rightCompare == null : leftCompare.equals(rightCompare)) return;
-        String name = escape(label == null ? "" : label);
-        String labelValueSeparator = compactValueOnOwnLine(kind) ? ":\n" : ": ";
-        String modifiedLabelValueSeparator = compactValueOnOwnLine(kind) ? ": []\n" : ": []";
-        if(left == null){
-            compact.added.add(addedColorTag() + "+[]" + name + labelValueSeparator + addedColorTag() + escape(formatCompactValue(right, kind)) + "[]");
-        }else if(right == null){
-            compact.removed.add(removedColorTag() + name + labelValueSeparator + escape(formatCompactValue(left, kind)) + "[]");
+        CompactBucket bucket = left == null ? CompactBucket.ADDED : right == null ? CompactBucket.REMOVED : CompactBucket.MODIFIED;
+        CompactChange change = new CompactChange(label, left, right, kind, bucket);
+        if(kind == RowKind.STACK_LIST || kind == RowKind.BUILD_COST){
+            change.stackChanges = buildCompactStackChanges(left, right);
+        }
+        addCompactChange(compact, change);
+    }
+
+    private void addCompactChange(CompactDiff compact, CompactChange change){
+        if(compact == null || change == null) return;
+        compact.ordered.add(change);
+        if(change.bucket == CompactBucket.ADDED){
+            compact.added.add(change);
+        }else if(change.bucket == CompactBucket.REMOVED){
+            compact.removed.add(change);
         }else{
-            String oldValue = formatCompactValue(left, kind);
-            String newValue = formatCompactValue(right, kind);
-            compact.modified.add("[lightgray]" + name + modifiedLabelValueSeparator + modifiedOldColorTag() + escape(oldValue) + breakArrow(oldValue, newValue, kind) + modifiedNewColorTag() + escape(newValue) + "[]");
+            compact.modified.add(change);
         }
     }
 
@@ -2664,24 +2843,66 @@ public class PatchViewerMod extends Mod{
         }
     }
 
-    private boolean renderCompactStackDiff(Table table, SnapshotRow beforeRow, SnapshotRow afterRow, float width){
-        String beforeText = compactRowText(beforeRow);
-        String afterText = compactRowText(afterRow);
-        if(beforeText == null && afterText == null) return false;
+    private boolean renderCompactStackDiff(Table table, CompactChange change, float width){
+        if(table == null || change == null || (change.kind != RowKind.STACK_LIST && change.kind != RowKind.BUILD_COST)) return false;
+        Seq<CompactStackItem> beforeItems = parseCompactStackItems(change.before);
+        Seq<CompactStackItem> afterItems = parseCompactStackItems(change.after);
+        Seq<CompactStackChange> changes = buildCompactStackChanges(beforeItems, afterItems);
+        if(changes == null || changes.isEmpty()) return false;
 
-        Table root = new Table();
-        root.left().top().defaults().left().top();
-        if(beforeText != null && afterText != null){
-            renderCompactMarkupValue(root, modifiedOldColorTag() + beforeText + "[]", width);
-            root.add(arrowColor + "->[]").left().padTop(2f).padBottom(4f).row();
-            renderCompactMarkupValue(root, modifiedNewColorTag() + afterText + "[]", width);
-        }else if(beforeText != null){
-            renderCompactMarkupValue(root, removedColorTag() + beforeText + "[]", width);
-        }else{
-            renderCompactMarkupValue(root, addedColorTag() + afterText + "[]", width);
+        Table row = new Table();
+        row.left().top().defaults().left().top();
+        String labelColor = change.bucket == CompactBucket.ADDED ? addedColorTag()
+            : change.bucket == CompactBucket.REMOVED ? removedColorTag() : "[lightgray]";
+        String labelPrefix = change.bucket == CompactBucket.ADDED ? "+" : "";
+        row.add(labelColor + labelPrefix + escape(change.label == null ? "" : change.label) + ":[]").left().top().row();
+
+        Seq<Element> beforeComponents = new Seq<>();
+        for(CompactStackItem item : beforeItems){
+            CompactStackChange stackChange = findCompactStackChange(changes, item, true);
+            if(stackChange == null) continue;
+            String color = stackChange.after == null ? removedColorTag() : modifiedOldColorTag();
+            beforeComponents.add(compactStackView(item.content, item.amount, color));
         }
-        table.add(root).left().top().fillX().growX().width(width);
+
+        Seq<Element> afterComponents = new Seq<>();
+        for(CompactStackItem item : afterItems){
+            CompactStackChange stackChange = findCompactStackChange(changes, item, false);
+            if(stackChange == null) continue;
+            String color = stackChange.before == null ? addedColorTag() : modifiedNewColorTag();
+            afterComponents.add(compactStackView(item.content, item.amount, color));
+        }
+
+        if(beforeComponents.isEmpty() && afterComponents.isEmpty()) return false;
+
+        if(!beforeComponents.isEmpty()){
+            AtomicStatFlow beforeFlow = new AtomicStatFlow(beforeComponents);
+            beforeFlow.rebuild(width);
+            row.add(beforeFlow).left().top().growX().fillX().width(width).row();
+        }
+        if(!beforeComponents.isEmpty() && !afterComponents.isEmpty()){
+            row.add(arrowColor + "->[]").left().top().row();
+        }
+        if(!afterComponents.isEmpty()){
+            AtomicStatFlow afterFlow = new AtomicStatFlow(afterComponents);
+            afterFlow.rebuild(width);
+            row.add(afterFlow).left().top().growX().fillX().width(width).row();
+        }
+
+        table.add(row).left().top().growX().fillX().width(width);
+        table.row();
         return true;
+    }
+
+    private CompactStackChange findCompactStackChange(Seq<CompactStackChange> changes, CompactStackItem item, boolean before){
+        if(changes == null || item == null) return null;
+        for(CompactStackChange change : changes){
+            if(change == null) continue;
+            if(before ? change.before == item : change.after == item){
+                return change;
+            }
+        }
+        return null;
     }
 
     private boolean shouldInlineBuildCost(Seq<ItemStack> before, Seq<ItemStack> after, float availableWidth){
@@ -3029,6 +3250,67 @@ public class PatchViewerMod extends Mod{
         }
     }
 
+    private static class AtomicStatFlow extends Table{
+        final Seq<Element> components = new Seq<>();
+        float layoutWidth = -1f;
+
+        AtomicStatFlow(Seq<Element> components){
+            if(components != null) this.components.addAll(components);
+            left().top();
+        }
+
+        float largestComponentWidth(){
+            float width = 0f;
+            for(Element component : components){
+                if(component == null) continue;
+                component.pack();
+                width = Math.max(width, Math.max(component.getPrefWidth(), component.getWidth()));
+            }
+            return width;
+        }
+
+        void rebuild(float availableWidth){
+            float width = Math.max(1f, availableWidth);
+            if(Math.abs(layoutWidth - width) < 0.5f && !getCells().isEmpty()){
+                setWidth(width);
+                return;
+            }
+
+            for(Element component : components){
+                if(component != null) component.remove();
+            }
+            clearChildren();
+
+            Table line = new Table();
+            line.left().top().defaults().left().top();
+            float usedWidth = 0f;
+            boolean hasContent = false;
+            for(Element component : components){
+                if(component == null) continue;
+                component.pack();
+                float componentWidth = Math.max(1f, Math.max(component.getPrefWidth(), component.getWidth()));
+                float nextWidth = hasContent ? usedWidth + compactComponentGap + componentWidth : componentWidth;
+                if(hasContent && nextWidth > width){
+                    add(line).left().top().row();
+                    line = new Table();
+                    line.left().top().defaults().left().top();
+                    usedWidth = 0f;
+                    hasContent = false;
+                }
+                line.add(component).left().top().padLeft(hasContent ? compactComponentGap : 0f);
+                usedWidth += (hasContent ? compactComponentGap : 0f) + componentWidth;
+                hasContent = true;
+            }
+            if(hasContent){
+                add(line).left().top();
+            }
+
+            layoutWidth = width;
+            setWidth(width);
+            invalidateHierarchy();
+        }
+    }
+
     private static class ContentSnapshot{
         String title;
         String description;
@@ -3069,13 +3351,49 @@ public class PatchViewerMod extends Mod{
     }
 
     private static class CompactDiff{
-        final Seq<String> added = new Seq<>();
-        final Seq<String> modified = new Seq<>();
-        final Seq<String> removed = new Seq<>();
+        final Seq<CompactChange> added = new Seq<>();
+        final Seq<CompactChange> modified = new Seq<>();
+        final Seq<CompactChange> removed = new Seq<>();
+        final Seq<CompactChange> ordered = new Seq<>();
 
         boolean isEmpty(){
-            return added.isEmpty() && modified.isEmpty() && removed.isEmpty();
+            return ordered.isEmpty();
         }
+    }
+
+    private static class CompactChange{
+        final String label;
+        final String before;
+        final String after;
+        final RowKind kind;
+        final CompactBucket bucket;
+        Seq<CompactStackChange> stackChanges;
+
+        CompactChange(String label, String before, String after, RowKind kind, CompactBucket bucket){
+            this.label = label;
+            this.before = before;
+            this.after = after;
+            this.kind = kind == null ? RowKind.TEXT : kind;
+            this.bucket = bucket == null ? CompactBucket.MODIFIED : bucket;
+        }
+    }
+
+    private static class CompactStackChange{
+        final CompactStackItem before;
+        final CompactStackItem after;
+        final CompactBucket bucket;
+
+        CompactStackChange(CompactStackItem before, CompactStackItem after, CompactBucket bucket){
+            this.before = before;
+            this.after = after;
+            this.bucket = bucket;
+        }
+    }
+
+    private enum CompactBucket{
+        ADDED,
+        MODIFIED,
+        REMOVED
     }
 
     private static class ContentMatch{
@@ -3099,6 +3417,16 @@ public class PatchViewerMod extends Mod{
             this.amountText = amountText;
             this.end = end;
             this.suffix = suffix;
+        }
+    }
+
+    private static class CompactAmountSuffix{
+        final String suffix;
+        final int end;
+
+        CompactAmountSuffix(String suffix, int end){
+            this.suffix = suffix;
+            this.end = end;
         }
     }
 

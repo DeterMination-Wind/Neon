@@ -1,13 +1,15 @@
-# Neon v10.3.0
+# Neon v10.3.1
 
 ## 中文
 
-- 设置界面新增“反馈问题”按钮：简体中文和繁体中文用户跳转到 QQ 反馈群，其他语言用户跳转到 Discord 反馈频道。
-- 改进模组更新中心的失败检查处理，网络不可用或仓库不可达时不再用错误信息打断更新列表。
-- 修复拼音搜索筛选蓝图时恢复被原生标签筛选排除的蓝图，并增加对应回归测试。
+- 重做 PatchViewer 的快速差异视图：保留变更原有顺序，并以新增、修改、删除状态逐项展示。
+- 改进物品、液体和资源堆叠的差异显示，使用更清晰的图标、数量和前后值布局。
+- 修复快速 HUD 在窗口宽度变化后没有及时重排的问题，并改善长文本、箭头和图标的换行处理。
+- 发布 PatchViewer 2.2.2，并将其同步集成到 Neon。
 
 ## English
 
-- Adds a "Report an issue" button to the settings page. Simplified and Traditional Chinese users are sent to QQ, while other locales are sent to the Discord feedback channel.
-- Improves update-center failure handling so unavailable networks or repositories no longer interrupt the update list with error text.
-- Fixes pinyin schematic filtering so schematics excluded by native tag filters are not restored, with a regression test added.
+- Reworks PatchViewer's quick diff view to preserve change order and render additions, modifications, and removals item by item.
+- Improves item, liquid, and resource-stack diff rendering with clearer icons, amounts, and before/after layouts.
+- Fixes quick HUD relayouts when the available width changes and improves wrapping for long text, arrows, and icons.
+- Releases PatchViewer 2.2.2 and bundles it into Neon.

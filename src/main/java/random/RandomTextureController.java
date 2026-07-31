@@ -8,6 +8,7 @@ import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.ctype.UnlockableContent;
 import mindustry.type.Item;
+import mindustry.type.SectorPreset;
 import mindustry.type.UnitType;
 import mindustry.world.Block;
 
@@ -55,6 +56,7 @@ public final class RandomTextureController{
         add(Vars.content.blocks());
         add(Vars.content.items());
         add(Vars.content.units());
+        add(Vars.content.sectors());
     }
 
     private void add(Iterable<? extends UnlockableContent> contents){
@@ -78,6 +80,9 @@ public final class RandomTextureController{
         }
         if(content instanceof UnitType unit){
             return !unit.internal && (valid(unit.region) || valid(content.fullIcon) || valid(content.uiIcon));
+        }
+        if(content instanceof SectorPreset){
+            return valid(content.fullIcon) || valid(content.uiIcon);
         }
         return false;
     }
@@ -105,7 +110,7 @@ public final class RandomTextureController{
             target.unit.region = fitted(source.bodyFrame(0), target.originalBody);
         }
 
-        if(target.block != null || target.unit != null){
+        if(target.block != null || target.unit != null || target.sector != null){
             target.appliedFull = fitted(source.iconFrame(false, 0), target.originalFull);
             target.appliedUi = fitted(source.iconFrame(true, 0), target.originalUi);
             target.content.fullIcon = target.appliedFull;
@@ -180,6 +185,7 @@ public final class RandomTextureController{
         final Block block;
         final Item item;
         final UnitType unit;
+        final SectorPreset sector;
         final TextureRegion originalBody;
         final TextureRegion[] originalVariantRegions;
         final TextureRegion originalFull;
@@ -188,13 +194,14 @@ public final class RandomTextureController{
         TextureRegion appliedFull;
         TextureRegion appliedUi;
 
-        private Visual(UnlockableContent content, Block block, Item item, UnitType unit,
+        private Visual(UnlockableContent content, Block block, Item item, UnitType unit, SectorPreset sector,
                        TextureRegion originalBody, TextureRegion[] originalVariantRegions,
                        TextureRegion originalFull, TextureRegion originalUi, TextureRegion[] bodyFrames){
             this.content = content;
             this.block = block;
             this.item = item;
             this.unit = unit;
+            this.sector = sector;
             this.originalBody = originalBody;
             this.originalVariantRegions = originalVariantRegions;
             this.originalFull = originalFull;
@@ -208,16 +215,20 @@ public final class RandomTextureController{
             if(content instanceof Block block){
                 TextureRegion[] variants = block.variantRegions;
                 TextureRegion[] body = variants != null && variants.length > 0 ? variants.clone() : new TextureRegion[]{block.region};
-                return new Visual(content, block, null, null, block.region, variants == null ? null : variants.clone(), full, ui, body);
+                return new Visual(content, block, null, null, null, block.region, variants == null ? null : variants.clone(), full, ui, body);
             }
             if(content instanceof Item item){
                 TextureRegion[] frames = itemFrames(item);
                 if(frames.length == 0) frames = new TextureRegion[]{full != null ? full : ui};
-                return new Visual(content, null, item, null, full != null ? full : ui, null, full, ui, frames);
+                return new Visual(content, null, item, null, null, full != null ? full : ui, null, full, ui, frames);
             }
             if(content instanceof UnitType unit){
                 TextureRegion body = unit.region != null ? unit.region : full != null ? full : ui;
-                return new Visual(content, null, null, unit, body, null, full, ui, new TextureRegion[]{body});
+                return new Visual(content, null, null, unit, null, body, null, full, ui, new TextureRegion[]{body});
+            }
+            if(content instanceof SectorPreset sector){
+                TextureRegion icon = full != null ? full : ui;
+                return new Visual(content, null, null, null, sector, icon, null, full, ui, new TextureRegion[]{icon});
             }
             return null;
         }
@@ -265,7 +276,7 @@ public final class RandomTextureController{
                 unit.uiIcon = originalUi;
             }
 
-            if(block != null || unit != null){
+            if(block != null || unit != null || sector != null){
                 content.fullIcon = originalFull;
                 content.uiIcon = originalUi;
             }

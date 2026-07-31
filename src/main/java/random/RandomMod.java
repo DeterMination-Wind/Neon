@@ -30,6 +30,7 @@ public class RandomMod extends Mod{
 
     private RandomStateStore store;
     private RandomTextResolver textResolver;
+    private RandomInstructionTextController instructionTextController;
     private RandomTextureController textureController;
     private DatabaseDialog originalDatabase;
     private ContentInfoDialog originalContent;
@@ -40,6 +41,7 @@ public class RandomMod extends Mod{
     private boolean settingsAdded;
     private boolean bundledRandomEnabled;
     private boolean bundledMenuHooked;
+    private int mi2uRefreshGeneration;
 
     @Override
     public void init(){
@@ -48,6 +50,7 @@ public class RandomMod extends Mod{
 
         store = new RandomStateStore();
         textResolver = new RandomTextResolver(store);
+        instructionTextController = new RandomInstructionTextController(store);
         textureController = new RandomTextureController(store);
 
         Events.on(EventType.ClientLoadEvent.class, event -> onClientLoad());
@@ -128,7 +131,7 @@ public class RandomMod extends Mod{
     }
 
     private void onWorldLoad(){
-        if(store == null || textResolver == null || textureController == null) return;
+        if(store == null || textResolver == null || instructionTextController == null || textureController == null) return;
 
         activeText = bekBundled ? bundledRandomEnabled : RandomSettings.textEnabled();
         activeTexture = bekBundled ? bundledRandomEnabled : RandomSettings.textureEnabled();
@@ -137,13 +140,16 @@ public class RandomMod extends Mod{
         activeCacheKey = store.cacheKey(identity, activeContentSignature, activeText, activeTexture);
 
         textResolver.begin(activeCacheKey, activeText);
+        instructionTextController.begin(activeCacheKey, activeText);
         if(activeText && !installTextDialogs()){
-            Log.warn("Random text presentation disabled because another mod owns the database or content dialog.");
-            activeText = false;
+            Log.warn("Random database text presentation disabled because another mod owns the database or content dialog.");
             textResolver.reset();
         }
 
+        boolean textureChanged = textureController.active();
         textureController.begin(activeCacheKey, activeTexture);
+        textureChanged |= textureController.active();
+        if(activeText || textureChanged) refreshMi2uContentCaches();
     }
 
     private boolean installTextDialogs(){
@@ -169,13 +175,36 @@ public class RandomMod extends Mod{
     }
 
     private void resetWorld(){
+        boolean textChanged = textResolver != null && textResolver.active();
+        boolean textureChanged = textureController != null && textureController.active();
         if(textureController != null) textureController.reset();
+        if(instructionTextController != null) instructionTextController.reset();
         if(textResolver != null) textResolver.reset();
         restoreTextDialogs();
+        if(textChanged || textureChanged) refreshMi2uContentCaches();
         activeCacheKey = null;
         activeContentSignature = null;
         activeText = false;
         activeTexture = false;
+    }
+
+    /** Mi2u caches several static content presentation widgets; refresh after a mapping changes. */
+    private void refreshMi2uContentCaches(){
+        if(Vars.mods == null) return;
+        var mi2u = Vars.mods.getMod("mi2-utilities-java");
+        if(mi2u == null || !mi2u.enabled()) return;
+
+        int generation = ++mi2uRefreshGeneration;
+        Runnable refresh = () -> {
+            if(generation != mi2uRefreshGeneration || Vars.mods == null) return;
+            var current = Vars.mods.getMod("mi2-utilities-java");
+            if(current != null && current.enabled()) Events.fire(new EventType.ContentInitEvent());
+        };
+        if(Core.app == null){
+            refresh.run();
+        }else{
+            Core.app.post(refresh);
+        }
     }
 
     private void restoreTextDialogs(){

@@ -24,8 +24,8 @@ import static mindustry.Vars.state;
 
 /** Stores mappings outside native save files while keeping their cache key explicit. */
 public final class RandomStateStore{
-    public static final int ALGORITHM_VERSION = 1;
-    private static final String TEXT_KIND = "text";
+    public static final int ALGORITHM_VERSION = 2;
+    private static final String[] TEXT_KINDS = {"name", "description", "details", "database-category", "instruction"};
     private static final String TEXTURE_KIND = "texture";
 
     private final Fi mappingDirectory;
@@ -135,7 +135,9 @@ public final class RandomStateStore{
 
     public void migrate(String oldCacheKey, String newCacheKey, boolean text, boolean texture){
         if(oldCacheKey == null || newCacheKey == null || oldCacheKey.equals(newCacheKey)) return;
-        if(text) copy(oldCacheKey, newCacheKey, TEXT_KIND);
+        if(text){
+            for(String kind : TEXT_KINDS) copy(oldCacheKey, newCacheKey, kind);
+        }
         if(texture) copy(oldCacheKey, newCacheKey, TEXTURE_KIND);
     }
 

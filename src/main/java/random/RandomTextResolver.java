@@ -3,21 +3,24 @@ package random;
 import arc.Core;
 import arc.struct.Seq;
 import mindustry.Vars;
+import mindustry.ctype.Content;
 import mindustry.ctype.UnlockableContent;
 import mindustry.world.meta.Stat;
 import mindustry.world.meta.StatCat;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Resolves randomized strings without modifying Mindustry content objects. */
+/** Resolves randomized strings and synchronizes direct content labels with the active mapping. */
 public final class RandomTextResolver{
     private static final String NAME_KIND = "name";
     private static final String DESCRIPTION_KIND = "description";
     private static final String DETAILS_KIND = "details";
+    private static final String DATABASE_CATEGORY_KIND = "database-category";
 
     private final RandomStateStore store;
     private final Map<String, TextEntry> entries = new LinkedHashMap<>();
@@ -26,9 +29,11 @@ public final class RandomTextResolver{
     private final Map<String, TextEntry> contentDetails = new LinkedHashMap<>();
     private final Map<String, TextEntry> databaseCategories = new LinkedHashMap<>();
     private final Map<String, TextEntry> databaseTags = new LinkedHashMap<>();
+    private final IdentityHashMap<UnlockableContent, String> originalLocalizedNames = new IdentityHashMap<>();
     private Map<String, String> nameMapping = new LinkedHashMap<>();
     private Map<String, String> descriptionMapping = new LinkedHashMap<>();
     private Map<String, String> detailsMapping = new LinkedHashMap<>();
+    private Map<String, String> databaseCategoryMapping = new LinkedHashMap<>();
     private boolean active;
 
     public RandomTextResolver(RandomStateStore store){
@@ -49,11 +54,10 @@ public final class RandomTextResolver{
         List<String> commonIds = new ArrayList<>();
         List<String> descriptionIds = new ArrayList<>();
         List<String> detailsIds = new ArrayList<>();
+        List<String> databaseCategoryIds = new ArrayList<>();
 
-        addContentEntries(Vars.content.blocks(), commonIds, descriptionIds, detailsIds);
-        addContentEntries(Vars.content.items(), commonIds, descriptionIds, detailsIds);
-        addContentEntries(Vars.content.units(), commonIds, descriptionIds, detailsIds);
-        addDatabaseEntries(commonIds);
+        addContentEntries(commonIds, descriptionIds, detailsIds);
+        addDatabaseEntries(commonIds, databaseCategoryIds);
 
         for(StatCat category : StatCat.all){
             TextEntry entry = entry("name:category:" + category.name, "category." + category.name, category.localized());
@@ -72,35 +76,40 @@ public final class RandomTextResolver{
         nameMapping = loadOrGenerate(cacheKey, NAME_KIND, commonIds);
         descriptionMapping = loadOrGenerate(cacheKey, DESCRIPTION_KIND, descriptionIds);
         detailsMapping = loadOrGenerate(cacheKey, DETAILS_KIND, detailsIds);
+        databaseCategoryMapping = loadOrGenerate(cacheKey, DATABASE_CATEGORY_KIND, databaseCategoryIds);
         active = true;
+        applyLocalizedNames();
     }
 
-    private void addContentEntries(Seq<? extends UnlockableContent> contents, List<String> commonIds,
-                                   List<String> descriptionIds, List<String> detailsIds){
-        for(UnlockableContent content : contents){
-            if(content == null || content.removed) continue;
+    /** Includes every unlockable type so modded liquids and campaign content share the same text pools. */
+    private void addContentEntries(List<String> commonIds, List<String> descriptionIds, List<String> detailsIds){
+        for(Seq<Content> contents : Vars.content.getContentMap()){
+            for(Content raw : contents){
+                if(!(raw instanceof UnlockableContent content)) continue;
+                if(content.removed) continue;
 
-            String prefix = content.getContentType().name() + ":" + content.name;
-            String bundlePrefix = content.getContentType().name() + "." + content.name;
-            TextEntry name = entry("name:content:" + prefix, bundlePrefix + ".name", content.localizedName);
-            if(name != null){
-                contentNames.put(contentKey(content), name);
-                commonIds.add(name.id);
-            }
-
-            if(content.description != null && !content.description.trim().isEmpty()){
-                TextEntry description = entry("description:content:" + prefix, bundlePrefix + ".description", content.description);
-                if(description != null){
-                    contentDescriptions.put(contentKey(content), description);
-                    descriptionIds.add(description.id);
+                String prefix = content.getContentType().name() + ":" + content.name;
+                String bundlePrefix = content.getContentType().name() + "." + content.name;
+                TextEntry name = entry("name:content:" + prefix, bundlePrefix + ".name", content.localizedName);
+                if(name != null){
+                    contentNames.put(contentKey(content), name);
+                    commonIds.add(name.id);
                 }
-            }
 
-            if(content.details != null && !content.details.trim().isEmpty()){
-                TextEntry details = entry("details:content:" + prefix, bundlePrefix + ".details", content.details);
-                if(details != null){
-                    contentDetails.put(contentKey(content), details);
-                    detailsIds.add(details.id);
+                if(content.description != null && !content.description.trim().isEmpty()){
+                    TextEntry description = entry("description:content:" + prefix, bundlePrefix + ".description", content.description);
+                    if(description != null){
+                        contentDescriptions.put(contentKey(content), description);
+                        descriptionIds.add(description.id);
+                    }
+                }
+
+                if(content.details != null && !content.details.trim().isEmpty()){
+                    TextEntry details = entry("details:content:" + prefix, bundlePrefix + ".details", content.details);
+                    if(details != null){
+                        contentDetails.put(contentKey(content), details);
+                        detailsIds.add(details.id);
+                    }
                 }
             }
         }
@@ -125,16 +134,41 @@ public final class RandomTextResolver{
     }
 
     public void reset(){
+        for(Map.Entry<UnlockableContent, String> entry : originalLocalizedNames.entrySet()){
+            entry.getKey().localizedName = entry.getValue();
+        }
+        originalLocalizedNames.clear();
         active = false;
         nameMapping = new LinkedHashMap<>();
         descriptionMapping = new LinkedHashMap<>();
         detailsMapping = new LinkedHashMap<>();
+        databaseCategoryMapping = new LinkedHashMap<>();
         entries.clear();
         contentNames.clear();
         contentDescriptions.clear();
         contentDetails.clear();
         databaseCategories.clear();
         databaseTags.clear();
+    }
+
+    /**
+     * The vanilla placement HUD and many third-party static widgets read localizedName directly.
+     * Keep that field in sync with the resolver while the random presentation is active, then
+     * restore the content-owned value in reset().
+     */
+    private void applyLocalizedNames(){
+        if(Vars.content == null) return;
+        for(Seq<Content> contents : Vars.content.getContentMap()){
+            for(Content raw : contents){
+                if(!(raw instanceof UnlockableContent content) || content.removed) continue;
+                if(!contentNames.containsKey(contentKey(content))) continue;
+
+                String randomized = name(content);
+                if(randomized.isEmpty() || randomized.equals(content.localizedName)) continue;
+                originalLocalizedNames.put(content, content.localizedName);
+                content.localizedName = randomized;
+            }
+        }
     }
 
     public boolean active(){
@@ -180,7 +214,7 @@ public final class RandomTextResolver{
     public String databaseCategory(String category){
         String original = localized("database-category." + category, category);
         if(!active) return original;
-        return mapped(databaseCategories.get(category), nameMapping, original);
+        return mapped(databaseCategories.get(category), databaseCategoryMapping, original);
     }
 
     public String databaseTag(String tag){
@@ -212,9 +246,9 @@ public final class RandomTextResolver{
         return localized(content.getContentType().name() + "." + content.name + ".description", content.description);
     }
 
-    private void addDatabaseEntries(List<String> commonIds){
-        for(Seq<mindustry.ctype.Content> contents : Vars.content.getContentMap()){
-            for(mindustry.ctype.Content raw : contents){
+    private void addDatabaseEntries(List<String> commonIds, List<String> databaseCategoryIds){
+        for(Seq<Content> contents : Vars.content.getContentMap()){
+            for(Content raw : contents){
                 if(!(raw instanceof UnlockableContent content)) continue;
 
                 String category = content.databaseCategory == null || content.databaseCategory.isEmpty()
@@ -228,7 +262,7 @@ public final class RandomTextResolver{
                     "database-tag." + tag, tag);
                 databaseCategories.put(category, categoryEntry);
                 databaseTags.put(tag, tagEntry);
-                addUnique(commonIds, categoryEntry == null ? null : categoryEntry.id);
+                addUnique(databaseCategoryIds, categoryEntry == null ? null : categoryEntry.id);
                 addUnique(commonIds, tagEntry == null ? null : tagEntry.id);
             }
         }

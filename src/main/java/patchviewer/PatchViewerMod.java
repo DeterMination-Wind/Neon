@@ -177,11 +177,14 @@ public class PatchViewerMod extends Mod{
                         if(originalDialog != null && originalDialog != this){
                             originalDialog.show(content);
                         }else{
-                            showPatched(content);
+                            super.show(content);
                         }
                         return;
                     }
-                    showPatched(content);
+
+                    // Calling super keeps Vars.ui.content and the visible dialog as the same instance.
+                    super.show(content);
+                    showPatched(this, content);
                 }
             };
         }catch(Throwable error){
@@ -1311,6 +1314,12 @@ public class PatchViewerMod extends Mod{
                 if(row.kind != RowKind.TEXT || row.compactKind != RowKind.TEXT){
                     row.rendered = rendered;
                     captureLabelStates(rendered, row.labels);
+                    // Some native StatValues (for example drillables) calculate their colspan
+                    // from the stat inset's existing label cell. Keep a baseline copy built in
+                    // that exact context for the database diff view; `rendered` intentionally
+                    // remains the lightweight value-only table used by the compact displays.
+                    row.nativeInset = buildNativeStatInset(row.label, map.get(stat));
+                    captureLabelStates(row.nativeInset, row.nativeLabels);
                     row.compactText = extractStructuredCompactText(rendered);
                     if(row.compactKind == RowKind.STACK_LIST){
                         row.compactText = normalizeStackCompactText(row.compactText);
@@ -1337,13 +1346,29 @@ public class PatchViewerMod extends Mod{
             for(StatValue value : values){
                 try{
                     value.display(table);
+                    table.add().size(10f);
                 }catch(Throwable ignored){
                 }
             }
         }
-        normalizeUnitIconLinks(table);
-        freezeElementTree(table);
-        return simplifyRenderedTable(table);
+        return table;
+    }
+
+    /** Mirrors ContentInfoDialog's per-stat construction, including its leading stat-label cell. */
+    private Table buildNativeStatInset(String label, Seq<StatValue> values){
+        Table inset = new Table();
+        inset.left();
+        inset.add("[lightgray]" + (label == null ? "" : label) + ":[] ").left().top();
+        if(values != null){
+            for(StatValue value : values){
+                try{
+                    value.display(inset);
+                    inset.add().size(10f);
+                }catch(Throwable ignored){
+                }
+            }
+        }
+        return inset;
     }
 
     private void sanitizeQuestionMarkButtons(Element element){
@@ -2549,7 +2574,219 @@ public class PatchViewerMod extends Mod{
         return row != null && (row.buildCostBefore != null || row.buildCostAfter != null);
     }
 
-    private void showPatched(UnlockableContent content){
+    /** Applies diffs only to the native rows that changed; every other dialog node stays untouched. */
+    private void showPatched(ContentInfoDialog dialog, UnlockableContent content){
+        if(dialog == null || content == null) return;
+
+        ContentDiff diff = diffsByContent.get(content);
+        if(diff == null || diff.isEmpty()) return;
+
+        Table table = findNativeContentTable(dialog.cont);
+        if(table == null) return;
+
+        ContentSnapshot before = baselineSnapshots.get(content);
+        ContentSnapshot after = afterSnapshots.get(content);
+
+        applyContentTextDiff(table, content.displayDescription(), diff.description);
+        applyContentTextDiff(table, content.details, diff.details);
+        applyNativeStatDiffs(table, content, before, after, diff);
+    }
+
+    private Table findNativeContentTable(Element element){
+        if(element == null) return null;
+        if(element instanceof ScrollPane){
+            Element widget = ((ScrollPane)element).getWidget();
+            if(widget instanceof Table) return (Table)widget;
+        }
+        if(element instanceof Group){
+            Seq<Element> children = ((Group)element).getChildren();
+            for(int i = 0; i < children.size; i++){
+                Table table = findNativeContentTable(children.get(i));
+                if(table != null) return table;
+            }
+        }
+        return null;
+    }
+
+    private void applyContentTextDiff(Table root, String currentText, String markup){
+        if(root == null || markup == null) return;
+        String expected = normalizeText(currentText);
+        if(expected == null) return;
+
+        Label label = findLabelWithText(root, expected);
+        if(label == null) return;
+        label.setText("[lightgray]" + markup);
+        label.setWrap(true);
+        label.setEllipsis(false);
+    }
+
+    private Label findLabelWithText(Element element, String expected){
+        if(element == null || expected == null) return null;
+        if(element instanceof Label){
+            CharSequence text = ((Label)element).getText();
+            String visible = normalizeText(text == null ? null : Strings.stripColors(text.toString()));
+            return expected.equals(visible) ? (Label)element : null;
+        }
+        if(element instanceof ScrollPane){
+            return findLabelWithText(((ScrollPane)element).getWidget(), expected);
+        }
+        if(element instanceof Group){
+            Seq<Element> children = ((Group)element).getChildren();
+            for(int i = 0; i < children.size; i++){
+                Label label = findLabelWithText(children.get(i), expected);
+                if(label != null) return label;
+            }
+        }
+        return null;
+    }
+
+    private void applyNativeStatDiffs(Table root, UnlockableContent content, ContentSnapshot before, ContentSnapshot after, ContentDiff diff){
+        if(root == null || content == null || diff == null) return;
+
+        OrderedSet<String> displayKeys = new OrderedSet<>();
+        if(before != null) displayKeys.addAll(before.order);
+        if(after != null) displayKeys.addAll(after.order);
+        displayKeys.addAll(diff.rows.keys().toSeq());
+
+        for(String key : displayKeys){
+            InlineRow row = diff.rows.get(key);
+            if(row == null) continue;
+
+            SnapshotRow beforeRow = before == null ? null : before.rows.get(key);
+            SnapshotRow afterRow = after == null ? null : after.rows.get(key);
+            SnapshotRow source = afterRow != null ? afterRow : beforeRow;
+            if(source == null) continue;
+
+            NativeStatInset inset = findNativeStatInset(root, source.label);
+            if(inset == null) continue;
+
+            wrapNativeStatInset(inset, row, beforeRow);
+        }
+
+        root.invalidateHierarchy();
+    }
+
+    private NativeStatInset findNativeStatInset(Table root, String label){
+        if(root == null || label == null) return null;
+        String expected = label.trim() + ":";
+        Seq<Cell> cells = root.getCells();
+        for(int i = 0; i < cells.size; i++){
+            Element child = cells.get(i).get();
+            if(!(child instanceof Table)) continue;
+            Table candidate = (Table)child;
+            Seq<Cell> candidateCells = candidate.getCells();
+            if(candidateCells.isEmpty()) continue;
+            Element first = candidateCells.first().get();
+            if(!(first instanceof Label)) continue;
+            CharSequence text = ((Label)first).getText();
+            String visible = Strings.stripColors(text == null ? "" : text.toString()).trim();
+            if(expected.equals(visible)) return new NativeStatInset(cells.get(i), candidate);
+        }
+        return null;
+    }
+
+    /**
+     * Leaves the original post-patch inset intact and wraps it with a baseline inset.  Moving the
+     * original element rather than rebuilding it preserves the game's native icon sizing, click
+     * listeners, wrapping, and any version-specific StatValue layout behavior.
+     */
+    private void wrapNativeStatInset(NativeStatInset target, InlineRow row, SnapshotRow beforeRow){
+        if(target == null || target.table == null || target.cell == null) return;
+
+        Table beforeInset = baselineInset(beforeRow);
+        Seq<LabelState> beforeLabels = baselineInsetLabels(beforeRow, beforeInset);
+        Seq<LabelState> afterLabels = new Seq<>();
+        captureLabelStates(target.table, afterLabels);
+
+        if(beforeInset != null && !afterLabels.isEmpty()){
+            if(beforeRow != null && beforeRow.nativeInset == null){
+                // A plain snapshot has a single reconstructed value label while the native after
+                // row can contain several cells (number and unit, for example). Keep the cells
+                // intact and color each side as a modification instead of treating them as a
+                // removal/addition mismatch.
+                restoreLabelStates(beforeLabels);
+                highlightStatValueLabels(beforeLabels, modifiedOldColorTag());
+                highlightStatValueLabels(afterLabels, modifiedNewColorTag());
+            }else{
+                prepareRenderedDiff(beforeLabels, afterLabels);
+            }
+            if(row.kind == RowKind.STACK_LIST){
+                highlightChangedGroups(beforeLabels);
+                highlightChangedGroups(afterLabels);
+            }
+        }else if(beforeInset != null){
+            restoreLabelStates(beforeLabels);
+            highlightStatValueLabels(beforeLabels, removedColorTag());
+            if(row.kind == RowKind.STACK_LIST) highlightChangedGroups(beforeLabels);
+        }else{
+            highlightStatValueLabels(afterLabels, addedColorTag());
+            if(row.kind == RowKind.STACK_LIST) highlightChangedGroups(afterLabels);
+        }
+
+        Table wrapper = new Table();
+        wrapper.left().top().defaults().left().top();
+
+        if(beforeInset != null){
+            wrapper.add(beforeInset).left().top().fillX().growX();
+            wrapper.row();
+            wrapper.add(arrowColor + "->[]").left().padTop(2f).padBottom(2f);
+            wrapper.row();
+        }
+
+        // Replace the root cell first, then move the original inset into the wrapper. This avoids
+        // rebuilding any post-patch StatValue widgets and keeps their original event handlers.
+        target.cell.setElement(wrapper);
+        if(beforeInset != null) hideRepeatedNativeStatLabel(target.table);
+        wrapper.add(target.table).left().top().fillX().growX();
+    }
+
+    /**
+     * The baseline row already owns the stat key. Keep the native after row's first cell so
+     * colspan-based StatValues retain their original column count, but make its duplicate label
+     * visually empty.
+     */
+    private void hideRepeatedNativeStatLabel(Table inset){
+        if(inset == null) return;
+        Seq<Cell> cells = inset.getCells();
+        if(cells.isEmpty()) return;
+        Element first = cells.first().get();
+        if(first instanceof Label){
+            ((Label)first).setText("");
+        }
+    }
+
+    private Table baselineInset(SnapshotRow row){
+        if(row == null) return null;
+        if(row.nativeInset != null) return row.nativeInset;
+
+        // Plain rows have no child widgets to preserve. Their snapshot text is sufficient for a
+        // baseline row while the post-patch row remains the original game-created widget.
+        Table inset = new Table();
+        inset.left();
+        inset.add("[lightgray]" + escape(row.label == null ? "" : row.label) + ":[] ").left().top();
+        Label value = new Label(row.text == null ? "" : row.text);
+        value.setWrap(true);
+        value.setEllipsis(false);
+        inset.add(value).left().top().fillX().growX();
+        return inset;
+    }
+
+    private Seq<LabelState> baselineInsetLabels(SnapshotRow row, Table inset){
+        if(row != null && row.nativeInset == inset) return row.nativeLabels;
+        Seq<LabelState> labels = new Seq<>();
+        captureLabelStates(inset, labels);
+        return labels;
+    }
+
+    /** Keeps the static stat label neutral when an entire added or removed row is highlighted. */
+    private void highlightStatValueLabels(Seq<LabelState> labels, String colorTag){
+        if(labels == null) return;
+        for(int i = 1; i < labels.size; i++){
+            highlightWholeLabel(labels.get(i), colorTag);
+        }
+    }
+
+    private void showLegacyPatched(UnlockableContent content){
         Vars.ui.content.cont.clear();
 
         Table table = new Table();
@@ -3331,6 +3568,8 @@ public class PatchViewerMod extends Mod{
         Seq<String> numeric = new Seq<>();
         Table rendered;
         final Seq<LabelState> labels = new Seq<>();
+        Table nativeInset;
+        final Seq<LabelState> nativeLabels = new Seq<>();
 
         SnapshotRow(StatCat cat, Stat stat, String label){
             this.cat = cat;
@@ -3530,6 +3769,16 @@ public class PatchViewerMod extends Mod{
 
         static InlineRow forNative(String label, RowKind kind, Table beforeRendered, Seq<LabelState> beforeLabels, Table afterRendered, Seq<LabelState> afterLabels){
             return new InlineRow(label, null, null, null, true, kind, beforeRendered, beforeLabels, afterRendered, afterLabels);
+        }
+    }
+
+    private static class NativeStatInset{
+        final Cell cell;
+        final Table table;
+
+        NativeStatInset(Cell cell, Table table){
+            this.cell = cell;
+            this.table = table;
         }
     }
 

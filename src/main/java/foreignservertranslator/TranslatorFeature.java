@@ -131,6 +131,10 @@ public final class TranslatorFeature{
         return foreignServers != null && foreignServers.contains(key);
     }
 
+    public static boolean hasMarkedForeignServer(){
+        return foreignServers != null && foreignServers.size > 0;
+    }
+
     public static void toggleForeign(String key){
         if(foreignServers == null) foreignServers = new ObjectSet<>();
         if(!foreignServers.remove(key)){

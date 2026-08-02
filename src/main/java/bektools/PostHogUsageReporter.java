@@ -17,6 +17,14 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.function.Supplier;
 
 final class PostHogUsageReporter{
     private static final String logTag = "[Neon/PostHog]";
@@ -29,6 +37,7 @@ final class PostHogUsageReporter{
     private static final int minFlushMinutes = 2;
 
     private final Class<? extends Mod> modType;
+    private final Supplier<Map<String, Boolean>> submodStateSupplier;
 
     private boolean installed;
     private boolean flushed;
@@ -37,7 +46,12 @@ final class PostHogUsageReporter{
     private PlayerIdResolution cachedIdResolution;
 
     PostHogUsageReporter(Class<? extends Mod> modType){
+        this(modType, Collections::emptyMap);
+    }
+
+    PostHogUsageReporter(Class<? extends Mod> modType, Supplier<Map<String, Boolean>> submodStateSupplier){
         this.modType = modType;
+        this.submodStateSupplier = submodStateSupplier == null ? Collections::emptyMap : submodStateSupplier;
     }
 
     void onClientLoad(){
@@ -83,9 +97,11 @@ final class PostHogUsageReporter{
         PlayerIdResolution idResolution = cachedIdResolution;
         String distinctId = normalize(idResolution.playerId, "unknown");
         String playerName = normalize(resolvePlayerName(), "unknown");
+        String timestamp = utcTimestamp();
+        Map<String, Boolean> submods = resolveSubmodStates();
         Log.info(logTag + " send prepared. distinct_id=" + distinctId + ", player_id=" + distinctId + ", player_id_source=" + idResolution.source + ", raw_player_uuid=" + idResolution.rawPlayerUuid + ", raw_platform_uuid=" + idResolution.rawPlatformUuid + ", cached_player_id=" + idResolution.cachedPlayerId + ", player_name=" + playerName + ", game_version=" + gameVersion + ", mod_version=" + meta.modVersion + ", usage_minutes=" + nextPending);
 
-        if(sendUsage(distinctId, playerName, gameVersion, meta.modVersion, nextPending)){
+        if(sendUsage(distinctId, playerName, gameVersion, meta.modVersion, nextPending, timestamp, submods)){
             persistPendingMinutes(0);
             Log.info(logTag + " upload success. pending reset to 0.");
         }else{
@@ -93,19 +109,21 @@ final class PostHogUsageReporter{
         }
     }
 
-    private boolean sendUsage(String distinctId, String playerName, String gameVersion, String modVersion, int usageMinutes){
+    private boolean sendUsage(String distinctId, String playerName, String gameVersion, String modVersion, int usageMinutes, String timestamp, Map<String, Boolean> submods){
         HttpURLConnection conn = null;
         try{
             String json = "{"
             + "\"api_key\":\"" + escapeJson(apiKey) + "\","
             + "\"event\":\"" + eventName + "\","
             + "\"distinct_id\":\"" + escapeJson(distinctId) + "\","
+            + "\"timestamp\":\"" + escapeJson(timestamp) + "\","
             + "\"properties\":{"
             + "\"player_id\":\"" + escapeJson(distinctId) + "\","
             + "\"player_name\":\"" + escapeJson(playerName) + "\","
             + "\"game_version\":\"" + escapeJson(gameVersion) + "\","
             + "\"mod_version\":\"" + escapeJson(modVersion) + "\","
-            + "\"usage_minutes\":" + usageMinutes
+            + "\"usage_minutes\":" + usageMinutes + ","
+            + "\"submods\":" + encodeSubmods(submods)
             + "}}";
 
             conn = (HttpURLConnection)new URL(endpoint).openConnection();
@@ -136,6 +154,23 @@ final class PostHogUsageReporter{
         }finally{
             if(conn != null) conn.disconnect();
         }
+    }
+
+    private Map<String, Boolean> resolveSubmodStates(){
+        try{
+            Map<String, Boolean> states = submodStateSupplier.get();
+            if(states == null || states.isEmpty()) return Collections.emptyMap();
+            return new LinkedHashMap<>(states);
+        }catch(Throwable t){
+            Log.warn(logTag + " failed to resolve submod states", t);
+            return Collections.emptyMap();
+        }
+    }
+
+    private static String utcTimestamp(){
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT);
+        format.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return format.format(new Date());
     }
 
     private void installShutdownHook(){
@@ -235,6 +270,21 @@ final class PostHogUsageReporter{
             }
         }
         return out.toString();
+    }
+
+    private static String encodeSubmods(Map<String, Boolean> submods){
+        StringBuilder out = new StringBuilder("{");
+        boolean first = true;
+        if(submods != null){
+            for(Map.Entry<String, Boolean> entry : submods.entrySet()){
+                if(entry.getKey() == null) continue;
+                if(!first) out.append(',');
+                out.append('"').append(escapeJson(entry.getKey())).append("\":");
+                out.append(Boolean.TRUE.equals(entry.getValue()));
+                first = false;
+            }
+        }
+        return out.append('}').toString();
     }
 
     private static String readBody(InputStream stream){

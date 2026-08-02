@@ -1,6 +1,7 @@
 package tripwire;
 
 import arc.Events;
+import mdtxcompat.MindustryXOverlayUiBridge;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType;
 import mindustry.gen.Icon;
@@ -18,7 +19,7 @@ public class TripwireMod extends Mod {
     }
 
     public TripwireMod() {
-        this(OverlayUiBridge.UNSUPPORTED);
+        this(bekBundled ? OverlayUiBridge.UNSUPPORTED : new MindustryXOverlayUiBridge());
     }
 
     protected TripwireMod(OverlayUiBridge overlayUi) {

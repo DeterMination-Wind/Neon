@@ -28,6 +28,65 @@
       "bundlesDir": "src/main/resources/bundles"
     },
     {
+      "id": "brf",
+      "name": "Better RTS Formation",
+      "localPath": "../BetterRTSFormation",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/betterrtsformation",
+      "mainClassFile": "BetterRTSFormationMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "btg",
+      "name": "BetterTerrainGen-V2",
+      "localPath": "../BetterTerrainGen-V2",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/betterterraingen/v2",
+      "mainClassFile": "BetterTerrainGenV2Mod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "ap",
+      "name": "AutoPruner",
+      "localPath": "../AutoPruner",
+      "trackUpstream": false,
+      "javaPackageDir": "src/main/java/autopruner",
+      "mainClassFile": "AutoPrunerMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false,
+      "allowNoGit": true
+    },
+    {
+      "id": "ctd",
+      "name": "Color-the-ducts",
+      "localPath": "../Color-the-ducts",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/colortheducts",
+      "mainClassFile": "ColorTheDuctsMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
+    },
+    {
+      "id": "ls",
+      "name": "LogicSugar",
+      "localPath": "../LogicSugar",
+      "trackUpstream": true,
+      "sourceJavaDir": "src/logicsugar",
+      "javaPackageDir": "src/main/java/logicsugar",
+      "extraJavaDirs": [
+        "src/main/java/mindustry/logic"
+      ],
+      "sourceExtraJavaDirs": [
+        "src/mindustry/logic"
+      ],
+      "mainClassFile": "LogicSugarMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "sourceBundlesDir": "assets/bundles",
+      "injectBekHooks": false
+    },
+    {
       "id": "bmm",
       "name": "betterMiniMap",
       "localPath": "../betterMiniMap",

@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-07-31T11:08:21Z",
+  "generatedAtUtc": "2026-08-02T16:34:41Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -235,6 +235,71 @@
       "repoUrl": null,
       "branch": null,
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\Random"
+    },
+    "brf": {
+      "sourceKind": "git",
+      "syncedHead": "686b1e236e76083e22a8deefd5c8ab46601d630e",
+      "workspaceHeadAtSync": "686b1e236e76083e22a8deefd5c8ab46601d630e",
+      "workspaceDirtyAtSync": true,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "686b1e236e76083e22a8deefd5c8ab46601d630e",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterRTSFormation"
+    },
+    "btg": {
+      "sourceKind": "git",
+      "syncedHead": "2e3b21cba2855a0811f4ee96eae2df46df9afa5d",
+      "workspaceHeadAtSync": "2e3b21cba2855a0811f4ee96eae2df46df9afa5d",
+      "workspaceDirtyAtSync": true,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "2e3b21cba2855a0811f4ee96eae2df46df9afa5d",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterTerrainGen-V2"
+    },
+    "ap": {
+      "sourceKind": "snapshot",
+      "syncedHead": "nogit-7b5242928b2e2f57a19238e7aaadde9482418fad",
+      "workspaceHeadAtSync": "nogit-7b5242928b2e2f57a19238e7aaadde9482418fad",
+      "workspaceDirtyAtSync": false,
+      "upstreamRef": null,
+      "upstreamHeadAtSync": null,
+      "aheadOfUpstreamAtSync": null,
+      "behindUpstreamAtSync": null,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\AutoPruner"
+    },
+    "ctd": {
+      "sourceKind": "git",
+      "syncedHead": "f9c44dc74c90a8366a97beb46b3e634e40910de1",
+      "workspaceHeadAtSync": "f9c44dc74c90a8366a97beb46b3e634e40910de1",
+      "workspaceDirtyAtSync": true,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "f9c44dc74c90a8366a97beb46b3e634e40910de1",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\Color-the-ducts"
+    },
+    "ls": {
+      "sourceKind": "git",
+      "syncedHead": "2e1e7dd9a938ee1a6f40ad326c64801c76896e9f",
+      "workspaceHeadAtSync": "2e1e7dd9a938ee1a6f40ad326c64801c76896e9f",
+      "workspaceDirtyAtSync": true,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "2e1e7dd9a938ee1a6f40ad326c64801c76896e9f",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\LogicSugar"
     }
   }
 }

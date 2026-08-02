@@ -13,7 +13,7 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 19 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 24 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
@@ -34,10 +34,15 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 19 �
 - Tripwire（地理围栏报警）
 - BetterPolyAi（Poly 建造辅助）
 - AdvancedReplace（地图编辑高级替换）
+- BetterRTSFormation（更好的 RTS 编队）
+- BetterTerrainGen-V2（更自然的地形生成）
+- AutoPruner（智能拆除）
+- Color-the-ducts（导管染色）
+- LogicSugar（逻辑辅助）
 
-如果你只想安装一次、一次性获得这十九类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助"功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这二十四类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助"功能，Neon 会更省事。
 
-提示：Neon 已包含上述 19 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 24 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -155,6 +160,32 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 19 �
 - 支持 CIEDE2000 色差宽容度设置，便于处理近似颜色的染色地形。
 - 设置项已纳入 Neon 聚合设置页统一管理。
 
+#### 20) BetterRTSFormation（更好的 RTS 编队）
+
+- 让 RTS 编队更容易创建、选择和识别，并保留原有快捷键行为。
+- 支持编队角标、严格编队选择，以及非指挥模式下的编队操作。
+- 设置项已纳入 Neon 聚合设置页统一管理。
+
+#### 21) BetterTerrainGen-V2（更自然的地形生成）
+
+- 为地图编辑器地形生成器提供 Natural Water 自然水体滤镜。
+- 本模块没有独立设置项，Neon 设置页仅保留模块说明占位。
+
+#### 22) AutoPruner（智能拆除）
+
+- 使用独立热键拆除多余电力节点，或按建筑放置时间窗口拆除建筑。
+- Neon 聚合版首次使用时默认关闭，手动开启后保留原有设置行为。
+
+#### 23) Color-the-ducts（导管染色）
+
+- 按液体颜色在液体导管中心绘制方块，支持悬停模式、整条导管和透明度调整。
+- Neon 聚合版首次使用时默认关闭，手动开启后可在统一设置页调整。
+
+#### 24) LogicSugar（逻辑辅助）
+
+- 提供结构化逻辑语句、编辑器替换和编译辅助功能。
+- 保留跳转线着色与积木颜色两个逻辑辅助设置，并纳入 Neon 聚合设置页。
+
 ### 快速上手
 
 1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
@@ -173,6 +204,11 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 19 �
 - 自定义标记（customMarker）
 - BetterScreenShot
 - 圆盘快捷建造（Radial Build Menu）
+- BetterRTSFormation（更好的 RTS 编队）
+- BetterTerrainGen-V2（更自然的地形生成）
+- AutoPruner（智能拆除）
+- Color-the-ducts（导管染色）
+- LogicSugar（逻辑辅助）
 - betterMiniMap
 - 玩家数据库（ServerPlayerDataBase）
 - 地图编辑增强（betterMapEditor）
@@ -229,7 +265,7 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles nineteen modules into one package:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-four modules into one package:
 
 - Power Grid Minimap
 - Stealth Path
@@ -250,10 +286,15 @@ Neon is a client-side Mindustry toolkit (Java mod) that bundles nineteen modules
 - Tripwire
 - BetterPolyAi
 - AdvancedReplace
+- BetterRTSFormation
+- BetterTerrainGen-V2
+- AutoPruner
+- Color-the-ducts
+- LogicSugar
 
-If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, and map-editor helpers, Neon is the all-in-one option.
+If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, and RTS formation controls, Neon is the all-in-one option.
 
-Note: Neon already contains these nineteen modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
+Note: Neon already contains these twenty-four modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
 
 ### Module Highlights
 
@@ -371,6 +412,32 @@ Note: Neon already contains these nineteen modules. Do not enable standalone ver
 - Includes CIEDE2000 tolerance settings for near-color matching.
 - Integrated into Neon grouped settings.
 
+#### 20) BetterRTSFormation
+
+- Makes RTS control groups easier to create, select, and recognize while preserving the original hotkey behavior.
+- Supports formation badges, strict group selection, and formation controls outside command mode.
+- Integrated into Neon grouped settings.
+
+#### 21) BetterTerrainGen-V2
+
+- Adds the Natural Water filter to the map editor terrain generator.
+- Has no standalone settings; Neon keeps a grouped module note as a placeholder.
+
+#### 22) AutoPruner
+
+- Removes redundant power nodes or buildings by placement-time windows through separate hotkeys.
+- Disabled by default on first use in the Neon aggregate; existing user settings are preserved.
+
+#### 23) Color-the-ducts
+
+- Draws liquid-colored center squares on liquid ducts with hover, connected-line, scale, and opacity controls.
+- Disabled by default on first use in the Neon aggregate; existing user settings are preserved.
+
+#### 24) LogicSugar
+
+- Provides structured logic statements, editor replacement, and compilation helpers.
+- Keeps the existing jump-line coloring and block-color settings in Neon grouped settings.
+
 ### Quick Start
 
 1) Install `Neon.zip` to Mindustry `mods` folder and enable it in game.
@@ -382,7 +449,7 @@ Note: Neon already contains these nineteen modules. Do not enable standalone ver
 - BetterScreenShot capture hotkey (`F8` by default)
 - Radial Build Menu hotkey (plus optional slot-group toggle)
 
-3) Configure all modules in `Settings -> Mods -> Neon`, including WhoUsesThisBuilding, PatchViewer, PinyinSearchSupport, ForeignServerTranslator, Tripwire, BetterPolyAi, and AdvancedReplace groups.
+3) Configure all modules in `Settings -> Mods -> Neon`, including WhoUsesThisBuilding, PatchViewer, PinyinSearchSupport, ForeignServerTranslator, Tripwire, BetterPolyAi, AdvancedReplace, BetterRTSFormation, AutoPruner, Color-the-ducts, and LogicSugar groups.
 
 4) Overlay windows:
 

@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "10.3.1"
+version = "0.0.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -355,4 +355,5 @@ tasks.register("deploy"){
     description = "Builds merged desktop+android jar and zip artifacts."
     dependsOn tasks.named("jarMerged")
     dependsOn tasks.named("zipMerged")
+    dependsOn tasks.named("jarLocalDev")
 }

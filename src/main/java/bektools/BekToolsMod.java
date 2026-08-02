@@ -15,19 +15,25 @@ import arc.util.Log;
 import arc.util.Scaling;
 import bektools.profiler.NeonProfilerFeature;
 import bektools.ui.VscodeSettingsStyle;
+import betterrtsformation.BetterRTSFormationMod;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
 import advancedreplace.AdvancedReplaceMod;
+import autopruner.AutoPrunerMod;
 import bettermapeditor.BetterMapEditorMod;
 import betterhotkey.BetterHotKeyMod;
 import betterminimap.BetterMiniMapMod;
 import betterlogisticsspeed.BetterLogisticsSpeedMod;
 import betterpolyai.BetterPolyAiMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
+import betterterraingen.v2.BetterTerrainGenV2Mod;
 import betterscreenshot.features.BetterScreenShotFeature;
+import colortheducts.ColorTheDuctsMod;
 import custommarker.features.CustomMarkerFeature;
 import foreignservertranslator.ForeignServerTranslatorMod;
+import foreignservertranslator.TranslatorFeature;
+import logicsugar.LogicSugarMod;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -42,6 +48,7 @@ import random.RandomMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
 import stealthpath.StealthPathMod;
 import tripwire.TripwireMod;
+import tripwire.TripwireInput;
 import whousesthisbuilding.WhoUsesThisBuildingMod;
 
 import java.util.LinkedHashMap;
@@ -60,6 +67,11 @@ public class BekToolsMod extends Mod{
     private static final String moduleCustomMarker = "cm";
     private static final String moduleScreenshot = "bss";
     private static final String moduleRadialBuildMenu = "rbm";
+    private static final String moduleBetterRtsFormation = "brf";
+    private static final String moduleBetterTerrainGen = "btg";
+    private static final String moduleAutoPruner = "ap";
+    private static final String moduleColorTheDucts = "ctd";
+    private static final String moduleLogicSugar = "ls";
     private static final String moduleBetterMiniMap = "bmm";
     private static final String moduleServerPlayerDatabase = "spdb";
     private static final String moduleBetterMapEditor = "bme";
@@ -83,6 +95,11 @@ public class BekToolsMod extends Mod{
     private final PowerGridMinimapMod pgmm;
     private final StealthPathMod stealthPath;
     private final RadialBuildMenuMod radialBuildMenu;
+    private final BetterRTSFormationMod betterRtsFormation;
+    private final BetterTerrainGenV2Mod betterTerrainGen;
+    private final AutoPrunerMod autoPruner;
+    private final ColorTheDuctsMod colorTheDucts;
+    private final LogicSugarMod logicSugar;
     private final BetterMiniMapMod betterMiniMap;
     private final ServerPlayerDataBaseMod serverPlayerDataBase;
     private final BetterMapEditorMod betterMapEditor;
@@ -129,6 +146,14 @@ public class BekToolsMod extends Mod{
         markBundled(modulePgmm, () -> PowerGridMinimapMod.bekBundled = true);
         markBundled(moduleStealthPath, () -> StealthPathMod.bekBundled = true);
         markBundled(moduleRadialBuildMenu, () -> RadialBuildMenuMod.bekBundled = true);
+        markBundled(moduleBetterRtsFormation, () -> {
+            BetterRTSFormationMod.bekBundled = true;
+            BetterRTSFormationSettings.configure();
+        });
+        markBundled(moduleBetterTerrainGen, () -> BetterTerrainGenV2Mod.bekBundled = true);
+        markBundled(moduleAutoPruner, () -> AutoPrunerMod.bekBundled = true);
+        markBundled(moduleColorTheDucts, () -> ColorTheDuctsMod.bekBundled = true);
+        markBundled(moduleLogicSugar, () -> LogicSugarMod.bekBundled = true);
         markBundled(moduleBetterMiniMap, () -> BetterMiniMapMod.bekBundled = true);
         markBundled(moduleBetterMapEditor, () -> BetterMapEditorMod.bekBundled = true);
         markBundled(moduleServerPlayerDatabase, () -> ServerPlayerDataBaseMod.bekBundled = true);
@@ -148,6 +173,27 @@ public class BekToolsMod extends Mod{
         pgmm = initializeModule(modulePgmm, pgmmSupplier);
         stealthPath = initializeModule(moduleStealthPath, stealthPathSupplier);
         radialBuildMenu = initializeModule(moduleRadialBuildMenu, radialBuildMenuSupplier);
+        betterRtsFormation = initializeModule(moduleBetterRtsFormation, () -> {
+            BetterRTSFormationMod mod = new BetterRTSFormationMod();
+            mod.init();
+            return mod;
+        });
+        betterTerrainGen = initializeModule(moduleBetterTerrainGen, () -> {
+            BetterTerrainGenV2Mod mod = new BetterTerrainGenV2Mod();
+            mod.init();
+            return mod;
+        });
+        autoPruner = initializeModule(moduleAutoPruner, () -> {
+            AutoPrunerMod mod = new AutoPrunerMod();
+            mod.init();
+            return mod;
+        });
+        colorTheDucts = initializeModule(moduleColorTheDucts, ColorTheDuctsMod::new);
+        logicSugar = initializeModule(moduleLogicSugar, () -> {
+            LogicSugarMod mod = new LogicSugarMod();
+            mod.init();
+            return mod;
+        });
         betterMiniMap = initializeModule(moduleBetterMiniMap, () -> {
             BetterMiniMapMod mod = new BetterMiniMapMod();
             mod.init();
@@ -212,7 +258,7 @@ public class BekToolsMod extends Mod{
             mod.init();
             return mod;
         });
-        postHogUsageReporter = initializeModule(moduleUsageReporter, () -> new PostHogUsageReporter(getClass()));
+        postHogUsageReporter = initializeModule(moduleUsageReporter, () -> new PostHogUsageReporter(getClass(), this::snapshotSubmodStates));
 
         // Global UI/event features are initialized only after every bundled module has
         // been isolated, so a later module failure cannot leave a profiler ghost window.
@@ -304,6 +350,38 @@ public class BekToolsMod extends Mod{
         return moduleFailures.containsKey(moduleId);
     }
 
+    private Map<String, Boolean> snapshotSubmodStates(){
+        Map<String, Boolean> states = new LinkedHashMap<>();
+        addSubmodState(states, "电网小地图", modulePgmm, pgmm != null, true);
+        addSubmodState(states, "偷袭小道", moduleStealthPath, stealthPath != null, false);
+        addSubmodState(states, "圆盘快捷建造", moduleRadialBuildMenu, radialBuildMenu != null, false);
+        addSubmodState(states, "RTS 编队增强", moduleBetterRtsFormation, betterRtsFormation != null, true);
+        addSubmodState(states, "更自然的地形生成 V2", moduleBetterTerrainGen, betterTerrainGen != null, betterTerrainGen != null && BetterTerrainGenV2Mod.hasBeenUsed());
+        addSubmodState(states, "智能拆除", moduleAutoPruner, autoPruner != null, false);
+        addSubmodState(states, "导管染色", moduleColorTheDucts, colorTheDucts != null, false);
+        addSubmodState(states, "LogicSugar", moduleLogicSugar, logicSugar != null, false);
+        addSubmodState(states, "增强小地图", moduleBetterMiniMap, betterMiniMap != null, true);
+        addSubmodState(states, "物流速率增强", moduleBetterLogisticsSpeed, betterLogisticsSpeed != null, true);
+        addSubmodState(states, "快捷键增强", moduleBetterHotKey, betterHotKey != null, false);
+        addSubmodState(states, "模组更新器", moduleModUpdater, modUpdater != null, false);
+        addSubmodState(states, "玩家数据库", moduleServerPlayerDatabase, serverPlayerDataBase != null, false);
+        addSubmodState(states, "地图编辑增强", moduleBetterMapEditor, betterMapEditor != null, true);
+        addSubmodState(states, "投影覆盖增强", moduleBetterProjectorOverlay, betterProjectorOverlay != null, true);
+        addSubmodState(states, "谁在用这个建筑", moduleWhoUsesThisBuilding, whoUsesThisBuilding != null, false);
+        addSubmodState(states, "补丁查看器", modulePatchViewer, patchViewer != null, true);
+        addSubmodState(states, "拼音搜索支持", modulePinyinSearchSupport, pinyinSearchSupport != null, false);
+        addSubmodState(states, "外语服务器翻译", moduleForeignServerTranslator, foreignServerTranslator != null, foreignServerTranslator != null && TranslatorFeature.hasMarkedForeignServer());
+        addSubmodState(states, "地理围栏报警", moduleTripwire, tripwire != null, tripwire != null && TripwireInput.hasConfiguredControlKey());
+        addSubmodState(states, "更好的 PolyAI", moduleBetterPolyAi, betterPolyAi != null, false);
+        addSubmodState(states, "高级替换", moduleAdvancedReplace, advancedReplace != null, true);
+        addSubmodState(states, "随机化", moduleRandom, random != null, false);
+        return states;
+    }
+
+    private void addSubmodState(Map<String, Boolean> states, String name, String moduleId, boolean available, boolean enabled){
+        if(available && !isModuleFailed(moduleId)) states.put(name, enabled);
+    }
+
     private void registerModuleCommands(String moduleId, boolean available, Runnable registration){
         if(!available || isModuleFailed(moduleId)) return;
         try{
@@ -332,6 +410,14 @@ public class BekToolsMod extends Mod{
             addModuleGroup(table, moduleCustomMarker, !isModuleFailed(moduleCustomMarker), Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings);
             addModuleGroup(table, moduleScreenshot, !isModuleFailed(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings);
             addModuleGroup(table, moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, st -> radialBuildMenu.bekBuildSettings(st));
+            addModuleGroup(table, moduleBetterRtsFormation, betterRtsFormation != null, Core.bundle.get("bektools.section.brf", "Better RTS Formation"), Icon.commandRally, st -> betterRtsFormation.bekBuildSettings(st));
+            addModuleGroup(table, moduleBetterTerrainGen, betterTerrainGen != null, Core.bundle.get("bektools.section.btg", "Better Terrain Gen V2"), Icon.map, st -> {
+                betterTerrainGen.bekBuildSettings(st);
+                st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.btg.none"));
+            });
+            addModuleGroup(table, moduleAutoPruner, autoPruner != null, Core.bundle.get("bektools.section.ap", "Auto Pruner"), Icon.trash, st -> autoPruner.bekBuildSettings(st));
+            addModuleGroup(table, moduleColorTheDucts, colorTheDucts != null, Core.bundle.get("bektools.section.ctd", "Color-the-ducts"), Icon.imageSmall, st -> colorTheDucts.bekBuildSettings(st));
+            addModuleGroup(table, moduleLogicSugar, logicSugar != null, Core.bundle.get("bektools.section.ls", "LogicSugar"), Icon.edit, st -> logicSugar.bekBuildSettings(st));
             addModuleGroup(table, moduleBetterMiniMap, betterMiniMap != null, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings);
             addModuleGroup(table, moduleServerPlayerDatabase, serverPlayerDataBase != null, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, st -> serverPlayerDataBase.bekBuildSettings(st));
             addModuleGroup(table, moduleBetterMapEditor, betterMapEditor != null, Core.bundle.get("bektools.section.bme", "Better Map Editor"), Icon.map, st -> {

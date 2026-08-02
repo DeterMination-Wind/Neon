@@ -13,7 +13,7 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 24 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 25 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
@@ -39,10 +39,11 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 24 �
 - AutoPruner（智能拆除）
 - Color-the-ducts（导管染色）
 - LogicSugar（逻辑辅助）
+- Random（随机化）
 
-如果你只想安装一次、一次性获得这二十四类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助"功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这二十五类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助 + 随机化"功能，Neon 会更省事。
 
-提示：Neon 已包含上述 24 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 25 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -186,6 +187,12 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 24 �
 - 提供结构化逻辑语句、编辑器替换和编译辅助功能。
 - 保留跳转线着色与积木颜色两个逻辑辅助设置，并纳入 Neon 聚合设置页。
 
+#### 25) Random（随机化）
+
+- 在下一次进入世界时，随机打乱数据库文本、战役与液体描述，以及游戏内说明提示。
+- 同时随机打乱方块、物品、单位和战役区块图标，不改变逻辑行为。
+- Neon 聚合版不添加独立设置组；在主菜单点击“千万别点”后，下一局世界启用文本与贴图随机化。
+
 ### 快速上手
 
 1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
@@ -230,6 +237,8 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 24 �
 - 屏幕左侧中部的齿轮按钮用于打开或关闭管理器。
 - 也可以直接按默认快捷键 `Z`。
 
+5) 随机化（Random）：Neon 聚合版不添加独立设置组；在主菜单点击“千万别点”后，下一局世界启用随机文本与贴图。
+
 ### 多人游戏
 
 Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适合多人游戏环境。
@@ -265,7 +274,7 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-four modules into one package:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-five modules into one package:
 
 - Power Grid Minimap
 - Stealth Path
@@ -291,10 +300,11 @@ Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-four modu
 - AutoPruner
 - Color-the-ducts
 - LogicSugar
+- Random
 
-If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, and RTS formation controls, Neon is the all-in-one option.
+If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, terrain generation, RTS formation controls, and randomized presentation, Neon is the all-in-one option.
 
-Note: Neon already contains these twenty-four modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
+Note: Neon already contains these twenty-five modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
 
 ### Module Highlights
 
@@ -438,6 +448,12 @@ Note: Neon already contains these twenty-four modules. Do not enable standalone 
 - Provides structured logic statements, editor replacement, and compilation helpers.
 - Keeps the existing jump-line coloring and block-color settings in Neon grouped settings.
 
+#### 25) Random
+
+- Randomizes database text, campaign and liquid descriptions, plus in-game instructional tooltips for the next world.
+- Randomizes block, item, unit, and campaign sector icons without changing logic behavior.
+- The bundled version has no separate settings group; click `Do Not Click` in the main menu to enable randomized text and textures for the next world.
+
 ### Quick Start
 
 1) Install `Neon.zip` to Mindustry `mods` folder and enable it in game.
@@ -456,6 +472,8 @@ Note: Neon already contains these twenty-four modules. Do not enable standalone 
 - Overlay-capable modules appear in the shared OverlayUI manager automatically.
 - Use the gear button at the left-middle side of the screen to open or close the manager.
 - You can also use the default `Z` hotkey.
+
+5) Random: The bundled version has no separate settings group; click `Do Not Click` in the main menu to enable randomized text and textures for the next world.
 
 ### Multiplayer
 

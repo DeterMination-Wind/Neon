@@ -11,6 +11,7 @@ import arc.scene.ui.Label;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextField;
 import arc.scene.ui.Tooltip;
+import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.ObjectMap;
 import arc.struct.ObjectSet;
@@ -31,6 +32,7 @@ public final class FieldDispatcher{
     private final ObjectMap<TextField, Seq<ChangeListener>> vanillas = new ObjectMap<>();
     private final ObjectMap<TextField, Timer.Task> debounces = new ObjectMap<>();
     private final ObjectMap<TextField, ChangeListener> proxies = new ObjectMap<>();
+    private final ObjectMap<TextField, ResultSnapshot> filteredResults = new ObjectMap<>();
     private final ObjectSet<String> bundleSearchKeys = new ObjectSet<>();
     private final ObjectSet<String> modsContextTokens = new ObjectSet<>();
     private final ObjectSet<String> modsExactTokens = new ObjectSet<>();
@@ -50,6 +52,7 @@ public final class FieldDispatcher{
             proxies.remove(f);
             patched.remove(f);
             vanillas.remove(f);
+            filteredResults.remove(f);
         }
 
         Seq<TextField> all = new Seq<>();
@@ -59,6 +62,10 @@ public final class FieldDispatcher{
             if(!isSearchField(f)) continue;
             attach(f);
             patched.add(f);
+        }
+
+        for(TextField f : patched){
+            refreshAfterVanillaRebuild(f);
         }
     }
 
@@ -165,6 +172,7 @@ public final class FieldDispatcher{
     private void onChange(TextField field){
         cancelDebounce(field);
         if(!Core.settings.getBool(PinyinSearchSupportMod.keyEnabled, true)){
+            filteredResults.remove(field);
             fireVanilla(field);
             return;
         }
@@ -206,12 +214,15 @@ public final class FieldDispatcher{
         String typed = field.getText();
         if(typed == null) typed = "";
 
-        if(typed.isEmpty() || !shouldUsePinyinSearch(typed) || isModsSearchField(field)){
+        boolean schematicSearch = SchematicsAdapter.isSchematicsSearch(field);
+        if(!shouldDispatchSearch(typed, schematicSearch) || isModsSearchField(field)){
+            filteredResults.remove(field);
             fireListeners(field, list);
             return;
         }
 
         if(context == null || !context.isActive(field)){
+            filteredResults.remove(field);
             fireListeners(field, list);
             return;
         }
@@ -225,11 +236,15 @@ public final class FieldDispatcher{
         if(SectorListAdapter.isSectorSearch(field)){
             fireListeners(field, list);
             SectorListAdapter.filter(field, typed, opts);
+            rememberFilteredResults(field, context);
             return;
         }
 
-        if(SchematicsAdapter.isSchematicsSearch(field)){
-            if(!SchematicsAdapter.filter(field, typed, opts, context)){
+        if(schematicSearch){
+            if(SchematicsAdapter.filter(field, typed, opts, context)){
+                rememberFilteredResults(field, context);
+            }else{
+                filteredResults.remove(field);
                 fireListeners(field, list);
             }
             return;
@@ -237,6 +252,7 @@ public final class FieldDispatcher{
 
         String prev = FieldTextProxy.swap(field, "");
         if(field.getText() != null && !field.getText().isEmpty()){
+            filteredResults.remove(field);
             fireListeners(field, list);
             return;
         }
@@ -247,22 +263,72 @@ public final class FieldDispatcher{
         }
 
         if(!context.isActive(field)){
+            filteredResults.remove(field);
             fireListeners(field, list);
             return;
         }
 
         ScopeTree scope = ScopeTree.locate(field, context);
         if(scope == null || !scope.isValid()){
+            filteredResults.remove(field);
             fireListeners(field, list);
             return;
         }
 
         try{
             scope.postFilter(typed, opts);
+            rememberFilteredResults(field, context);
         }catch(Throwable t){
             Log.warn("[PinyinSearchSupport] post filter failed: @", t.getMessage());
+            filteredResults.remove(field);
             fireListeners(field, list);
         }
+    }
+
+    /**
+     * Native dialogs often rebuild their result table without changing the text field:
+     * database planet tabs, map filters, and schematic tags all do this. Detect that
+     * replacement and replay the pinyin pass against a fresh empty native query.
+     */
+    private void refreshAfterVanillaRebuild(TextField field){
+        if(field == null || debounces.containsKey(field)) return;
+        if(!Core.settings.getBool(PinyinSearchSupportMod.keyEnabled, true)){
+            filteredResults.remove(field);
+            return;
+        }
+
+        String typed = field.getText();
+        boolean schematicSearch = SchematicsAdapter.isSchematicsSearch(field);
+        if(!shouldDispatchSearch(typed, schematicSearch) || isModsSearchField(field)){
+            filteredResults.remove(field);
+            return;
+        }
+
+        ScopeTree.Context context = ScopeTree.capture(field);
+        if(context == null || !context.isActive(field)){
+            filteredResults.remove(field);
+            return;
+        }
+
+        ScopeTree scope = ScopeTree.locate(field, context);
+        if(scope == null || !scope.isValid()){
+            filteredResults.remove(field);
+            return;
+        }
+
+        ResultSnapshot snapshot = filteredResults.get(field);
+        if(snapshot == null || !snapshot.matches(context, scope)){
+            runFilter(field, context);
+        }
+    }
+
+    private void rememberFilteredResults(TextField field, ScopeTree.Context context){
+        ScopeTree scope = ScopeTree.locate(field, context);
+        if(scope == null || !scope.isValid()){
+            filteredResults.remove(field);
+            return;
+        }
+        filteredResults.put(field, new ResultSnapshot(context, scope));
     }
 
     private static boolean shouldUsePinyinSearch(String query){
@@ -272,6 +338,10 @@ public final class FieldDispatcher{
             if(Character.isLetter(c) || pinyinsearchsupport.match.PinyinIndex.isCjk(c)) return true;
         }
         return false;
+    }
+
+    static boolean shouldDispatchSearch(String query, boolean schematicSearch){
+        return query != null && !query.isEmpty() && (schematicSearch || shouldUsePinyinSearch(query));
     }
 
     private boolean isModsSearchField(TextField field){
@@ -377,5 +447,46 @@ public final class FieldDispatcher{
     private void cancelDebounce(TextField field){
         Timer.Task t = debounces.remove(field);
         if(t != null) t.cancel();
+    }
+
+    /** Snapshot only the native result surface we own, not the whole dialog. */
+    static final class ResultSnapshot{
+        final Group root;
+        final Group originalParent;
+        final ScrollPane pane;
+        final Table table;
+        final Seq<Element> actors = new Seq<>();
+
+        ResultSnapshot(ScopeTree.Context context, ScopeTree scope){
+            root = context.root;
+            originalParent = context.originalParent;
+            pane = scope.primaryPane();
+            table = scope.primaryTable();
+            captureActors(table, actors);
+        }
+
+        boolean matches(ScopeTree.Context context, ScopeTree scope){
+            if(context == null || scope == null || root != context.root || originalParent != context.originalParent) return false;
+            if(pane != scope.primaryPane() || table != scope.primaryTable()) return false;
+            return sameActors(table, actors);
+        }
+
+        static boolean sameActors(Table table, Seq<Element> expected){
+            if(table == null || expected == null) return false;
+            Seq<Cell> cells = table.getCells();
+            if(cells.size != expected.size) return false;
+            for(int i = 0; i < cells.size; i++){
+                if(cells.get(i).get() != expected.get(i)) return false;
+            }
+            return true;
+        }
+
+        private static void captureActors(Table table, Seq<Element> out){
+            if(table == null || out == null) return;
+            Seq<Cell> cells = table.getCells();
+            for(int i = 0; i < cells.size; i++){
+                out.add(cells.get(i).get());
+            }
+        }
     }
 }

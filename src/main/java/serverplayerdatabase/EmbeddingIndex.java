@@ -4,6 +4,7 @@ import arc.Core;
 import arc.struct.IntMap;
 import arc.struct.Seq;
 import arc.util.Log;
+import arc.util.Strings;
 import arc.util.Time;
 
 import java.nio.ByteBuffer;
@@ -41,7 +42,9 @@ public final class EmbeddingIndex implements AutoCloseable{
     private volatile boolean rebuilding;
     private volatile boolean dirty;
     private volatile boolean closed;
-    private volatile String status = "未初始化";
+    private static final String initialStatus = "Not initialized";
+
+    private volatile String status = initialStatus;
     private volatile String failureReason;
     private volatile int indexedEntries;
     private volatile int totalEntries;
@@ -64,7 +67,7 @@ public final class EmbeddingIndex implements AutoCloseable{
         if(closed) return;
         if(!chatDb.usesSqlite()){
             available = false;
-            failureReason = "当前聊天后端不是 SQLite，语义搜索不可用。";
+            failureReason = bundle("spdb.semantic.index.backend-unavailable", "Semantic search is unavailable because the chat backend is not SQLite.");
             status = failureReason;
             return;
         }
@@ -76,7 +79,7 @@ public final class EmbeddingIndex implements AutoCloseable{
                 available = false;
                 ready = false;
                 rebuilding = false;
-                failureReason = "语义索引初始化失败: " + safeMessage(t);
+                failureReason = bundleFormat("spdb.semantic.index.init-failed", "Semantic index initialization failed: @", safeMessage(t));
                 status = failureReason;
                 Log.err("SPDB: failed to initialize embedding index.", t);
             }
@@ -100,7 +103,11 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public String status(){
-        return status;
+        return initialStatus.equals(status) ? bundle("spdb.semantic.index.not-initialized", initialStatus) : status;
+    }
+
+    public boolean isInitialStatus(){
+        return initialStatus.equals(status);
     }
 
     public String failureReason(){
@@ -127,7 +134,7 @@ public final class EmbeddingIndex implements AutoCloseable{
             }catch(Throwable t){
                 ready = false;
                 rebuilding = false;
-                failureReason = "重建语义索引失败: " + safeMessage(t);
+                failureReason = bundleFormat("spdb.semantic.index.rebuild-failed", "Semantic index rebuild failed: @", safeMessage(t));
                 status = failureReason;
                 Log.err("SPDB: failed rebuilding embedding index.", t);
             }
@@ -217,7 +224,7 @@ public final class EmbeddingIndex implements AutoCloseable{
         ready = false;
         rebuilding = false;
         dirty = false;
-        status = "语义索引已关闭";
+        status = bundle("spdb.semantic.index.closed", "Semantic index closed.");
         executor.shutdownNow();
         if(timeoutMillis > 0L){
             try{
@@ -244,7 +251,7 @@ public final class EmbeddingIndex implements AutoCloseable{
         ensureSchema();
         if(closed) return;
         if(invalidateVectorsIfModelChanged()){
-            status = "检测到语义模型已切换，正在重建搜索索引 0/0";
+            status = bundle("spdb.semantic.index.model-changed", "Semantic model changed; rebuilding search index 0/0.");
         }
         totalEntries = countIndexableEntries();
         if(closed) return;
@@ -255,7 +262,7 @@ public final class EmbeddingIndex implements AutoCloseable{
             ready = true;
             rebuilding = false;
             dirty = false;
-            status = "索引就绪，共 " + indexedEntries + " 条";
+            status = bundleFormat("spdb.semantic.index.ready", "Search index ready: @ entries.", indexedEntries);
             return;
         }
 
@@ -267,7 +274,7 @@ public final class EmbeddingIndex implements AutoCloseable{
         rebuilding = true;
         ready = false;
         totalEntries = countIndexableEntries();
-        status = "正在建立搜索索引 0/" + totalEntries;
+        status = bundleFormat("spdb.semantic.index.building", "Building search index 0/@", totalEntries);
 
         synchronized(vectors){
             vectors.clear();
@@ -294,9 +301,9 @@ public final class EmbeddingIndex implements AutoCloseable{
         totalEntries = countIndexableEntries();
 
         if(indexedEntries > 0){
-            status = "检测到未完成索引，已恢复 " + indexedEntries + "/" + totalEntries + "，继续补齐缺失部分";
+            status = bundleFormat("spdb.semantic.index.resume", "Resuming unfinished index: @/@; completing missing entries.", indexedEntries, totalEntries);
         }else{
-            status = "正在建立搜索索引 0/" + totalEntries;
+            status = bundleFormat("spdb.semantic.index.building", "Building search index 0/@", totalEntries);
         }
 
         int lastId = Math.max(0, checkpoint.afterId);
@@ -329,7 +336,7 @@ public final class EmbeddingIndex implements AutoCloseable{
                 totalEntries = Math.max(totalEntries, indexedEntries);
             }
 
-            status = "正在建立搜索索引 " + indexedEntries + "/" + totalEntries;
+            status = bundleFormat("spdb.semantic.index.progress", "Building search index @/@", indexedEntries, totalEntries);
         }
 
         if(!closed){
@@ -337,8 +344,19 @@ public final class EmbeddingIndex implements AutoCloseable{
             dirty = false;
             lastPersistAt = Time.millis();
             updateReadyStatus();
-            status = ready ? "索引就绪，共 " + indexedEntries + " 条" : "索引未完成";
+            status = ready
+                ? bundleFormat("spdb.semantic.index.ready", "Search index ready: @ entries.", indexedEntries)
+                : bundle("spdb.semantic.index.incomplete", "Search index incomplete.");
         }
+    }
+
+    private static String bundle(String key, String fallback){
+        return Core.bundle == null ? fallback : Core.bundle.get(key, fallback);
+    }
+
+    private static String bundleFormat(String key, String fallback, Object... args){
+        String template = Core.bundle != null && Core.bundle.has(key) ? Core.bundle.get(key) : fallback;
+        return Strings.format(template, args);
     }
 
     private void updateReadyStatus(){

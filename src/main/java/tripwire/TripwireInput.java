@@ -19,8 +19,8 @@ import static mindustry.Vars.state;
 import static mindustry.Vars.ui;
 
 public final class TripwireInput {
-    private static final KeyBind createKey = KeyBind.add("tripwire-create", null, "tripwire");
-    private static final KeyBind deleteKey = KeyBind.add("tripwire-delete", null, "tripwire");
+    private static final KeyBind createKey = KeyBind.add("tripwire-create", KeyCode.unset, "tripwire");
+    private static final KeyBind deleteKey = KeyBind.add("tripwire-delete", KeyCode.unset, "tripwire");
     private static final float leftHintCenterOffset = -150f;
     private static final Seq<Vec2> creatingPoints = new Seq<>();
     private static final Rect deleteRect = new Rect();

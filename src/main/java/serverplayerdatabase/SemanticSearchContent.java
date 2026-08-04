@@ -41,27 +41,27 @@ public final class SemanticSearchContent{
 
         root.table(Styles.black3, box -> {
             box.left().top().defaults().left().pad(4f).growX();
-            box.add(bundle("spdb.semantic.title", "语义搜索")).left().row();
+            box.add(bundle("spdb.semantic.title", "Semantic search")).left().row();
             box.add(statusLine()).left().wrap().row();
 
             if(compact){
                 box.table(line -> {
                     line.left().defaults().left().padRight(6f);
                     queryField = line.field("", text -> {}).growX().get();
-                    queryField.setMessageText(bundle("spdb.semantic.query.placeholder", "输入查询，支持 +加分 -减分 ---排除，例如 pvp +辱骂 ---萌新"));
+                    queryField.setMessageText(bundle("spdb.semantic.query.placeholder", "Enter a query. Use +include, -include, and ---exclude, e.g. pvp +insult ---newbie"));
                 }).growX().row();
                 box.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
-                    line.button(bundle("spdb.semantic.action.search", "搜索"), this::runSearch).height(38f).growX();
-                    line.button(bundle("spdb.semantic.action.refresh", "刷新状态"), this::refreshStatus).height(38f).growX();
+                    line.button(bundle("spdb.semantic.action.search", "Search"), this::runSearch).height(38f).growX();
+                    line.button(bundle("spdb.semantic.action.refresh", "Refresh status"), this::refreshStatus).height(38f).growX();
                 }).growX().row();
             }else{
                 box.table(line -> {
                     line.left().defaults().left().padRight(6f);
                     queryField = line.field("", text -> {}).growX().get();
-                    queryField.setMessageText(bundle("spdb.semantic.query.placeholder", "输入查询，支持 +加分 -减分 ---排除，例如 pvp +辱骂 ---萌新"));
-                    line.button(bundle("spdb.semantic.action.search", "搜索"), this::runSearch).height(38f);
-                    line.button(bundle("spdb.semantic.action.refresh", "刷新状态"), this::refreshStatus).height(38f);
+                    queryField.setMessageText(bundle("spdb.semantic.query.placeholder", "Enter a query. Use +include, -include, and ---exclude, e.g. pvp +insult ---newbie"));
+                    line.button(bundle("spdb.semantic.action.search", "Search"), this::runSearch).height(38f);
+                    line.button(bundle("spdb.semantic.action.refresh", "Refresh status"), this::refreshStatus).height(38f);
                 }).growX().row();
             }
 
@@ -82,7 +82,7 @@ public final class SemanticSearchContent{
         String query = queryField == null ? null : queryField.getText();
         if(query == null || query.trim().isEmpty()){
             showingStatusOnly = false;
-            result.add(bundle("spdb.semantic.query.required", "请输入查询内容。")).left();
+            result.add(bundle("spdb.semantic.query.required", "Enter a query first.")).left();
             return;
         }
 
@@ -95,7 +95,7 @@ public final class SemanticSearchContent{
         Seq<EmbeddingIndex.SearchResult> hits = host.searchSemantic(query, 40);
         if(hits.isEmpty()){
             showingStatusOnly = false;
-            result.add(bundle("spdb.semantic.result.empty", "没有找到匹配结果。")).left();
+            result.add(bundle("spdb.semantic.result.empty", "No matching results found.")).left();
             return;
         }
 
@@ -107,11 +107,11 @@ public final class SemanticSearchContent{
                     host.formatTime(hit.chat.time)
                         + " | "
                         + host.safeLine(hit.chat.senderName, 26)
-                        + " | 分数 "
+                        + " | Score "
                         + String.format(java.util.Locale.ROOT, "%.3f", hit.score)
                 )).left().wrap().row();
-                card.add(host.escapeMarkup(bundle("spdb.semantic.result.uid", "UID: ") + hit.chat.uid + " | " + bundle("spdb.semantic.result.server", "服: ") + host.safeLine(hit.chat.server, 30))).left().wrap().row();
-                card.add(host.escapeMarkup(bundle("spdb.semantic.result.message", "内容: ") + host.safeLine(hit.chat.message, 160))).left().wrap().row();
+                card.add(host.escapeMarkup(bundle("spdb.semantic.result.uid", "UID: ") + hit.chat.uid + " | " + bundle("spdb.semantic.result.server", "Server: ") + host.safeLine(hit.chat.server, 30))).left().wrap().row();
+                card.add(host.escapeMarkup(bundle("spdb.semantic.result.message", "Content: ") + host.safeLine(hit.chat.message, 160))).left().wrap().row();
                 card.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
                     line.button(hit.chat.uid, Styles.defaultt, () -> host.openUid(hit.chat.uid)).height(32f).growX();

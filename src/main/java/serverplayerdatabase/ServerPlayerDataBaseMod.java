@@ -3,11 +3,13 @@ package serverplayerdatabase;
 import arc.Core;
 import arc.Events;
 import arc.files.Fi;
+import arc.func.Cons;
 import arc.func.Prov;
 import arc.graphics.Color;
 import arc.input.KeyCode;
 import arc.math.geom.Vec2;
 import arc.scene.Element;
+import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextArea;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
@@ -45,7 +47,6 @@ import mindustry.mod.Mod;
 import mindustry.net.Administration.TraceInfo;
 import mindustry.net.Packets.AdminAction;
 import mindustry.ui.Bar;
-import mindustry.ui.FileChooser;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.ui.dialogs.BaseDialog;
@@ -279,9 +280,9 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     @Override
     public void registerClientCommands(CommandHandler handler){
-        handler.<Player>register("spdb", "打开 ServerPlayerDataBase 查询窗口。", (args, player) -> Core.app.post(this::showStandaloneQueryDialog));
-        handler.<Player>register("spdb-debug", "打开 ServerPlayerDataBase 调试窗口。", (args, player) -> Core.app.post(this::showStandaloneDebugDialog));
-        handler.<Player>register("spdb-search", "<query...>", "打开语义搜索并填入查询。", (args, player) -> {
+        handler.<Player>register("spdb", bundle("spdb.command.query", "Open the ServerPlayerDataBase query window."), (args, player) -> Core.app.post(this::showStandaloneQueryDialog));
+        handler.<Player>register("spdb-debug", bundle("spdb.command.debug", "Open the ServerPlayerDataBase debug window."), (args, player) -> Core.app.post(this::showStandaloneDebugDialog));
+        handler.<Player>register("spdb-search", "<query...>", bundle("spdb.command.search", "Open semantic search and fill the query."), (args, player) -> {
             String query = args == null || args.length == 0 ? "" : String.join(" ", args).trim();
             Core.app.post(() -> showSemanticSearchDialog(query));
         });
@@ -804,7 +805,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private void initializeSemanticSearchFromSettings(){
         if(!semanticSearchEnabled()){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.disabled", "语义搜索未启用。打开语义搜索标签页或执行 /spdb-search 后会启用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.disabled", "Semantic search is disabled. Open its tab or run /spdb-search to enable it.");
             return;
         }
 
@@ -814,24 +815,24 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void startSemanticSearchIfLocalComponentsReady(){
         if(!semanticSearchEnabled() || semanticSearchDisposing) return;
         if(isAndroidRuntime()){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.android", "当前运行环境为 Android，语义搜索不可用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.android", "Semantic search is unavailable on Android.");
             bumpSemanticSearchUiRevision();
             return;
         }
         if(chatsDbFile == null || semanticSearchModelFile == null || semanticSearchRuntimeFile == null){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "The chat database path is unavailable; semantic search is unavailable.");
             bumpSemanticSearchUiRevision();
             return;
         }
 
         semanticSearchStatusOverride = null;
         if(semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() <= 0L){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.runtime-empty", "本地语义搜索运行库文件为空，请重新下载。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.runtime-empty", "The local semantic-search runtime file is empty; download it again.");
             bumpSemanticSearchUiRevision();
             return;
         }
         if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() <= 0L){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.model-empty", "本地语义模型文件为空，请重新下载。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.model-empty", "The local semantic model file is empty; download it again.");
             bumpSemanticSearchUiRevision();
             return;
         }
@@ -850,25 +851,25 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         if(semanticSearchDisposing) return;
         if(isAndroidRuntime()){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.android", "当前运行环境为 Android，语义搜索不可用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.android", "Semantic search is unavailable on Android.");
             bumpSemanticSearchUiRevision();
             return;
         }
         if(chatsDbFile == null){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "The chat database path is unavailable; semantic search is unavailable.");
             bumpSemanticSearchUiRevision();
             return;
         }
         if(semanticSearchReady() || semanticSearchDownloadInProgress || semanticSearchInitializing || semanticSearchPromptOpen) return;
         if(embeddingIndex != null) return;
         if(semanticSearchModelFile == null || semanticSearchRuntimeFile == null){
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.db-missing", "The chat database path is unavailable; semantic search is unavailable.");
             bumpSemanticSearchUiRevision();
             return;
         }
         if(semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() <= 0L){
             cleanupSemanticSearchRuntimeFile();
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.runtime-empty", "本地语义搜索运行库文件为空，请重新下载。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.runtime-empty", "The local semantic-search runtime file is empty; download it again.");
         }
         if(!semanticSearchRuntimeFile.exists() || semanticSearchRuntimeFile.length() <= 0L){
             requestSemanticSearchDownload(true);
@@ -876,7 +877,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
         if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() <= 0L){
             cleanupSemanticSearchModelFile();
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.model-empty", "本地语义模型文件为空，请重新下载。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.model-empty", "The local semantic model file is empty; download it again.");
         }
         if(semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L){
             startSemanticSearchInitialization(false);
@@ -897,32 +898,32 @@ public class ServerPlayerDataBaseMod extends Mod{
 
     private String semanticSearchStatus(){
         if(!semanticSearchEnabled()){
-            return bundle("spdb.semantic.status.disabled", "语义搜索未启用。打开语义搜索标签页或执行 /spdb-search 后会启用。");
+            return bundle("spdb.semantic.status.disabled", "Semantic search is disabled. Open its tab or run /spdb-search to enable it.");
         }
         if(semanticSearchDisposing){
-            return bundle("spdb.semantic.status.releasing", "正在释放语义搜索资源...");
+            return bundle("spdb.semantic.status.releasing", "Releasing semantic-search resources...");
         }
         if(isAndroidRuntime()){
-            return bundle("spdb.semantic.status.android", "当前运行环境为 Android，语义搜索不可用。");
+            return bundle("spdb.semantic.status.android", "Semantic search is unavailable on Android.");
         }
         if(chatsDbFile == null){
-            return bundle("spdb.semantic.status.db-missing", "聊天数据库路径不可用，语义搜索不可用。");
+            return bundle("spdb.semantic.status.db-missing", "The chat database path is unavailable; semantic search is unavailable.");
         }
         if(semanticSearchDownloadInProgress){
             if(semanticSearchDownloadTotalMb > 0f && semanticSearchDownloadProgress >= 0f){
                 float downloadedMb = semanticSearchDownloadProgress * semanticSearchDownloadTotalMb;
                 return bundleFormat(
                     "spdb.semantic.progress.known",
-                    "已下载 @ / @ MB",
+                    "Downloaded @ / @ MB",
                     Strings.autoFixed(downloadedMb, 2),
                     Strings.autoFixed(semanticSearchDownloadTotalMb, 2)
                 ) + " (" + Math.round(semanticSearchDownloadProgress * 100f) + "%)";
             }
-            return bundle("spdb.semantic.progress.unknown", "正在下载，暂时无法获取文件总大小。");
+            return bundle("spdb.semantic.progress.unknown", "Downloading; total size is not available yet.");
         }
         if(embeddingIndex != null){
             String indexStatus = embeddingIndex.status();
-            if(indexStatus != null && !indexStatus.trim().isEmpty() && (!"未初始化".equals(indexStatus) || semanticSearchStatusOverride == null)){
+            if(indexStatus != null && !indexStatus.trim().isEmpty() && (!embeddingIndex.isInitialStatus() || semanticSearchStatusOverride == null)){
                 return indexStatus;
             }
         }
@@ -930,18 +931,18 @@ public class ServerPlayerDataBaseMod extends Mod{
             return semanticSearchStatusOverride;
         }
         if(semanticSearchRuntimeFile != null && semanticSearchRuntimeFile.exists() && semanticSearchRuntimeFile.length() <= 0L){
-            return bundle("spdb.semantic.status.runtime-empty", "本地语义搜索运行库文件为空，请重新下载。");
+            return bundle("spdb.semantic.status.runtime-empty", "The local semantic-search runtime file is empty; download it again.");
         }
         if(semanticSearchModelFile != null && semanticSearchModelFile.exists() && semanticSearchModelFile.length() <= 0L){
-            return bundle("spdb.semantic.status.model-empty", "本地语义模型文件为空，请重新下载。");
+            return bundle("spdb.semantic.status.model-empty", "The local semantic model file is empty; download it again.");
         }
         if(semanticSearchRuntimeFile == null || !semanticSearchRuntimeFile.exists() || semanticSearchRuntimeFile.length() <= 0L){
-            return bundle("spdb.semantic.status.runtime-missing", "语义搜索运行库未下载。首次打开语义搜索时确认下载后即可使用。");
+            return bundle("spdb.semantic.status.runtime-missing", "The semantic-search runtime is not downloaded. Confirm the download when opening semantic search for the first time.");
         }
         if(semanticSearchModelFile != null && semanticSearchModelFile.exists() && semanticSearchModelFile.length() > 0L){
-            return bundle("spdb.semantic.status.model-ready", "本地模型已就绪，正在等待初始化。");
+            return bundle("spdb.semantic.status.model-ready", "The local model is ready; waiting for initialization.");
         }
-        return bundle("spdb.semantic.status.model-missing", "模型未下载。首次打开语义搜索时确认下载后即可使用。");
+        return bundle("spdb.semantic.status.model-missing", "The model is not downloaded. Confirm the download when opening semantic search for the first time.");
     }
 
     private void requestSemanticSearchDownload(boolean runtime){
@@ -950,32 +951,32 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         semanticSearchPromptOpen = true;
         semanticSearchStatusOverride = runtime
-            ? bundle("spdb.semantic.status.runtime-prompt-open", "正在等待你确认下载语义搜索运行库。")
-            : bundle("spdb.semantic.status.prompt-open", "正在等待你确认下载语义模型。");
+            ? bundle("spdb.semantic.status.runtime-prompt-open", "Waiting for confirmation to download the semantic-search runtime.")
+            : bundle("spdb.semantic.status.prompt-open", "Waiting for confirmation to download the semantic model.");
         bumpSemanticSearchUiRevision();
 
         String prompt = (runtime
-            ? bundle("spdb.semantic.prompt.runtime-reason", "语义搜索需要先下载本地运行库后才能使用。")
-            : bundle("spdb.semantic.prompt.reason", "语义搜索需要先下载本地语义模型后才能使用。"))
+            ? bundle("spdb.semantic.prompt.runtime-reason", "Semantic search requires a local runtime.")
+            : bundle("spdb.semantic.prompt.reason", "Semantic search requires a local semantic model."))
             + "\n" + (runtime
-            ? bundle("spdb.semantic.prompt.runtime-source", "下载来源：阿里云 Maven Central 镜像")
-            : bundle("spdb.semantic.prompt.source", "下载来源：hf-mirror"))
-            + "\n" + bundle("spdb.semantic.prompt.target", "保存位置：")
+            ? bundle("spdb.semantic.prompt.runtime-source", "Download source: Alibaba Maven Central mirror")
+            : bundle("spdb.semantic.prompt.source", "Download source: hf-mirror"))
+            + "\n" + bundle("spdb.semantic.prompt.target", "Save path:")
             + "\n" + target.absolutePath()
-            + "\n\n" + bundle("spdb.semantic.prompt.cancel", "取消后语义搜索将保持不可用，稍后可再次打开重试。");
+            + "\n\n" + bundle("spdb.semantic.prompt.cancel", "Semantic search will remain unavailable after cancellation; you can retry later.");
 
         Vars.ui.showCustomConfirm("@confirm", prompt, "@ok", "@cancel", () -> {
             if(semanticSearchDisposing || !semanticSearchEnabled()) return;
             semanticSearchPromptOpen = false;
             semanticSearchStatusOverride = runtime
-                ? bundle("spdb.semantic.status.runtime-download-start", "正在准备下载语义搜索运行库...")
-                : bundle("spdb.semantic.status.download-start", "正在准备下载语义模型...");
+                ? bundle("spdb.semantic.status.runtime-download-start", "Preparing to download the semantic-search runtime...")
+                : bundle("spdb.semantic.status.download-start", "Preparing to download the semantic model...");
             bumpSemanticSearchUiRevision();
             startSemanticSearchFileDownload(runtime);
         }, () -> {
             if(semanticSearchDisposing || !semanticSearchEnabled()) return;
             semanticSearchPromptOpen = false;
-            semanticSearchStatusOverride = bundle("spdb.semantic.status.cancelled", "已取消语义模型下载，语义搜索暂不可用。");
+            semanticSearchStatusOverride = bundle("spdb.semantic.status.cancelled", "Semantic model download cancelled; semantic search is unavailable.");
             bumpSemanticSearchUiRevision();
         });
     }
@@ -989,8 +990,8 @@ public class ServerPlayerDataBaseMod extends Mod{
         semanticSearchDownloadProgress = -1f;
         semanticSearchDownloadTotalMb = 0f;
         semanticSearchStatusOverride = runtime
-            ? bundle("spdb.semantic.status.runtime-downloading", "正在从阿里云 Maven Central 镜像下载语义搜索运行库...")
-            : bundle("spdb.semantic.status.downloading", "正在从 hf-mirror 下载语义模型...");
+            ? bundle("spdb.semantic.status.runtime-downloading", "Downloading the semantic-search runtime from the Alibaba Maven Central mirror...")
+            : bundle("spdb.semantic.status.downloading", "Downloading the semantic model from hf-mirror...");
         bumpSemanticSearchUiRevision();
         Core.app.post(this::showSemanticSearchProgressDialog);
 
@@ -1032,8 +1033,8 @@ public class ServerPlayerDataBaseMod extends Mod{
                     semanticSearchDownloadProgress = 1f;
                     hideSemanticSearchProgressDialog();
                     semanticSearchStatusOverride = runtime
-                        ? bundle("spdb.semantic.status.runtime-download-complete", "运行库下载完成，正在检查语义模型...")
-                        : bundle("spdb.semantic.status.download-complete", "模型下载完成，正在初始化...");
+                        ? bundle("spdb.semantic.status.runtime-download-complete", "Runtime download completed; checking the semantic model...")
+                        : bundle("spdb.semantic.status.download-complete", "Model download completed; initializing...");
                     bumpSemanticSearchUiRevision();
                     if(runtime){
                         ensureSemanticSearchReady(semanticSearchPendingQuery);
@@ -1057,7 +1058,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
         semanticSearchStatusOverride = bundleFormat(
             runtime ? "spdb.semantic.status.runtime-download-failed" : "spdb.semantic.status.download-failed",
-            runtime ? "语义搜索运行库下载失败：@" : "语义模型下载失败：@",
+            runtime ? "Semantic-search runtime download failed: @" : "Semantic model download failed: @",
             semanticSearchErrorMessage(t)
         );
         bumpSemanticSearchUiRevision();
@@ -1075,7 +1076,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             semanticSearchResourcesStarted = true;
             lifecycleToken = semanticSearchLifecycleToken;
         }
-        semanticSearchStatusOverride = bundle("spdb.semantic.status.init-start", "正在初始化语义搜索模型...");
+        semanticSearchStatusOverride = bundle("spdb.semantic.status.init-start", "Initializing the semantic-search model...");
         bumpSemanticSearchUiRevision();
 
         Threads.daemon("spdb-semantic-init", () -> {
@@ -1152,7 +1153,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
 
         closeSemanticSearchPair(oldIndex, oldEngine);
-        semanticSearchStatusOverride = bundle("spdb.semantic.status.index-wait", "语义模型已加载，正在建立搜索索引...");
+        semanticSearchStatusOverride = bundle("spdb.semantic.status.index-wait", "The model is loaded; building the search index...");
         newIndex.initialize();
         bumpSemanticSearchUiRevision();
     }
@@ -1170,7 +1171,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(deleteModelOnFailure){
             cleanupSemanticSearchModelFile();
         }
-        semanticSearchStatusOverride = bundleFormat("spdb.semantic.status.init-failed", "语义搜索初始化失败：@", semanticSearchErrorMessage(t));
+        semanticSearchStatusOverride = bundleFormat("spdb.semantic.status.init-failed", "Semantic-search initialization failed: @", semanticSearchErrorMessage(t));
         bumpSemanticSearchUiRevision();
         Log.err("SPDB: semantic search initialization failed.", t);
         if(Vars.ui != null) Vars.ui.showException(semanticSearchStatusOverride, t);
@@ -1273,7 +1274,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 if(!terminal){
                     semanticSearchDisposing = false;
                     if(!semanticSearchEnabled()){
-                        semanticSearchStatusOverride = bundle("spdb.semantic.status.disabled", "语义搜索未启用。打开语义搜索标签页或执行 /spdb-search 后会启用。");
+                        semanticSearchStatusOverride = bundle("spdb.semantic.status.disabled", "Semantic search is disabled. Open its tab or run /spdb-search to enable it.");
                     }else{
                         semanticSearchStatusOverride = null;
                         shouldRestart = true;
@@ -1348,9 +1349,9 @@ public class ServerPlayerDataBaseMod extends Mod{
             return;
         }
 
-        BaseDialog dialog = new BaseDialog(bundle("spdb.semantic.progress.title", "下载语义搜索组件"));
+        BaseDialog dialog = new BaseDialog(bundle("spdb.semantic.progress.title", "Download semantic-search components"));
         dialog.cont.margin(10f);
-        dialog.cont.add(bundle("spdb.semantic.progress.desc", "正在下载语义搜索组件，请稍候。"))
+        dialog.cont.add(bundle("spdb.semantic.progress.desc", "Downloading semantic-search components, please wait."))
             .width(460f)
             .left()
             .wrap()
@@ -1418,9 +1419,9 @@ public class ServerPlayerDataBaseMod extends Mod{
                 if(loaded != null){
                     playersFileIntegrityState = verifyPlayerDbFileIntegrity(loaded);
                     if(playersFileIntegrityState == integrityMismatch){
-                        playersIntegrityIssues.add("玩家库校验失败：players.json 可能已被修改。");
+                        playersIntegrityIssues.add(bundle("spdb.integrity.players-modified", "Player database verification failed: players.json may have been modified."));
                     }else if(playersFileIntegrityState == integrityUnsupported){
-                        playersIntegrityIssues.add("玩家库校验失败：players.json 使用了不支持的校验算法。");
+                        playersIntegrityIssues.add(bundle("spdb.integrity.players-unsupported", "Player database verification failed: players.json uses an unsupported verification algorithm."));
                     }else if(playersFileIntegrityState == integrityMissing){
                         playersDirty = true;
                     }
@@ -1429,7 +1430,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 }
             }catch(Throwable t){
                 Log.err("SPDB: failed to load players database.", t);
-                playersIntegrityIssues.add("玩家库读取失败，无法完成完整性校验。");
+                playersIntegrityIssues.add(bundle("spdb.integrity.players-read-failed", "Player database could not be read; integrity verification could not be completed."));
             }
         }
 
@@ -1460,7 +1461,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
 
         if(hasIntegrityIssues() && Vars.ui != null){
-            Vars.ui.showInfoFade("SPDB: 检测到数据库完整性异常，请在查询窗口查看详情。");
+            Vars.ui.showInfoFade(bundle("spdb.toast.integrity", "SPDB: Database integrity issues detected. See the query window for details."));
         }
     }
 
@@ -1502,19 +1503,19 @@ public class ServerPlayerDataBaseMod extends Mod{
         Core.settings.defaults(keyShowAutoTraceDialog, false);
         Core.settings.defaults(keySemanticSearchEnabled, false);
 
-        if(!bekBundled) Vars.ui.settings.addCategory("玩家数据库", Icon.zoom, this::bekBuildSettings);
+        if(!bekBundled) Vars.ui.settings.addCategory(bundle("spdb.category", "Server Player Database"), Icon.zoom, this::bekBuildSettings);
     }
     /** Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("数据采集", Icon.zoom));
+            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.collection", "Data collection"), Icon.zoom));
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyCollect, true, Icon.add, null));
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyRecordChat, false, Icon.chat, null));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("管理员增强", Icon.admin));
+            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.admin", "Administrator tools"), Icon.admin));
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyAutoTrace, true, Icon.zoom, null));
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keyShowAutoTraceDialog, false, Icon.eyeSmall, null));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.semantic", "语义搜索"), Icon.zoom));
+            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.semantic", "Semantic search"), Icon.zoom));
             table.pref(new SpdbSettingsWidgets.IconCheckSetting(keySemanticSearchEnabled, false, Icon.zoom, enabled -> {
                 if(enabled){
                     startSemanticSearchIfLocalComponentsReady();
@@ -1523,13 +1524,13 @@ public class ServerPlayerDataBaseMod extends Mod{
                 }
             }));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("工具", Icon.wrench));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开查询窗口", Icon.list, this::showStandaloneQueryDialog));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("打开调试窗口", Icon.zoom, this::showStandaloneDebugDialog));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("查找疑似小号（同IP）", Icon.players, this::showSameIpAltDialog));
-            table.pref(new SpdbSettingsWidgets.ActionButtonSetting("立即保存数据库", Icon.save, () -> saveDirty(true)));
+            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.tools", "Tools"), Icon.wrench));
+            table.pref(new SpdbSettingsWidgets.ActionButtonSetting(bundle("spdb.action.open-query", "Open query window"), Icon.list, this::showStandaloneQueryDialog));
+            table.pref(new SpdbSettingsWidgets.ActionButtonSetting(bundle("spdb.action.open-debug", "Open debug window"), Icon.zoom, this::showStandaloneDebugDialog));
+            table.pref(new SpdbSettingsWidgets.ActionButtonSetting(bundle("spdb.action.find-same-ip", "Find possible alternate accounts (same IP)"), Icon.players, this::showSameIpAltDialog));
+            table.pref(new SpdbSettingsWidgets.ActionButtonSetting(bundle("spdb.action.save", "Save database now"), Icon.save, () -> saveDirty(true)));
 
-            table.pref(new SpdbSettingsWidgets.HeaderSetting("更新", Icon.refresh));
+            table.pref(new SpdbSettingsWidgets.HeaderSetting(bundle("spdb.settings.header.update", "Updates"), Icon.refresh));
             if(!bekBundled) table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.enabledKey(), true, Icon.refresh, null));
             if(!bekBundled) table.pref(new SpdbSettingsWidgets.IconCheckSetting(GithubUpdateCheck.showDialogKey(), true, Icon.infoSmall, null));
         
@@ -1546,6 +1547,9 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(overlayQueryWindow == null){
             overlayQueryWindow = overlayUI.registerWindow(overlayQueryWindowName, overlayQueryContent.root, () -> Vars.state.isGame());
             if(overlayQueryWindow != null) overlayQueryWindow.configure(false, true);
+            if(overlayQueryWindow != null && !hasStoredOverlayWindowState(overlayQueryWindowName)){
+                overlayQueryWindow.setEnabledAndPinned(true, false);
+            }
         }
 
         if(debugContent == null){
@@ -1554,7 +1558,14 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(overlayDebugWindow == null){
             overlayDebugWindow = overlayUI.registerWindow(overlayDebugWindowName, debugContent.root, () -> Vars.state.isGame());
             if(overlayDebugWindow != null) overlayDebugWindow.configure(false, true);
+            if(overlayDebugWindow != null && !hasStoredOverlayWindowState(overlayDebugWindowName)){
+                overlayDebugWindow.setEnabledAndPinned(false, false);
+            }
         }
+    }
+
+    private boolean hasStoredOverlayWindowState(String windowName){
+        return Core.settings != null && Core.settings.has("overlayUI." + windowName);
     }
 
     private boolean compactUi(){
@@ -1599,7 +1610,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(Vars.ui == null) return;
 
         if(fallbackQueryDialog == null){
-            fallbackQueryDialog = new BaseDialog("玩家数据库 / 聊天记录");
+            fallbackQueryDialog = new BaseDialog(bundle("spdb.window.query.title", "Player database / Chat history"));
             fallbackQueryDialog.addCloseButton();
             fallbackQueryContent = new QueryContent();
         }
@@ -1631,7 +1642,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(Vars.ui == null) return;
 
         if(fallbackDebugDialog == null){
-            fallbackDebugDialog = new BaseDialog("SPDB 调试面板");
+            fallbackDebugDialog = new BaseDialog(bundle("spdb.window.debug.title", "SPDB parser debug"));
             fallbackDebugDialog.addCloseButton();
             DebugContent content = new DebugContent();
             fallbackDebugDialog.cont.add(content.root)
@@ -1648,7 +1659,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void showSameIpAltDialog(){
         if(Vars.ui == null) return;
 
-        BaseDialog dialog = new BaseDialog("疑似小号（同IP账号）");
+        BaseDialog dialog = new BaseDialog(bundle("spdb.query.same-ip.title", "Possible alternate accounts (same IP)"));
         dialog.addCloseButton();
         dialog.cont.defaults().left().pad(4f);
 
@@ -1656,22 +1667,22 @@ public class ServerPlayerDataBaseMod extends Mod{
         result.left().top();
 
         TextField targetUidField = new TextField("");
-        targetUidField.setMessageText("目标UID（保留）");
+        targetUidField.setMessageText(bundle("spdb.query.same-ip.target", "Target UID to keep"));
 
         TextArea sourceUidsArea = new TextArea("");
-        sourceUidsArea.setMessageText("输入多个UID，支持空格/换行/逗号分隔");
+        sourceUidsArea.setMessageText(bundle("spdb.query.same-ip.sources", "Source UIDs (multiple)"));
 
         Table mergeOutput = new Table();
         mergeOutput.left().top();
-        setSameIpMergeOutput(mergeOutput, "示例：目标 dNF，来源 abc def ghi\n可输入：abc def ghi");
+        setSameIpMergeOutput(mergeOutput, bundle("spdb.query.same-ip.example", "Example: target dNF, sources abc def ghi\nAccepted: abc def ghi"));
 
         dialog.cont.table(Styles.black3, top -> {
             top.left().defaults().left().pad(6f);
-            top.add("一键查找数据库中同IP账号，按账号数降序列出。")
+            top.add(bundle("spdb.query.same-ip.description", "Find same-IP account groups in the database, ordered by account count."))
                 .left()
                 .growX()
                 .wrap();
-            top.button("刷新", Icon.refresh, Styles.defaultt, () -> refreshSameIpAltResult(result))
+            top.button(bundle("spdb.action.refresh", "Refresh"), Icon.refresh, Styles.defaultt, () -> refreshSameIpAltResult(result))
                 .height(40f)
                 .padLeft(8f);
         }).growX().row();
@@ -1690,10 +1701,10 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             body.table(Styles.black3, side -> {
                 side.left().top().defaults().left().pad(4f).growX();
-                side.add("批量 UID 合并").left().wrap().row();
-                side.add("目标UID").left().row();
+                side.add(bundle("spdb.query.same-ip.merge", "Merge all")).left().wrap().row();
+                side.add(bundle("spdb.query.same-ip.target", "Target UID to keep")).left().row();
                 side.add(targetUidField).height(38f).growX().row();
-                side.add("来源UID（多个）").left().row();
+                side.add(bundle("spdb.query.same-ip.sources", "Source UIDs (multiple)")).left().row();
                 side.pane(sourceUidsArea)
                     .scrollX(false)
                     .height(220f)
@@ -1701,10 +1712,10 @@ public class ServerPlayerDataBaseMod extends Mod{
                     .row();
                 side.table(btns -> {
                     btns.left().defaults().left().padRight(6f).growX();
-                    btns.button("一键合并", Icon.save, Styles.defaultt, () ->
+                    btns.button(bundle("spdb.query.same-ip.merge", "Merge all"), Icon.save, Styles.defaultt, () ->
                         mergeUidBatchFromSameIpDialog(targetUidField.getText(), sourceUidsArea.getText(), result, mergeOutput)
                     ).height(38f).growX();
-                    btns.button("清空", Styles.defaultt, () -> {
+                    btns.button(bundle("spdb.action.clear", "Clear"), Styles.defaultt, () -> {
                         targetUidField.setText("");
                         sourceUidsArea.setText("");
                         setSameIpMergeOutput(mergeOutput, "");
@@ -1731,15 +1742,15 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void mergeUidBatchFromSameIpDialog(String targetUidText, String sourceUidsText, Table result, Table output){
         String targetUid = normalizeShortUid(targetUidText);
         if(targetUid == null){
-            setSameIpMergeOutput(output, "请输入三位目标 UID（例如 dNF）。");
-            Vars.ui.showInfoFade("SPDB: 请输入三位目标 UID。");
+            setSameIpMergeOutput(output, bundle("spdb.query.same-ip.invalid-target", "Enter a three-character target UID (for example dNF)."));
+            Vars.ui.showInfoFade(bundle("spdb.query.same-ip.invalid-target", "Enter a three-character target UID (for example dNF)."));
             return;
         }
 
         String[] tokens = splitUidBatchTokens(sourceUidsText);
         if(tokens.length == 0){
-            setSameIpMergeOutput(output, "请输入至少一个来源 UID。\n支持空格、换行、逗号分隔。");
-            Vars.ui.showInfoFade("SPDB: 请输入来源 UID。");
+            setSameIpMergeOutput(output, bundle("spdb.query.same-ip.invalid-source", "Enter at least one source UID.\nSpaces, newlines and commas are accepted."));
+            Vars.ui.showInfoFade(bundle("spdb.query.same-ip.invalid-source", "Enter at least one source UID."));
             return;
         }
 
@@ -1756,8 +1767,8 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         fromUids.remove(targetUid, false);
         if(fromUids.isEmpty()){
-            setSameIpMergeOutput(output, "没有可合并来源 UID。\n注意：来源 UID 不能与目标 UID 相同。");
-            Vars.ui.showInfoFade("SPDB: 没有可合并来源 UID。");
+            setSameIpMergeOutput(output, bundle("spdb.query.same-ip.no-source", "No mergeable source UIDs.\nA source UID cannot equal the target UID."));
+            Vars.ui.showInfoFade(bundle("spdb.query.same-ip.no-source", "No mergeable source UIDs."));
             return;
         }
 
@@ -1778,18 +1789,20 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         boolean changed = rebound > 0 || mergedPid > 0 || movedChatUid > 0;
         if(!changed){
-            setSameIpMergeOutput(output, "未发现可合并数据。\n请确认 UID 存在于本地数据库。" + (invalid > 0 ? "\n已忽略无效 UID: " + invalid : ""));
-            Vars.ui.showInfoFade("SPDB: 未发现可合并数据。");
+            setSameIpMergeOutput(output, bundleFormat("spdb.query.same-ip.no-data", "No mergeable data found.\nConfirm that the UIDs exist in the local database.@", invalid > 0 ? "\nIgnored invalid UIDs: " + invalid : ""));
+            Vars.ui.showInfoFade(bundle("spdb.query.same-ip.no-data", "No mergeable data found."));
             return;
         }
 
-        String summary = "目标 UID: " + targetUid
-            + "\n来源 UID 数: " + fromUids.size + (invalid > 0 ? "（忽略无效 " + invalid + "）" : "")
-            + "\n重绑记录: " + rebound
-            + "\n合并 PID: " + mergedPid
-            + "\n迁移聊天 UID: " + movedChatUid;
+        String summary = bundleFormat("spdb.query.same-ip.summary-target",
+            "Target UID: @\nSource UID count: @\nRebound records: @\nMerged PIDs: @\nMoved chat UIDs: @",
+            targetUid,
+            fromUids.size + (invalid > 0 ? " (ignored invalid " + invalid + ")" : ""),
+            rebound,
+            mergedPid,
+            movedChatUid);
         setSameIpMergeOutput(output, summary);
-        Vars.ui.showInfoFade("SPDB: 批量 UID 合并完成。");
+        Vars.ui.showInfoFade(bundle("spdb.query.same-ip.done", "SPDB: batch UID merge completed."));
     }
 
     private static void setSameIpMergeOutput(Table output, String message){
@@ -1819,7 +1832,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         Seq<SameIpGroup> groups = playerDb.findSameIpGroups(2);
         if(groups.isEmpty()){
-            result.add("当前没有发现同IP账号记录。").left().wrap().row();
+            result.add(bundle("spdb.query.same-ip.empty", "No same-IP account groups found.")).left().wrap().row();
             return;
         }
 
@@ -1827,7 +1840,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         for(SameIpGroup group : groups){
             accountCount += group.players.size;
         }
-        result.add("发现 " + groups.size + " 组疑似小号（同IP），涉及 " + accountCount + " 个账号。")
+        result.add(bundleFormat("spdb.query.same-ip.summary", "Found @ possible alternate-account groups involving @ accounts.", groups.size, accountCount))
             .left()
             .wrap()
             .row();
@@ -1839,14 +1852,14 @@ public class ServerPlayerDataBaseMod extends Mod{
             result.table(Styles.black3, card -> {
                 card.left().top().defaults().left().pad(3f).growX();
                 card.add(escapeMarkup(ipTitle)).left().wrap().row();
-                card.add("账号数: " + group.players.size + " | 最近出现: " + formatTime(group.latestSeen)).left().wrap().row();
+                card.add(bundleFormat("spdb.query.same-ip.accounts", "Accounts: @ | Latest seen: @", group.players.size, formatTime(group.latestSeen))).left().wrap().row();
 
                 for(int i = 0; i < group.players.size; i++){
                     PlayerRecord rec = group.players.get(i);
                     String line = (i + 1) + ". " + bestPlayerName(rec)
-                        + " | UID: " + (rec.uid == null ? "(none)" : rec.uid)
+                        + " | UID: " + (rec.uid == null ? bundle("spdb.query.field.none", "(none)") : rec.uid)
                         + " | PID: " + rec.pid
-                        + " | 最后出现: " + formatTime(rec.lastSeen);
+                        + " | " + bundle("spdb.query.field.last-seen", "Last seen") + ": " + formatTime(rec.lastSeen);
                     card.add(escapeMarkup(line)).left().wrap().row();
                 }
             }).growX().padTop(6f).row();
@@ -1859,37 +1872,37 @@ public class ServerPlayerDataBaseMod extends Mod{
     }
 
     private void importPlayersFromFile(){
-        FileChooser.open("json").submit(file -> {
+        showFileChooser(true, "json", file -> {
             try{
                 PlayerDbFile incoming = json.fromJson(PlayerDbFile.class, file.readString("UTF-8"));
                 if(incoming == null || incoming.players == null){
-                    Vars.ui.showErrorMessage("SPDB: 玩家库文件无效。");
+                    Vars.ui.showErrorMessage(bundle("spdb.toast.players.invalid", "SPDB: Invalid player database file."));
                     return;
                 }
 
                 int state = verifyPlayerDbFileIntegrity(incoming);
                 if(state == integrityMismatch){
-                    Vars.ui.showErrorMessage("SPDB: 玩家库校验失败，文件疑似被修改。\n请重新导入原始导出文件。");
+                    Vars.ui.showErrorMessage(bundle("spdb.toast.players.modified", "SPDB: Player database verification failed; the file may have been modified.\nImport the original export again."));
                     return;
                 }
                 if(state == integrityUnsupported){
-                    Vars.ui.showErrorMessage("SPDB: 玩家库使用了不支持的校验算法，拒绝导入。");
+                    Vars.ui.showErrorMessage(bundle("spdb.toast.players.unsupported", "SPDB: Unsupported player database verification algorithm; import rejected."));
                     return;
                 }
                 if(state == integrityMissing){
-                    Vars.ui.showInfoFade("SPDB: 玩家库无校验元数据，按兼容模式导入。");
+                    Vars.ui.showInfoFade(bundle("spdb.toast.players.legacy", "SPDB: Player database has no integrity metadata; importing in compatibility mode."));
                 }
 
                 int merged = playerDb.mergeFrom(incoming);
                 if(merged > 0){
                     playersDirty = true;
-                    Vars.ui.showInfoFade("SPDB: 玩家库导入/合并条目: " + merged);
+                    Vars.ui.showInfoFade(bundleFormat("spdb.toast.players.imported", "SPDB: Imported or merged player records: @", merged));
                 }else{
-                    Vars.ui.showInfoFade("SPDB: 没有可新增的玩家数据。");
+                    Vars.ui.showInfoFade(bundle("spdb.toast.players.none", "SPDB: No new player data found."));
                 }
             }catch(Throwable t){
                 Log.err("SPDB: failed to import players.", t);
-                Vars.ui.showErrorMessage("SPDB: 玩家库导入失败。");
+                Vars.ui.showErrorMessage(bundle("spdb.toast.players.import-failed", "SPDB: Player database import failed."));
             }
         });
     }
@@ -1899,66 +1912,89 @@ public class ServerPlayerDataBaseMod extends Mod{
         return OverlayUiBridge.autoDetect();
     }
 
+    /** Supports both the legacy Platform chooser and the v159 FileChooser builder. */
+    private static void showFileChooser(boolean open, String extension, Cons<Fi> consumer){
+        try{
+            Class<?> chooser = Class.forName("mindustry.ui.FileChooser");
+            Method factory = chooser.getMethod(open ? "open" : "save", String[].class);
+            Object params = factory.invoke(null, (Object)new String[]{extension});
+            Method submit = params.getClass().getMethod("submit", Cons.class);
+            submit.invoke(params, consumer);
+            return;
+        }catch(ClassNotFoundException ignored){
+            // Mindustry v154 and earlier expose the legacy Platform method instead.
+        }catch(Throwable t){
+            Log.warn("SPDB: v159 file chooser bridge failed: @", t.getMessage());
+        }
+
+        try{
+            Method legacy = Vars.platform.getClass().getMethod("showFileChooser", boolean.class, String.class, Cons.class);
+            legacy.invoke(Vars.platform, open, extension, consumer);
+        }catch(Throwable t){
+            Log.err("SPDB: file chooser is unavailable.", t);
+        }
+    }
+
     private void exportPlayersToFile(){
-        FileChooser.save("json").submit(file -> {
+        showFileChooser(false, "json", file -> {
             try{
                 PlayerDbFile out = playerDb.snapshot();
                 signPlayerDbFile(out);
                 file.writeString(json.prettyPrint(out), false, "UTF-8");
-                Vars.ui.showInfoFade("SPDB: 玩家库导出完成。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.players.exported", "SPDB: Player database export completed."));
             }catch(Throwable t){
                 Log.err("SPDB: failed to export players.", t);
-                Vars.ui.showErrorMessage("SPDB: 玩家库导出失败。");
+                Vars.ui.showErrorMessage(bundle("spdb.toast.players.export-failed", "SPDB: Player database export failed."));
             }
         });
     }
 
     private void importChatsFromFile(){
-        FileChooser.open("json").submit(file -> {
+        showFileChooser(true, "json", file -> {
             try{
                 ChatDbFile incoming = json.fromJson(ChatDbFile.class, file.readString("UTF-8"));
                 if(incoming == null || incoming.entries == null){
-                    Vars.ui.showErrorMessage("SPDB: 聊天库文件无效。");
+                    Vars.ui.showErrorMessage(bundle("spdb.toast.chats.invalid", "SPDB: Invalid chat database file."));
                     return;
                 }
 
                 int state = verifyChatDbFileIntegrity(incoming);
                 if(state == integrityMismatch){
-                    Vars.ui.showErrorMessage("SPDB: 聊天库校验失败，文件疑似被修改。\n请重新导入原始导出文件。");
+                    Vars.ui.showErrorMessage(bundle("spdb.toast.chats.modified", "SPDB: Chat database verification failed; the file may have been modified.\nImport the original export again."));
                     return;
                 }
                 if(state == integrityUnsupported){
-                    Vars.ui.showErrorMessage("SPDB: 聊天库使用了不支持的校验算法，拒绝导入。");
+                    Vars.ui.showErrorMessage(bundle("spdb.toast.chats.unsupported", "SPDB: Unsupported chat database verification algorithm; import rejected."));
                     return;
                 }
                 if(state == integrityMissing){
-                    Vars.ui.showInfoFade("SPDB: 聊天库无校验元数据，按兼容模式导入。");
+                    Vars.ui.showInfoFade(bundle("spdb.toast.chats.legacy", "SPDB: Chat database has no integrity metadata; importing in compatibility mode."));
                 }
 
                 int merged = chatDb.mergeFrom(incoming);
                 if(merged > 0){
                     chatsDirty = true;
-                    Vars.ui.showInfoFade("SPDB: 聊天库导入/合并条目: " + merged);
+                    Vars.ui.showInfoFade(bundleFormat("spdb.toast.chats.imported", "SPDB: Imported or merged chat records: @", merged));
                 }else{
-                    Vars.ui.showInfoFade("SPDB: 没有可新增的聊天数据。");
+                    Vars.ui.showInfoFade(bundle("spdb.toast.chats.none", "SPDB: No new chat data found."));
                 }
             }catch(Throwable t){
                 Log.err("SPDB: failed to import chats.", t);
-                Vars.ui.showErrorMessage("SPDB: 聊天库导入失败。");
+                Vars.ui.showErrorMessage(bundle("spdb.toast.chats.import-failed", "SPDB: Chat database import failed."));
             }
         });
     }
 
     private void exportChatsToFile(){
-        FileChooser.save("json").submit(file -> {
+        showFileChooser(false, "json", file -> {
             try{
                 ChatDbFile out = chatDb.snapshot();
                 signChatDbFile(out);
                 file.writeString(json.prettyPrint(out), false, "UTF-8");
-                Vars.ui.showInfoFade("SPDB: 聊天库导出完成。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.chats.exported", "SPDB: Chat database export completed."));
             }catch(Throwable t){
                 Log.err("SPDB: failed to export chats.", t);
-                Vars.ui.showErrorMessage("SPDB: 聊天库导出失败。");
+                Vars.ui.showErrorMessage(bundle("spdb.toast.chats.export-failed", "SPDB: Chat database export failed."));
             }
         });
     }
@@ -1970,24 +2006,24 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void showIntegrityDialog(){
         if(Vars.ui == null) return;
 
-        BaseDialog dialog = new BaseDialog("SPDB 数据完整性");
+        BaseDialog dialog = new BaseDialog(bundle("spdb.integrity.title", "SPDB integrity"));
         dialog.addCloseButton();
         float width = fitDialogWidth(960f);
         float height = fitDialogHeight(660f, 320f);
         dialog.cont.pane(p -> {
             p.left().top().defaults().left().pad(4f).growX();
 
-            p.add("玩家库文件: " + integrityStateText(playersFileIntegrityState)).left().row();
-            p.add("聊天存储后端: " + chatDb.storageBackendName()).left().row();
+            p.add(bundleFormat("spdb.integrity.players-file", "Player database file: @", integrityStateText(playersFileIntegrityState))).left().row();
+            p.add(bundleFormat("spdb.integrity.chat-backend", "Chat storage backend: @", chatDb.storageBackendName())).left().row();
             if(chatDb.usesSqlite()){
-                p.add("聊天数据库文件: " + integrityStateText(chatDb.indexIntegrityState()) + " | 总记录 " + chatDb.totalEntries() + " 条").left().wrap().row();
+                p.add(bundleFormat("spdb.integrity.chat-database", "Chat database file: @ | Total records: @", integrityStateText(chatDb.indexIntegrityState()), chatDb.totalEntries())).left().wrap().row();
             }else{
-                p.add("聊天索引文件: " + integrityStateText(chatDb.indexIntegrityState())).left().row();
-                p.add("聊天分片文件: 已校验 " + chatDb.shardsChecked() + " 个（通过 " + chatDb.shardsValid() + " / 缺少元数据 " + chatDb.shardsMissing() + " / 校验失败 " + chatDb.shardsMismatch() + " / 算法不支持 " + chatDb.shardsUnsupported() + "）").left().wrap().row();
+                p.add(bundleFormat("spdb.integrity.chat-index", "Chat index file: @", integrityStateText(chatDb.indexIntegrityState()))).left().row();
+                p.add(bundleFormat("spdb.integrity.chat-shards", "Chat shards checked: @ (valid @ / missing metadata @ / mismatched @ / unsupported algorithm @)", chatDb.shardsChecked(), chatDb.shardsValid(), chatDb.shardsMissing(), chatDb.shardsMismatch(), chatDb.shardsUnsupported())).left().wrap().row();
             }
 
             if(!playersIntegrityIssues.isEmpty() || chatDb.hasIntegrityIssues()){
-                p.add("异常详情:").padTop(6f).left().row();
+                p.add(bundle("spdb.integrity.details", "Details:")).padTop(6f).left().row();
                 for(String issue : playersIntegrityIssues){
                     p.add("- " + escapeMarkup(issue)).left().wrap().row();
                 }
@@ -1995,7 +2031,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     p.add("- " + escapeMarkup(issue)).left().wrap().row();
                 }
             }else{
-                p.add("当前未发现完整性异常。\n如导入文件被改动，将在导入时直接拦截。", Styles.outlineLabel).left().padTop(6f).wrap().row();
+                p.add(bundle("spdb.integrity.clean", "No integrity issues found.\nModified import files will be rejected during import."), Styles.outlineLabel).left().padTop(6f).wrap().row();
             }
         }).grow().width(width).height(height).minWidth(0f).minHeight(0f);
         dialog.show();
@@ -2004,13 +2040,13 @@ public class ServerPlayerDataBaseMod extends Mod{
     private static String integrityStateText(int state){
         switch(state){
             case integrityValid:
-                return "通过";
+                return bundle("spdb.integrity.valid", "Valid");
             case integrityMissing:
-                return "缺少元数据";
+                return bundle("spdb.integrity.missing", "Missing metadata");
             case integrityUnsupported:
-                return "算法不支持";
+                return bundle("spdb.integrity.unsupported", "Unsupported algorithm");
             default:
-                return "校验失败";
+                return bundle("spdb.integrity.failed", "Verification failed");
         }
     }
 
@@ -2349,37 +2385,37 @@ public class ServerPlayerDataBaseMod extends Mod{
             root.table(Styles.black3, top -> {
                 top.left().defaults().pad(6f).height(compact ? 40f : 44f).growX();
                 if(compact){
-                    top.button("导入玩家库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile).growX().row();
-                    top.button("导出玩家库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile).growX().row();
-                    top.button("导入聊天库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile).growX().row();
-                    top.button("导出聊天库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile).growX().row();
-                    top.button("完整性状态", Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog).growX();
+                    top.button(bundle("spdb.action.import-players", "Import player database"), Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile).growX().row();
+                    top.button(bundle("spdb.action.export-players", "Export player database"), Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile).growX().row();
+                    top.button(bundle("spdb.action.import-chats", "Import chat database"), Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile).growX().row();
+                    top.button(bundle("spdb.action.export-chats", "Export chat database"), Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile).growX().row();
+                    top.button(bundle("spdb.action.integrity", "Integrity status"), Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog).growX();
                 }else if(medium){
                     top.table(row -> {
                         row.left().defaults().height(42f).padRight(6f).growX();
-                        row.button("导入玩家库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile).growX();
-                        row.button("导出玩家库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile).growX();
-                        row.button("完整性状态", Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog).growX();
+                        row.button(bundle("spdb.action.import-players", "Import player database"), Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile).growX();
+                        row.button(bundle("spdb.action.export-players", "Export player database"), Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile).growX();
+                        row.button(bundle("spdb.action.integrity", "Integrity status"), Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog).growX();
                     }).growX().row();
                     top.table(row -> {
                         row.left().defaults().height(42f).padRight(6f).growX();
-                        row.button("导入聊天库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile).growX();
-                        row.button("导出聊天库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile).growX();
+                        row.button(bundle("spdb.action.import-chats", "Import chat database"), Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile).growX();
+                        row.button(bundle("spdb.action.export-chats", "Export chat database"), Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile).growX();
                     }).growX();
                 }else{
-                    top.button("导入玩家库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile);
-                    top.button("导出玩家库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile);
-                    top.button("导入聊天库", Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile);
-                    top.button("导出聊天库", Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile);
-                    top.button("完整性状态", Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog);
+                    top.button(bundle("spdb.action.import-players", "Import player database"), Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importPlayersFromFile);
+                    top.button(bundle("spdb.action.export-players", "Export player database"), Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportPlayersToFile);
+                    top.button(bundle("spdb.action.import-chats", "Import chat database"), Icon.download, Styles.defaultt, ServerPlayerDataBaseMod.this::importChatsFromFile);
+                    top.button(bundle("spdb.action.export-chats", "Export chat database"), Icon.upload, Styles.defaultt, ServerPlayerDataBaseMod.this::exportChatsToFile);
+                    top.button(bundle("spdb.action.integrity", "Integrity status"), Icon.list, Styles.defaultt, ServerPlayerDataBaseMod.this::showIntegrityDialog);
                 }
             }).growX().padBottom(6f).row();
 
             root.table(Styles.black3, tabs -> {
                 tabs.left().defaults().height(40f).pad(6f).growX();
-                tabs.button("玩家库", Icon.players, Styles.togglet, () -> activeTab = 0).checked(b -> activeTab == 0).growX();
-                tabs.button("聊天记录", Icon.chat, Styles.togglet, () -> activeTab = 1).checked(b -> activeTab == 1).growX();
-                tabs.button("语义搜索", Icon.zoom, Styles.togglet, () -> openSemanticSearch(null)).checked(b -> activeTab == 2).growX();
+                tabs.button(bundle("spdb.tab.players", "Players"), Icon.players, Styles.togglet, () -> activeTab = 0).checked(b -> activeTab == 0).growX();
+                tabs.button(bundle("spdb.tab.chats", "Chat history"), Icon.chat, Styles.togglet, () -> activeTab = 1).checked(b -> activeTab == 1).growX();
+                tabs.button(bundle("spdb.tab.semantic", "Semantic search"), Icon.zoom, Styles.togglet, () -> openSemanticSearch(null)).checked(b -> activeTab == 2).growX();
             }).growX().padBottom(8f).row();
 
             playerTab.clear();
@@ -2388,25 +2424,25 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             playerTab.table(Styles.black3, box -> {
                 box.left().top().defaults().left().pad(4f).growX();
-                box.add("UID 查询（3位）").left().row();
+                box.add(bundle("spdb.query.uid.title", "UID query (3 characters)")).left().row();
                 if(compact){
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         uidField = line.field("", text -> {}).growX().get();
-                        uidField.setMessageText("输入三位 UID，例如 dNF");
+                        uidField.setMessageText(bundle("spdb.query.uid.placeholder", "Enter a three-character UID, for example dNF"));
                     }).growX().row();
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("查询 UID", this::refreshUidResult).height(38f).growX();
-                        line.button("按UID合并", this::showMergeByUidPreview).height(38f).growX();
+                        line.button(bundle("spdb.query.uid.search", "Query UID"), this::refreshUidResult).height(38f).growX();
+                        line.button(bundle("spdb.query.uid.merge", "Merge by UID"), this::showMergeByUidPreview).height(38f).growX();
                     }).growX().row();
                 }else{
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         uidField = line.field("", text -> {}).growX().get();
-                        uidField.setMessageText("输入三位 UID，例如 dNF");
-                        line.button("查询 UID", this::refreshUidResult).height(38f);
-                        line.button("按UID合并", this::showMergeByUidPreview).height(38f);
+                        uidField.setMessageText(bundle("spdb.query.uid.placeholder", "Enter a three-character UID, for example dNF"));
+                        line.button(bundle("spdb.query.uid.search", "Query UID"), this::refreshUidResult).height(38f);
+                        line.button(bundle("spdb.query.uid.merge", "Merge by UID"), this::showMergeByUidPreview).height(38f);
                     }).growX().row();
                 }
                 box.pane(uidResult).scrollX(false).maxHeight(fitPaneHeight(260f, 150f)).growX().row();
@@ -2414,77 +2450,77 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             playerTab.table(Styles.black3, box -> {
                 box.left().top().defaults().left().pad(4f).growX();
-                box.add("UID 工具").left().row();
+                box.add(bundle("spdb.query.uid.tools", "UID tools")).left().row();
 
                 box.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
-                    line.button("一键合并全部重复UID", this::mergeAllSameUid).height(36f).growX();
+                    line.button(bundle("spdb.query.uid.merge-all", "Merge all duplicate UIDs"), this::mergeAllSameUid).height(36f).growX();
                 }).growX().row();
 
                 if(compact){
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         fillPidField = line.field("", text -> {}).growX().get();
-                        fillPidField.setMessageText("输入 PID（仅填充 UID 为空的记录）");
+                        fillPidField.setMessageText(bundle("spdb.query.uid.fill-pid", "Enter a PID (only fills records without a UID)"));
                     }).growX().row();
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
                         fillUidField = line.field("", text -> {}).growX().get();
-                        fillUidField.setMessageText("UID");
-                        line.button("填充UID", this::fillMissingUidByPid).height(36f).growX();
+                        fillUidField.setMessageText(bundle("spdb.query.header.uid", "UID"));
+                        line.button(bundle("spdb.query.uid.fill", "Fill UID"), this::fillMissingUidByPid).height(36f).growX();
                     }).growX().row();
 
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
                         mergeFromUidField = line.field("", text -> {}).growX().get();
-                        mergeFromUidField.setMessageText("来源UID");
+                        mergeFromUidField.setMessageText(bundle("spdb.query.uid.source", "Source UID"));
                         mergeToUidField = line.field("", text -> {}).growX().get();
-                        mergeToUidField.setMessageText("目标UID");
+                        mergeToUidField.setMessageText(bundle("spdb.query.uid.target", "Target UID"));
                     }).growX().row();
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("合并两个UID", this::mergeTwoUids).height(36f).growX();
+                        line.button(bundle("spdb.query.uid.merge-two", "Merge two UIDs"), this::mergeTwoUids).height(36f).growX();
                     }).growX().row();
                 }else{
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         fillPidField = line.field("", text -> {}).growX().get();
-                        fillPidField.setMessageText("输入 PID（仅填充 UID 为空的记录）");
+                        fillPidField.setMessageText(bundle("spdb.query.uid.fill-pid", "Enter a PID (only fills records without a UID)"));
                         fillUidField = line.field("", text -> {}).width(130f).get();
-                        fillUidField.setMessageText("UID");
-                        line.button("填充UID", this::fillMissingUidByPid).height(36f);
+                        fillUidField.setMessageText(bundle("spdb.query.header.uid", "UID"));
+                        line.button(bundle("spdb.query.uid.fill", "Fill UID"), this::fillMissingUidByPid).height(36f);
                     }).growX().row();
 
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         mergeFromUidField = line.field("", text -> {}).width(130f).get();
-                        mergeFromUidField.setMessageText("来源UID");
+                        mergeFromUidField.setMessageText(bundle("spdb.query.uid.source", "Source UID"));
                         mergeToUidField = line.field("", text -> {}).width(130f).get();
-                        mergeToUidField.setMessageText("目标UID");
-                        line.button("合并两个UID", this::mergeTwoUids).height(36f);
+                        mergeToUidField.setMessageText(bundle("spdb.query.uid.target", "Target UID"));
+                        line.button(bundle("spdb.query.uid.merge-two", "Merge two UIDs"), this::mergeTwoUids).height(36f);
                     }).growX().row();
                 }
             }).growX().row();
 
             playerTab.table(Styles.black3, box -> {
                 box.left().top().defaults().left().pad(4f).growX();
-                box.add("PID 查询").padTop(4f).row();
+                box.add(bundle("spdb.query.pid.title", "PID query")).padTop(4f).row();
                 if(compact){
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         pidField = line.field("", text -> {}).growX().get();
-                        pidField.setMessageText("输入 PID（Trace/数据库中的 pid）");
+                        pidField.setMessageText(bundle("spdb.query.pid.placeholder", "Enter a PID from Trace or the database"));
                     }).growX().row();
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("查询 PID", this::refreshPidResult).height(38f).growX();
+                        line.button(bundle("spdb.query.pid.search", "Query PID"), this::refreshPidResult).height(38f).growX();
                     }).growX().row();
                 }else{
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         pidField = line.field("", text -> {}).growX().get();
-                        pidField.setMessageText("输入 PID（Trace/数据库中的 pid）");
-                        line.button("查询 PID", this::refreshPidResult).height(38f);
+                        pidField.setMessageText(bundle("spdb.query.pid.placeholder", "Enter a PID from Trace or the database"));
+                        line.button(bundle("spdb.query.pid.search", "Query PID"), this::refreshPidResult).height(38f);
                     }).growX().row();
                 }
                 box.add(pidResult).growX().row();
@@ -2492,23 +2528,23 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             playerTab.table(Styles.black3, box -> {
                 box.left().top().defaults().left().pad(4f).growX();
-                box.add("名字查询").padTop(4f).row();
+                box.add(bundle("spdb.query.name.title", "Name query")).padTop(4f).row();
                 if(compact){
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         nameField = line.field("", text -> {}).growX().get();
-                        nameField.setMessageText("输入玩家名或片段（支持模糊）");
+                        nameField.setMessageText(bundle("spdb.query.name.placeholder", "Enter a player name or fragment (fuzzy)"));
                     }).growX().row();
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("查询名字", this::refreshNameResult).height(38f).growX();
+                        line.button(bundle("spdb.query.name.search", "Query name"), this::refreshNameResult).height(38f).growX();
                     }).growX().row();
                 }else{
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         nameField = line.field("", text -> {}).growX().get();
-                        nameField.setMessageText("输入玩家名或片段（支持模糊）");
-                        line.button("查询名字", this::refreshNameResult).height(38f);
+                        nameField.setMessageText(bundle("spdb.query.name.placeholder", "Enter a player name or fragment (fuzzy)"));
+                        line.button(bundle("spdb.query.name.search", "Query name"), this::refreshNameResult).height(38f);
                     }).growX().row();
                 }
                 box.pane(nameResult).scrollX(false).maxHeight(fitPaneHeight(240f, 140f)).growX().row();
@@ -2516,44 +2552,44 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             playerTab.table(Styles.black3, box -> {
                 box.left().top().defaults().left().pad(4f).growX();
-                box.add("IP 查询").padTop(4f).row();
+                box.add(bundle("spdb.query.ip.title", "IP query")).padTop(4f).row();
                 if(compact){
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         ipField = line.field("", text -> {}).growX().get();
-                        ipField.setMessageText("输入 IP");
+                        ipField.setMessageText(bundle("spdb.query.ip.placeholder", "Enter an IP address"));
                     }).growX().row();
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("查询 IP", this::refreshIpResult).height(38f).growX();
+                        line.button(bundle("spdb.query.ip.search", "Query IP"), this::refreshIpResult).height(38f).growX();
                     }).growX().row();
                 }else{
                     box.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         ipField = line.field("", text -> {}).growX().get();
-                        ipField.setMessageText("输入 IP");
-                        line.button("查询 IP", this::refreshIpResult).height(38f);
+                        ipField.setMessageText(bundle("spdb.query.ip.placeholder", "Enter an IP address"));
+                        line.button(bundle("spdb.query.ip.search", "Query IP"), this::refreshIpResult).height(38f);
                     }).growX().row();
                 }
                 box.pane(ipResult).scrollX(false).maxHeight(fitPaneHeight(240f, 140f)).growX().row();
             }).growX().row();
 
-            playerTab.add("全部玩家（按最后出现时间）").padTop(8f).row();
+            playerTab.add(bundle("spdb.query.players.title", "All players (latest seen first)")).padTop(8f).row();
             playerTab.table(line -> {
                 line.left().defaults().left().padRight(6f).growX();
-                line.button("上一页", () -> {
+                line.button(bundle("spdb.action.previous", "Previous"), () -> {
                     if(allPlayersPage > 0) allPlayersPage--;
                     refreshAllPlayersResult();
                 }).height(36f).growX();
-                line.button("下一页", () -> {
+                line.button(bundle("spdb.action.next", "Next"), () -> {
                     allPlayersPage++;
                     refreshAllPlayersResult();
                 }).height(36f).growX();
                 if(compact){
                     line.row();
-                    line.button("刷新", this::refreshAllPlayersResult).height(36f).growX().colspan(2);
+                    line.button(bundle("spdb.action.refresh", "Refresh"), this::refreshAllPlayersResult).height(36f).growX().colspan(2);
                 }else{
-                    line.button("刷新", this::refreshAllPlayersResult).height(36f);
+                    line.button(bundle("spdb.action.refresh", "Refresh"), this::refreshAllPlayersResult).height(36f);
                 }
             }).growX().row();
             playerTab.add(allPlayersResult).growX().growY().row();
@@ -2561,43 +2597,43 @@ public class ServerPlayerDataBaseMod extends Mod{
             chatTab.clear();
             chatTab.left().top().defaults().left().pad(4f).growX();
             allChatsPage = 0;
-            chatTab.add("聊天记录查询（按 UID）").row();
+            chatTab.add(bundle("spdb.query.chats.title", "Chat query (by UID)")).row();
             if(compact){
                 chatTab.table(line -> {
                     line.left().defaults().left().padRight(6f);
                     chatUidField = line.field("", text -> {}).growX().get();
-                    chatUidField.setMessageText("输入 UID");
+                    chatUidField.setMessageText(bundle("spdb.query.chats.placeholder", "Enter a UID"));
                 }).growX().row();
                 chatTab.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
-                    line.button("查询聊天", this::refreshChatResult).height(38f).growX();
+                    line.button(bundle("spdb.query.chats.search", "Query chat"), this::refreshChatResult).height(38f).growX();
                 }).growX().row();
             }else{
                 chatTab.table(line -> {
                     line.left().defaults().left().padRight(6f);
                     chatUidField = line.field("", text -> {}).growX().get();
-                    chatUidField.setMessageText("输入 UID");
-                    line.button("查询聊天", this::refreshChatResult).height(38f);
+                    chatUidField.setMessageText(bundle("spdb.query.chats.placeholder", "Enter a UID"));
+                    line.button(bundle("spdb.query.chats.search", "Query chat"), this::refreshChatResult).height(38f);
                 }).growX().row();
             }
             chatTab.pane(chatResult).scrollX(false).maxHeight(fitPaneHeight(260f, 140f)).growX().row();
 
-            chatTab.add("全部聊天（按时间倒序）").padTop(8f).row();
+            chatTab.add(bundle("spdb.query.all-chats.title", "All chat history (newest first)")).padTop(8f).row();
             chatTab.table(line -> {
                 line.left().defaults().left().padRight(6f).growX();
-                line.button("上一页", () -> {
+                line.button(bundle("spdb.action.previous", "Previous"), () -> {
                     if(allChatsPage > 0) allChatsPage--;
                     refreshAllChatsResult();
                 }).height(36f).growX();
-                line.button("下一页", () -> {
+                line.button(bundle("spdb.action.next", "Next"), () -> {
                     allChatsPage++;
                     refreshAllChatsResult();
                 }).height(36f).growX();
                 if(compact){
                     line.row();
-                    line.button("刷新", this::refreshAllChatsResult).height(36f).growX().colspan(2);
+                    line.button(bundle("spdb.action.refresh", "Refresh"), this::refreshAllChatsResult).height(36f).growX().colspan(2);
                 }else{
-                    line.button("刷新", this::refreshAllChatsResult).height(36f);
+                    line.button(bundle("spdb.action.refresh", "Refresh"), this::refreshAllChatsResult).height(36f);
                 }
             }).growX().row();
             chatTab.add(allChatsResult).growX().growY().row();
@@ -2702,17 +2738,17 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             String uid = normalizeShortUid(uidField == null ? null : uidField.getText());
             if(uid == null){
-                uidResult.add("请输入三位 UID 后查询。").left();
+                uidResult.add(bundle("spdb.query.uid.required", "Enter a three-character UID before searching.")).left();
                 return;
             }
 
             Seq<PlayerRecord> list = playerDb.findByUid(uid);
             if(list.isEmpty()){
-                uidResult.add("未找到该 UID。").left();
+                uidResult.add(bundle("spdb.query.uid.not-found", "UID not found.")).left();
                 return;
             }
 
-            uidResult.add("匹配到 " + list.size + " 个 PID").left().row();
+            uidResult.add(bundleFormat("spdb.query.uid.matches", "Found @ PID records.", list.size)).left().row();
             for(PlayerRecord record : list){
                 uidResult.table(Styles.black3, box -> renderPlayerDetailCard(box, record)).growX().padTop(4f).row();
             }
@@ -2721,40 +2757,41 @@ public class ServerPlayerDataBaseMod extends Mod{
         private void showMergeByUidPreview(){
             String uid = normalizeShortUid(uidField == null ? null : uidField.getText());
             if(uid == null){
-                Vars.ui.showInfoFade("SPDB: 请输入三位 UID。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.uid.required", "SPDB: Enter a three-character UID."));
                 return;
             }
 
             Seq<PlayerRecord> list = playerDb.findByUid(uid);
             if(list.size <= 1){
-                Vars.ui.showInfoFade("SPDB: UID " + uid + " 无需合并。");
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.uid.no-merge", "SPDB: UID @ does not need merging.", uid));
                 return;
             }
 
-            BaseDialog dialog = new BaseDialog("按UID合并预览");
+            BaseDialog dialog = new BaseDialog(bundle("spdb.query.merge.title", "UID merge preview"));
             dialog.addCloseButton();
             dialog.cont.defaults().left().pad(4f);
             float previewWidth = fitDialogWidth(920f);
             float previewHeight = fitDialogHeight(520f, 260f);
 
             PlayerRecord target = list.first();
-            dialog.cont.add("UID: " + uid + "，将合并 " + list.size + " 条 PID，保留最近活跃 PID: " + target.pid).left().wrap().row();
+            dialog.cont.add(bundleFormat("spdb.query.merge.preview", "UID @ will merge @ PID records; keeping the most recently active PID: @", uid, list.size, target.pid)).left().wrap().row();
             dialog.cont.pane(p -> {
                 p.left().top().defaults().left().pad(3f).growX();
                 for(PlayerRecord rec : list){
                     boolean keep = rec == target;
                     String name = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
-                    String line = (keep ? "[保留] " : "[并入] ") + rec.pid + " | " + name + " | 最后出现 " + formatTime(rec.lastSeen);
+                    String line = (keep ? bundle("spdb.query.merge.keep", "[Keep]") : bundle("spdb.query.merge.into", "[Merge]") + " ")
+                        + rec.pid + " | " + name + " | " + bundle("spdb.query.merge.last-seen", "Last seen") + " " + formatTime(rec.lastSeen);
                     p.add(escapeMarkup(line)).left().wrap().row();
                 }
             }).grow().width(previewWidth).height(previewHeight).minWidth(0f).minHeight(0f).row();
 
             dialog.buttons.defaults().height(44f).pad(4f);
-            dialog.buttons.button("确认合并", () -> {
+            dialog.buttons.button(bundle("spdb.query.merge.confirm", "Confirm merge"), () -> {
                 dialog.hide();
                 mergeByUid(uid);
             });
-            dialog.buttons.button("取消", dialog::hide);
+            dialog.buttons.button(bundle("spdb.action.cancel", "Cancel"), dialog::hide);
             dialog.show();
         }
 
@@ -2765,9 +2802,9 @@ public class ServerPlayerDataBaseMod extends Mod{
             int merged = playerDb.mergeByUid(uid);
             if(merged > 0){
                 playersDirty = true;
-                Vars.ui.showInfoFade("SPDB: UID " + uid + " 已合并 " + merged + " 条 PID 记录。");
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.uid.merged", "SPDB: UID @ merged @ PID records.", uid, merged));
             }else{
-                Vars.ui.showInfoFade("SPDB: UID " + uid + " 无需合并。");
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.uid.no-merge", "SPDB: UID @ does not need merging.", uid));
             }
 
             refreshUidResult();
@@ -2780,9 +2817,9 @@ public class ServerPlayerDataBaseMod extends Mod{
             int merged = playerDb.mergeAllSameUid();
             if(merged > 0){
                 playersDirty = true;
-                Vars.ui.showInfoFade("SPDB: 已合并全部重复UID，共合并 " + merged + " 条 PID 记录。");
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.uid.merge-all", "SPDB: Merged all duplicate UIDs, total PID records merged: @.", merged));
             }else{
-                Vars.ui.showInfoFade("SPDB: 当前没有可一键合并的重复UID。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.uid.merge-none", "SPDB: No duplicate UIDs can be merged."));
             }
 
             refreshUidResult();
@@ -2795,23 +2832,23 @@ public class ServerPlayerDataBaseMod extends Mod{
             String pid = normalizePid(fillPidField == null ? null : fillPidField.getText());
             String uid = normalizeShortUid(fillUidField == null ? null : fillUidField.getText());
             if(pid == null || uid == null){
-                Vars.ui.showInfoFade("SPDB: 请填写 PID 和三位 UID。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.pid-fields", "SPDB: Enter a PID and a three-character UID."));
                 return;
             }
 
             PlayerRecord rec = playerDb.getByPid(pid);
             if(rec == null){
-                Vars.ui.showInfoFade("SPDB: 未找到该 PID。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.pid-not-found", "SPDB: PID not found."));
                 return;
             }
             if(rec.uid != null){
-                Vars.ui.showInfoFade("SPDB: 该 PID 已有 UID（" + rec.uid + "），不会覆盖。");
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.pid-has-uid", "SPDB: This PID already has UID @; it will not be overwritten.", rec.uid));
                 return;
             }
 
             if(playerDb.bindUid(pid, uid)){
                 playersDirty = true;
-                Vars.ui.showInfoFade("SPDB: 已填充 UID " + uid + " -> " + pid);
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.uid-filled", "SPDB: Filled UID @ -> @", uid, pid));
             }
 
             refreshPidResult();
@@ -2824,11 +2861,11 @@ public class ServerPlayerDataBaseMod extends Mod{
             String fromUid = normalizeShortUid(mergeFromUidField == null ? null : mergeFromUidField.getText());
             String toUid = normalizeShortUid(mergeToUidField == null ? null : mergeToUidField.getText());
             if(fromUid == null || toUid == null){
-                Vars.ui.showInfoFade("SPDB: 请输入两个三位 UID。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.uid-two-required", "SPDB: Enter two three-character UIDs."));
                 return;
             }
             if(fromUid.equals(toUid)){
-                Vars.ui.showInfoFade("SPDB: 来源UID和目标UID相同，无需合并。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.uid-same", "SPDB: Source and target UIDs are identical; no merge is needed."));
                 return;
             }
 
@@ -2838,9 +2875,9 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             if(rebound > 0 || merged > 0){
                 playersDirty = true;
-                Vars.ui.showInfoFade("SPDB: UID " + fromUid + " 已并入 " + toUid + "（重绑 " + rebound + "，合并PID " + merged + "）。");
+                Vars.ui.showInfoFade(bundleFormat("spdb.toast.uid-rebound", "SPDB: UID @ merged into @ (rebound @, merged PIDs @).", fromUid, toUid, rebound, merged));
             }else{
-                Vars.ui.showInfoFade("SPDB: 未找到可合并的 UID 记录。");
+                Vars.ui.showInfoFade(bundle("spdb.toast.uid-merge-not-found", "SPDB: No mergeable UID records found."));
             }
 
             refreshUidResult();
@@ -2856,13 +2893,13 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             String pid = normalizePid(pidField == null ? null : pidField.getText());
             if(pid == null){
-                pidResult.add("请输入 PID 后查询。").left();
+                pidResult.add(bundle("spdb.query.pid.required", "Enter a PID before searching.")).left();
                 return;
             }
 
             PlayerRecord record = playerDb.getByPid(pid);
             if(record == null){
-                pidResult.add("未找到该 PID。").left();
+                pidResult.add(bundle("spdb.query.pid.not-found", "PID not found.")).left();
                 return;
             }
 
@@ -2875,26 +2912,26 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             String keyword = normalizeNameKeyword(nameField == null ? null : nameField.getText());
             if(keyword == null){
-                nameResult.add("请输入玩家名字后查询。").left();
+                nameResult.add(bundle("spdb.query.name.required", "Enter a player name before searching.")).left();
                 return;
             }
 
             Seq<PlayerRecord> players = playerDb.findByNameContains(keyword);
             if(players.isEmpty()){
-                nameResult.add("未找到匹配名字的玩家。", Styles.outlineLabel).left();
+                nameResult.add(bundle("spdb.query.name.not-found", "No players matched that name."), Styles.outlineLabel).left();
                 return;
             }
 
-            nameResult.add("关键字 '" + escapeMarkup(keyword) + "' 匹配 " + players.size + " 条记录").left().wrap().row();
+            nameResult.add(bundleFormat("spdb.query.name.matches", "Keyword '@' matched @ records.", escapeMarkup(keyword), players.size)).left().wrap().row();
             if(compactUi()){
                 for(PlayerRecord rec : players){
                     String bestName = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
                     String uidText = rec.uid == null ? "(none)" : rec.uid;
                     nameResult.table(Styles.black3, card -> {
                         card.left().top().defaults().left().pad(3f).growX();
-                        card.add(escapeMarkup("玩家: " + bestName)).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.player", "Player") + ": " + bestName)).left().wrap().row();
                         card.add(escapeMarkup("PID: " + safeLine(rec.pid, 68))).left().wrap().row();
-                        card.add(escapeMarkup("最后出现: " + formatTime(rec.lastSeen))).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.last-seen", "Last seen") + ": " + formatTime(rec.lastSeen))).left().wrap().row();
                         card.table(line -> {
                             line.left().defaults().left().padRight(6f).growX();
                             line.button(uidText, Styles.defaultt, () -> {
@@ -2902,7 +2939,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                                 if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
                                 if(rec.uid != null) refreshUidResult();
                             }).height(32f).growX();
-                            line.button("定位", () -> {
+                            line.button(bundle("spdb.action.locate", "Locate"), () -> {
                                 if(pidField != null) pidField.setText(rec.pid);
                                 refreshPidResult();
                             }).height(32f).growX();
@@ -2914,11 +2951,11 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             nameResult.table(Styles.black3, head -> {
                 head.left().defaults().pad(4f).left();
-                head.add("Name").width(200f);
-                head.add("UID").width(70f);
-                head.add("PID").width(250f);
-                head.add("最后出现").width(170f);
-                head.add("操作").width(90f);
+                head.add(bundle("spdb.query.header.name", "Name")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.uid", "UID")).width(70f);
+                head.add(bundle("spdb.query.header.pid", "PID")).growX().minWidth(180f);
+                head.add(bundle("spdb.query.header.last-seen", "Last seen")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.action", "Actions")).width(90f);
             }).growX().row();
 
             for(PlayerRecord rec : players){
@@ -2926,7 +2963,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 String uidText = rec.uid == null ? "(none)" : rec.uid;
                 nameResult.table(row -> {
                     row.left().defaults().pad(3f).left();
-                    row.add(escapeMarkup(safeLine(bestName, 26))).width(200f).left();
+                    row.add(escapeMarkup(safeLine(bestName, 26))).growX().minWidth(140f).left();
                     row.button(uidText, Styles.defaultt, () -> {
                         if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
                         if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
@@ -2935,9 +2972,9 @@ public class ServerPlayerDataBaseMod extends Mod{
                     row.button(rec.pid, Styles.defaultt, () -> {
                         if(pidField != null) pidField.setText(rec.pid);
                         refreshPidResult();
-                    }).width(250f).height(30f);
-                    row.add(formatTime(rec.lastSeen)).width(170f).left();
-                    row.button("定位", () -> {
+                    }).growX().minWidth(180f).height(30f);
+                    row.add(formatTime(rec.lastSeen)).growX().minWidth(140f).left();
+                    row.button(bundle("spdb.action.locate", "Locate"), () -> {
                         if(pidField != null) pidField.setText(rec.pid);
                         refreshPidResult();
                     }).width(90f).height(30f);
@@ -2947,40 +2984,40 @@ public class ServerPlayerDataBaseMod extends Mod{
 
         private void renderPlayerDetailCard(Table box, PlayerRecord record){
             box.left().top().defaults().left().pad(3f).growX();
-            addInteractiveFieldLine(box, "PID", record.pid, () -> {
+            addInteractiveFieldLine(box, bundle("spdb.query.header.pid", "PID"), record.pid, () -> {
                 if(pidField != null) pidField.setText(record.pid);
                 if(fillPidField != null) fillPidField.setText(record.pid);
                 refreshPidResult();
             });
-            addInteractiveFieldLine(box, "UID", record.uid == null ? "(none)" : record.uid, () -> {
+            addInteractiveFieldLine(box, bundle("spdb.query.header.uid", "UID"), record.uid == null ? bundle("spdb.query.field.none", "(none)") : record.uid, () -> {
                 if(record.uid != null && uidField != null) uidField.setText(record.uid);
                 if(record.uid != null && mergeFromUidField != null) mergeFromUidField.setText(record.uid);
                 if(record.uid != null) refreshUidResult();
             });
-            addFieldLine(box, "首次出现", formatTime(record.firstSeen));
-            addFieldLine(box, "最后出现", formatTime(record.lastSeen));
+            addFieldLine(box, bundle("spdb.query.field.first-seen", "First seen"), formatTime(record.firstSeen));
+            addFieldLine(box, bundle("spdb.query.field.last-seen", "Last seen"), formatTime(record.lastSeen));
 
-            box.add("曾用名:").left().row();
+            box.add(bundle("spdb.query.field.previous-names", "Previous names:")).left().row();
             if(record.names.isEmpty()){
-                box.add("(none)").left().row();
+                box.add(bundle("spdb.query.field.none", "(none)")).left().row();
             }else{
                 for(String name : record.names){
                     addFieldLine(box, "-", name);
                 }
             }
 
-            box.add("已知 IP:").left().row();
+            box.add(bundle("spdb.query.field.known-ips", "Known IPs:")).left().row();
             if(record.ips.isEmpty()){
-                box.add("(none)").left().row();
+                box.add(bundle("spdb.query.field.none", "(none)")).left().row();
             }else{
                 for(String ip : record.ips){
                     addIpLine(box, ip);
                 }
             }
 
-            box.add("出现过的服务器:").left().row();
+            box.add(bundle("spdb.query.field.servers", "Servers seen:")).left().row();
             if(record.servers.isEmpty()){
-                box.add("(none)").left().row();
+                box.add(bundle("spdb.query.field.none", "(none)")).left().row();
             }else{
                 for(String server : record.servers){
                     addFieldLine(box, "-", server);
@@ -2994,13 +3031,13 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             String ip = normalizeIp(ipField == null ? null : ipField.getText());
             if(ip == null){
-                ipResult.add("请输入 IP 后查询。").left();
+                ipResult.add(bundle("spdb.query.ip.required", "Enter an IP address before searching.")).left();
                 return;
             }
 
             Seq<PlayerRecord> players = playerDb.findByIp(ip);
             if(players.isEmpty()){
-                ipResult.add("该 IP 没有匹配到玩家。").left();
+                ipResult.add(bundle("spdb.query.ip.not-found", "No players matched that IP address.")).left();
                 return;
             }
 
@@ -3011,9 +3048,9 @@ public class ServerPlayerDataBaseMod extends Mod{
                     String geo = lookupIpGeoCached(ip);
                     ipResult.table(Styles.black3, card -> {
                         card.left().top().defaults().left().pad(3f).growX();
-                        card.add(escapeMarkup("玩家: " + bestName)).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.player", "Player") + ": " + bestName)).left().wrap().row();
                         card.add(escapeMarkup("PID: " + safeLine(rec.pid, 68))).left().wrap().row();
-                        card.add(escapeMarkup("IP 属地: " + (geo == null ? "(查询中...)" : geo))).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.ip-location", "IP location") + ": " + (geo == null ? bundle("spdb.query.field.pending", "(loading...)") : geo))).left().wrap().row();
                         card.table(line -> {
                             line.left().defaults().left().padRight(6f).growX();
                             line.button(uidText, Styles.defaultt, () -> {
@@ -3021,7 +3058,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                                 if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
                                 if(rec.uid != null) refreshUidResult();
                             }).height(32f).growX();
-                            line.button("定位", () -> {
+                            line.button(bundle("spdb.action.locate", "Locate"), () -> {
                                 if(pidField != null) pidField.setText(rec.pid);
                                 if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
                                 refreshPidResult();
@@ -3034,11 +3071,11 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             ipResult.table(Styles.black3, head -> {
                 head.left().defaults().pad(4f).left();
-                head.add("Name").width(180f);
-                head.add("UID").width(70f);
-                head.add("PID").width(250f);
-                head.add("IP 属地").growX();
-                head.add("操作").width(90f);
+                head.add(bundle("spdb.query.header.name", "Name")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.uid", "UID")).width(70f);
+                head.add(bundle("spdb.query.header.pid", "PID")).growX().minWidth(180f);
+                head.add(bundle("spdb.query.field.ip-location", "IP location")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.action", "Actions")).width(90f);
             }).growX().row();
 
             for(PlayerRecord rec : players){
@@ -3047,7 +3084,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 String geo = lookupIpGeoCached(ip);
                 ipResult.table(row -> {
                     row.left().defaults().pad(3f).left();
-                    row.add(escapeMarkup(bestName)).width(180f).left();
+                    row.add(escapeMarkup(bestName)).growX().minWidth(140f).left();
                     row.button(uidText, Styles.defaultt, () -> {
                         if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
                         if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
@@ -3056,9 +3093,9 @@ public class ServerPlayerDataBaseMod extends Mod{
                     row.button(rec.pid, Styles.defaultt, () -> {
                         if(pidField != null) pidField.setText(rec.pid);
                         refreshPidResult();
-                    }).width(250f).height(30f);
-                    row.add(escapeMarkup(geo == null ? "(查询中...)" : geo)).growX().left();
-                    row.button("定位", () -> {
+                    }).growX().minWidth(180f).height(30f);
+                    row.add(escapeMarkup(geo == null ? bundle("spdb.query.field.pending", "(loading...)") : geo)).growX().minWidth(140f).left();
+                    row.button(bundle("spdb.action.locate", "Locate"), () -> {
                         if(pidField != null) pidField.setText(rec.pid);
                         if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
                         refreshPidResult();
@@ -3073,13 +3110,13 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             String uid = normalizeShortUid(chatUidField == null ? null : chatUidField.getText());
             if(uid == null){
-                chatResult.add("请输入三位 UID 后查询聊天记录。").left();
+                chatResult.add(bundle("spdb.query.chat.required", "Enter a three-character UID before searching chat history.")).left();
                 return;
             }
 
             Seq<ChatEntry> list = chatDb.findByUid(uid);
             if(list.isEmpty()){
-                chatResult.add("没有该 UID 的聊天记录。").left();
+                chatResult.add(bundle("spdb.query.chat.not-found", "No chat history exists for this UID.")).left();
                 return;
             }
 
@@ -3088,7 +3125,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     chatResult.table(Styles.black3, card -> {
                         card.left().top().defaults().left().pad(3f).growX();
                         card.add(escapeMarkup(formatTime(entry.time) + " | " + safeLine(entry.senderName, 26))).left().wrap().row();
-                        card.add(escapeMarkup("内容: " + safeLine(entry.message, 130))).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.content", "Content:") + " " + safeLine(entry.message, 130))).left().wrap().row();
                         card.table(line -> {
                             line.left().defaults().left().padRight(6f).growX();
                             line.button(entry.uid, Styles.defaultt, () -> {
@@ -3105,11 +3142,11 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             chatResult.table(Styles.black3, head -> {
                 head.left().defaults().pad(4f).left();
-                head.add("时间").width(158f);
-                head.add("UID").width(70f);
-                head.add("玩家").width(160f);
-                head.add("内容").growX();
-                head.add("操作").width(90f);
+                head.add(bundle("spdb.query.header.time", "Time")).width(158f);
+                head.add(bundle("spdb.query.header.uid", "UID")).width(70f);
+                head.add(bundle("spdb.query.header.player", "Player")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.content", "Content")).growX().minWidth(180f);
+                head.add(bundle("spdb.query.header.action", "Actions")).width(90f);
             }).growX().row();
 
             for(ChatEntry entry : list){
@@ -3121,7 +3158,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                         if(chatUidField != null) chatUidField.setText(entry.uid);
                         refreshUidResult();
                     }).width(70f).height(30f);
-                    row.add(escapeMarkup(safeLine(entry.senderName, 22))).width(160f).left();
+                    row.add(escapeMarkup(safeLine(entry.senderName, 22))).growX().minWidth(140f).left();
                     row.add(escapeMarkup(safeLine(entry.message, 90))).growX().left();
                     row.button(Icon.copySmall, Styles.emptyi, () -> copy(entry.message)).size(30f);
                 }).growX().left().row();
@@ -3138,9 +3175,9 @@ public class ServerPlayerDataBaseMod extends Mod{
             if(allPlayersPage >= pages) allPlayersPage = pages - 1;
             if(allPlayersPage < 0) allPlayersPage = 0;
 
-            allPlayersResult.add("第 " + (allPlayersPage + 1) + " / " + pages + " 页，共 " + total + " 条").left().row();
+            allPlayersResult.add(bundleFormat("spdb.query.page", "Page @ / @, @ records", allPlayersPage + 1, pages, total)).left().row();
             if(total == 0){
-                allPlayersResult.add("暂无玩家记录。\n开启采集后会自动显示。", Styles.outlineLabel).left().wrap().row();
+                allPlayersResult.add(bundle("spdb.query.players.empty", "No player records yet.\nEnable collection to populate this list."), Styles.outlineLabel).left().wrap().row();
                 return;
             }
 
@@ -3156,7 +3193,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     allPlayersResult.table(Styles.black3, card -> {
                         card.left().top().defaults().left().pad(3f).growX();
                         card.add(escapeMarkup(bestName)).left().wrap().row();
-                        card.add(escapeMarkup("最后出现: " + formatTime(rec.lastSeen))).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.last-seen", "Last seen") + ": " + formatTime(rec.lastSeen))).left().wrap().row();
                         card.add(escapeMarkup("PID: " + safeLine(rec.pid, 68))).left().wrap().row();
                         card.table(line -> {
                             line.left().defaults().left().padRight(6f).growX();
@@ -3165,7 +3202,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                                 if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
                                 if(rec.uid != null) refreshUidResult();
                             }).height(32f).growX();
-                            line.button("聊天", () -> {
+                            line.button(bundle("spdb.action.chat", "Chat"), () -> {
                                 if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
                                 activeTab = 1;
                                 refreshChatResult();
@@ -3178,11 +3215,11 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             allPlayersResult.table(Styles.black3, head -> {
                 head.left().defaults().pad(4f).left();
-                head.add("玩家").width(170f);
-                head.add("UID").width(70f);
-                head.add("PID").width(250f);
-                head.add("最后出现").width(160f);
-                head.add("操作").width(120f);
+                head.add(bundle("spdb.query.header.player", "Player")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.uid", "UID")).width(70f);
+                head.add(bundle("spdb.query.header.pid", "PID")).growX().minWidth(180f);
+                head.add(bundle("spdb.query.header.last-seen", "Last seen")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.action", "Actions")).width(120f);
             }).growX().row();
 
             for(int i = from; i < to; i++){
@@ -3192,7 +3229,7 @@ public class ServerPlayerDataBaseMod extends Mod{
 
                 allPlayersResult.table(row -> {
                     row.left().defaults().pad(3f).left();
-                    row.add(escapeMarkup(safeLine(bestName, 22))).width(170f).left();
+                    row.add(escapeMarkup(safeLine(bestName, 22))).growX().minWidth(140f).left();
                     row.button(uidText, Styles.defaultt, () -> {
                         if(uidField != null && rec.uid != null) uidField.setText(rec.uid);
                         if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
@@ -3201,9 +3238,9 @@ public class ServerPlayerDataBaseMod extends Mod{
                     row.button(rec.pid, Styles.defaultt, () -> {
                         if(pidField != null) pidField.setText(rec.pid);
                         refreshPidResult();
-                    }).width(250f).height(30f);
-                    row.add(formatTime(rec.lastSeen)).width(160f).left();
-                    row.button("聊天", () -> {
+                    }).growX().minWidth(180f).height(30f);
+                    row.add(formatTime(rec.lastSeen)).growX().minWidth(140f).left();
+                    row.button(bundle("spdb.action.chat", "Chat"), () -> {
                         if(chatUidField != null && rec.uid != null) chatUidField.setText(rec.uid);
                         activeTab = 1;
                         refreshChatResult();
@@ -3221,9 +3258,9 @@ public class ServerPlayerDataBaseMod extends Mod{
             if(allChatsPage >= pages) allChatsPage = pages - 1;
             if(allChatsPage < 0) allChatsPage = 0;
 
-            allChatsResult.add("第 " + (allChatsPage + 1) + " / " + pages + " 页，共 " + total + " 条").left().row();
+            allChatsResult.add(bundleFormat("spdb.query.page", "Page @ / @, @ records", allChatsPage + 1, pages, total)).left().row();
             if(total == 0){
-                allChatsResult.add("暂无聊天记录。\n启用“存储聊天记录”后会自动显示。", Styles.outlineLabel).left().wrap().row();
+                allChatsResult.add(bundle("spdb.query.chats.empty", "No chat records yet.\nEnable chat storage to populate this list."), Styles.outlineLabel).left().wrap().row();
                 return;
             }
 
@@ -3233,8 +3270,8 @@ public class ServerPlayerDataBaseMod extends Mod{
                     allChatsResult.table(Styles.black3, card -> {
                         card.left().top().defaults().left().pad(3f).growX();
                         card.add(escapeMarkup(formatTime(entry.time) + " | " + safeLine(entry.senderName, 26))).left().wrap().row();
-                        card.add(escapeMarkup("UID: " + entry.uid + " | 服: " + safeLine(entry.server, 34))).left().wrap().row();
-                        card.add(escapeMarkup("内容: " + safeLine(entry.message, 130))).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.header.uid", "UID") + ": " + entry.uid + " | " + bundle("spdb.query.header.server", "Server") + ": " + safeLine(entry.server, 34))).left().wrap().row();
+                        card.add(escapeMarkup(bundle("spdb.query.field.content", "Content:") + " " + safeLine(entry.message, 130))).left().wrap().row();
                         card.table(line -> {
                             line.left().defaults().left().padRight(6f).growX();
                             line.button(entry.uid, Styles.defaultt, () -> {
@@ -3252,12 +3289,12 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             allChatsResult.table(Styles.black3, head -> {
                 head.left().defaults().pad(4f).left();
-                head.add("时间").width(158f);
-                head.add("UID").width(70f);
-                head.add("玩家").width(160f);
-                head.add("服务器").width(180f);
-                head.add("内容").growX();
-                head.add("操作").width(90f);
+                head.add(bundle("spdb.query.header.time", "Time")).width(158f);
+                head.add(bundle("spdb.query.header.uid", "UID")).width(70f);
+                head.add(bundle("spdb.query.header.player", "Player")).growX().minWidth(140f);
+                head.add(bundle("spdb.query.header.server", "Server")).growX().minWidth(160f);
+                head.add(bundle("spdb.query.header.content", "Content")).growX().minWidth(180f);
+                head.add(bundle("spdb.query.header.action", "Actions")).width(90f);
             }).growX().row();
 
             for(ChatEntry entry : list){
@@ -3270,8 +3307,8 @@ public class ServerPlayerDataBaseMod extends Mod{
                         activeTab = 0;
                         refreshUidResult();
                     }).width(70f).height(30f);
-                    row.add(escapeMarkup(safeLine(entry.senderName, 22))).width(160f).left();
-                    row.add(escapeMarkup(safeLine(entry.server, 26))).width(180f).left();
+                    row.add(escapeMarkup(safeLine(entry.senderName, 22))).growX().minWidth(140f).left();
+                    row.add(escapeMarkup(safeLine(entry.server, 26))).growX().minWidth(160f).left();
                     row.add(escapeMarkup(safeLine(entry.message, 70))).growX().left();
                     row.button(Icon.copySmall, Styles.emptyi, () -> copy(entry.message)).size(30f);
                 }).growX().left().row();
@@ -3323,6 +3360,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     private class OverlayQueryContent{
         final Table root = new Table();
         final Table result = new Table();
+        ScrollPane resultPane;
         TextField uidField;
         TextField nameField;
         TextField ipField;
@@ -3339,53 +3377,54 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             root.table(Styles.black3, t -> {
                 t.left().defaults().left().pad(4f);
-                t.add("[accent]SPDB 轻量查询[]").left().growX().row();
+                t.add("[accent]" + bundle("spdb.query.overlay.title", "SPDB quick query") + "[]").left().growX().row();
 
                 t.table(line -> {
                     line.left().defaults().left().padRight(6f).growX();
                     uidField = line.field("", text -> {}).growX().get();
-                    uidField.setMessageText("按 UID 查询（3位）");
-                    line.button("查UID", this::queryByUid).height(34f).growX();
+                    uidField.setMessageText(bundle("spdb.query.overlay.uid.placeholder", "Query by UID (3 characters)"));
+                    line.button(bundle("spdb.query.overlay.uid", "Query UID"), this::queryByUid).height(34f).growX();
                 }).growX().row();
 
                 if(compact){
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         nameField = line.field("", text -> {}).growX().get();
-                        nameField.setMessageText("按名字模糊查询");
+                        nameField.setMessageText(bundle("spdb.query.overlay.name.placeholder", "Fuzzy query by name"));
                     }).growX().row();
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("查名字", this::queryByName).height(34f).growX();
+                        line.button(bundle("spdb.query.overlay.name", "Query name"), this::queryByName).height(34f).growX();
                     }).growX().row();
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         ipField = line.field("", text -> {}).growX().get();
-                        ipField.setMessageText("按 IP 查询");
+                        ipField.setMessageText(bundle("spdb.query.overlay.ip.placeholder", "Query by IP"));
                     }).growX().row();
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("查IP", this::queryByIp).height(34f).growX();
-                        line.button("清空", this::clearResult).height(34f).growX();
+                        line.button(bundle("spdb.query.overlay.ip", "Query IP"), this::queryByIp).height(34f).growX();
+                        line.button(bundle("spdb.action.clear", "Clear"), this::clearResult).height(34f).growX();
                     }).growX().row();
                 }else{
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         nameField = line.field("", text -> {}).growX().get();
-                        nameField.setMessageText("按名字模糊查询");
-                        line.button("查名字", this::queryByName).height(34f);
+                        nameField.setMessageText(bundle("spdb.query.overlay.name.placeholder", "Fuzzy query by name"));
+                        line.button(bundle("spdb.query.overlay.name", "Query name"), this::queryByName).height(34f);
                     }).growX().row();
                     t.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         ipField = line.field("", text -> {}).growX().get();
-                        ipField.setMessageText("按 IP 查询");
-                        line.button("查IP", this::queryByIp).height(34f);
-                        line.button("清空", this::clearResult).height(34f);
+                        ipField.setMessageText(bundle("spdb.query.overlay.ip.placeholder", "Query by IP"));
+                        line.button(bundle("spdb.query.overlay.ip", "Query IP"), this::queryByIp).height(34f);
+                        line.button(bundle("spdb.action.clear", "Clear"), this::clearResult).height(34f);
                     }).growX().row();
                 }
             }).growX().row();
 
-            root.pane(result).scrollX(false).grow().maxHeight(fitPaneHeight(420f, 180f)).minWidth(0f).minHeight(0f).row();
+            resultPane = root.pane(result).scrollX(false).grow().maxHeight(fitPaneHeight(420f, 180f)).minWidth(0f).minHeight(0f).get();
+            root.row();
             root.add(new PreferAnySize()).grow().row();
         }
 
@@ -3393,33 +3432,36 @@ public class ServerPlayerDataBaseMod extends Mod{
             lastMode = 1;
             result.clear();
             result.left().top();
+            try{
+                String uid = normalizeShortUid(uidField == null ? null : uidField.getText());
+                if(uid == null){
+                    result.add(bundle("spdb.query.overlay.result.uid-required", "Enter a three-character UID (for example dNF)."), Styles.outlineLabel).left().row();
+                    return;
+                }
 
-            String uid = normalizeShortUid(uidField == null ? null : uidField.getText());
-            if(uid == null){
-                result.add("请输入三位 UID（例如 dNF）。", Styles.outlineLabel).left().row();
-                return;
-            }
+                Seq<PlayerRecord> list = playerDb.findByUid(uid);
+                if(list.isEmpty()){
+                    result.add(bundle("spdb.query.overlay.result.uid-empty", "UID not found."), Styles.outlineLabel).left().row();
+                    return;
+                }
 
-            Seq<PlayerRecord> list = playerDb.findByUid(uid);
-            if(list.isEmpty()){
-                result.add("未找到该 UID。", Styles.outlineLabel).left().row();
-                return;
-            }
+                result.add(bundleFormat("spdb.query.overlay.result.uid", "UID @ matched @ records", uid, list.size)).left().row();
+                for(PlayerRecord rec : list){
+                    String name = rec.names.isEmpty() ? bundle("spdb.query.field.none", "(none)") : rec.names.peek();
+                    String geo = rec.ips.isEmpty() ? "" : lookupIpGeoCached(rec.ips.peek());
+                    String text = bundle("spdb.query.header.pid", "PID") + ": " + rec.pid + "\n" +
+                        bundle("spdb.query.header.uid", "UID") + ": " + (rec.uid == null ? bundle("spdb.query.field.none", "(none)") : rec.uid) + "\n" +
+                        bundle("spdb.query.header.name", "Name") + ": " + name + "\n" +
+                        "IP: " + (rec.ips.isEmpty() ? bundle("spdb.query.field.none", "(none)") : rec.ips.peek()) + (geo == null || geo.isEmpty() ? "" : " (" + geo + ")") + "\n" +
+                        bundle("spdb.query.overlay.result.last", "Last") + ": " + formatTime(rec.lastSeen);
 
-            result.add("UID " + uid + " 匹配 " + list.size + " 条记录").left().row();
-            for(PlayerRecord rec : list){
-                String name = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
-                String geo = rec.ips.isEmpty() ? "" : lookupIpGeoCached(rec.ips.peek());
-                String text = "PID: " + rec.pid + "\n" +
-                    "UID: " + (rec.uid == null ? "(none)" : rec.uid) + "\n" +
-                    "Name: " + name + "\n" +
-                    "IP: " + (rec.ips.isEmpty() ? "(none)" : rec.ips.peek()) + (geo == null || geo.isEmpty() ? "" : " (" + geo + ")") + "\n" +
-                    "Last: " + formatTime(rec.lastSeen);
-
-                result.table(Styles.black3, row -> {
-                    row.left().defaults().left().pad(4f);
-                    row.add(escapeMarkup(text)).growX().left().wrap();
-                }).growX().padTop(3f).row();
+                    result.table(Styles.black3, row -> {
+                        row.left().defaults().left().pad(4f);
+                        row.add(escapeMarkup(text)).growX().left().wrap();
+                    }).growX().padTop(3f).row();
+                }
+            }finally{
+                refreshLayout();
             }
         }
 
@@ -3427,31 +3469,34 @@ public class ServerPlayerDataBaseMod extends Mod{
             lastMode = 3;
             result.clear();
             result.left().top();
+            try{
+                String keyword = normalizeNameKeyword(nameField == null ? null : nameField.getText());
+                if(keyword == null){
+                    result.add(bundle("spdb.query.overlay.result.name-required", "Enter a player name before searching."), Styles.outlineLabel).left().row();
+                    return;
+                }
 
-            String keyword = normalizeNameKeyword(nameField == null ? null : nameField.getText());
-            if(keyword == null){
-                result.add("请输入玩家名字后查询。", Styles.outlineLabel).left().row();
-                return;
-            }
+                Seq<PlayerRecord> list = playerDb.findByNameContains(keyword);
+                if(list.isEmpty()){
+                    result.add(bundle("spdb.query.overlay.result.name-empty", "No players matched that name."), Styles.outlineLabel).left().row();
+                    return;
+                }
 
-            Seq<PlayerRecord> list = playerDb.findByNameContains(keyword);
-            if(list.isEmpty()){
-                result.add("未找到匹配名字的玩家。", Styles.outlineLabel).left().row();
-                return;
-            }
+                result.add(bundleFormat("spdb.query.overlay.result.name", "Keyword '@' matched @ records", escapeMarkup(keyword), list.size)).left().wrap().row();
+                for(PlayerRecord rec : list){
+                    String name = rec.names.isEmpty() ? bundle("spdb.query.field.none", "(none)") : rec.names.peek();
+                    String text = bundle("spdb.query.header.name", "Name") + ": " + name + "\n" +
+                        bundle("spdb.query.header.uid", "UID") + ": " + (rec.uid == null ? bundle("spdb.query.field.none", "(none)") : rec.uid) + "\n" +
+                        bundle("spdb.query.header.pid", "PID") + ": " + rec.pid + "\n" +
+                        bundle("spdb.query.overlay.result.last", "Last") + ": " + formatTime(rec.lastSeen);
 
-            result.add("关键字 '" + escapeMarkup(keyword) + "' 匹配 " + list.size + " 条记录").left().wrap().row();
-            for(PlayerRecord rec : list){
-                String name = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
-                String text = "Name: " + name + "\n" +
-                    "UID: " + (rec.uid == null ? "(none)" : rec.uid) + "\n" +
-                    "PID: " + rec.pid + "\n" +
-                    "Last: " + formatTime(rec.lastSeen);
-
-                result.table(Styles.black3, row -> {
-                    row.left().defaults().left().pad(4f);
-                    row.add(escapeMarkup(text)).growX().left().wrap();
-                }).growX().padTop(3f).row();
+                    result.table(Styles.black3, row -> {
+                        row.left().defaults().left().pad(4f);
+                        row.add(escapeMarkup(text)).growX().left().wrap();
+                    }).growX().padTop(3f).row();
+                }
+            }finally{
+                refreshLayout();
             }
         }
 
@@ -3461,39 +3506,61 @@ public class ServerPlayerDataBaseMod extends Mod{
             if(uidField != null) uidField.setText("");
             if(nameField != null) nameField.setText("");
             if(ipField != null) ipField.setText("");
+            refreshLayout();
         }
 
         private void queryByIp(){
             lastMode = 2;
             result.clear();
             result.left().top();
+            try{
+                String ip = normalizeIp(ipField == null ? null : ipField.getText());
+                if(ip == null){
+                    result.add(bundle("spdb.query.overlay.result.ip-required", "Enter an IP address."), Styles.outlineLabel).left().row();
+                    return;
+                }
 
-            String ip = normalizeIp(ipField == null ? null : ipField.getText());
-            if(ip == null){
-                result.add("请输入 IP。", Styles.outlineLabel).left().row();
-                return;
+                String geo = lookupIpGeoCached(ip);
+                result.add("IP: " + ip + (geo == null ? "" : " (" + geo + ")")).left().wrap().row();
+
+                Seq<PlayerRecord> list = playerDb.findByIp(ip);
+                if(list.isEmpty()){
+                    result.add(bundle("spdb.query.overlay.result.ip-empty", "No players matched that IP address."), Styles.outlineLabel).left().row();
+                    return;
+                }
+
+                for(PlayerRecord rec : list){
+                    String name = rec.names.isEmpty() ? bundle("spdb.query.field.none", "(none)") : rec.names.peek();
+                    String text = bundle("spdb.query.header.name", "Name") + ": " + name + "\n" +
+                        bundle("spdb.query.header.uid", "UID") + ": " + (rec.uid == null ? bundle("spdb.query.field.none", "(none)") : rec.uid) + "\n" +
+                        bundle("spdb.query.header.pid", "PID") + ": " + rec.pid + "\n" +
+                        bundle("spdb.query.overlay.result.last", "Last") + ": " + formatTime(rec.lastSeen);
+
+                    result.table(Styles.black3, row -> {
+                        row.left().defaults().left().pad(4f);
+                        row.add(escapeMarkup(text)).growX().left().wrap();
+                    }).growX().padTop(3f).row();
+                }
+            }finally{
+                refreshLayout();
             }
+        }
 
-            String geo = lookupIpGeoCached(ip);
-            result.add("IP: " + ip + (geo == null ? "" : " (" + geo + ")")).left().wrap().row();
-
-            Seq<PlayerRecord> list = playerDb.findByIp(ip);
-            if(list.isEmpty()){
-                result.add("该 IP 没有匹配到玩家。", Styles.outlineLabel).left().row();
-                return;
-            }
-
-            for(PlayerRecord rec : list){
-                String name = rec.names.isEmpty() ? "(unknown)" : rec.names.peek();
-                String text = "Name: " + name + "\n" +
-                    "UID: " + (rec.uid == null ? "(none)" : rec.uid) + "\n" +
-                    "PID: " + rec.pid + "\n" +
-                    "Last: " + formatTime(rec.lastSeen);
-
-                result.table(Styles.black3, row -> {
-                    row.left().defaults().left().pad(4f);
-                    row.add(escapeMarkup(text)).growX().left().wrap();
-                }).growX().padTop(3f).row();
+        private void refreshLayout(){
+            result.invalidateHierarchy();
+            if(resultPane != null) resultPane.invalidateHierarchy();
+            root.invalidateHierarchy();
+            try{
+                result.layout();
+                if(resultPane != null) resultPane.layout();
+                root.layout();
+                if(overlayQueryWindow != null && overlayQueryWindow.asElement() instanceof Table){
+                    Table window = (Table)overlayQueryWindow.asElement();
+                    window.invalidateHierarchy();
+                    window.layout();
+                }
+            }catch(Throwable t){
+                Log.warn("SPDB: quick query layout refresh failed: @", t.getMessage());
             }
         }
 
@@ -3528,40 +3595,40 @@ public class ServerPlayerDataBaseMod extends Mod{
             root.table(Styles.black3, top -> {
                 top.left().defaults().pad(6f).height(40f).growX();
                 if(compact){
-                    top.add("[accent]SPDB 调试面板[]  最近 UID 解析记录").left().growX().wrap().row();
-                    top.button("刷新", this::refresh).height(36f).growX().row();
+                    top.add("[accent]" + bundle("spdb.query.debug.title", "SPDB debug panel") + "[]  " + bundle("spdb.query.debug.recent", "Recent UID parsing records")).left().growX().wrap().row();
+                    top.button(bundle("spdb.action.refresh", "Refresh"), this::refresh).height(36f).growX().row();
                     top.table(btns -> {
                         btns.left().defaults().padRight(6f).growX();
-                        btns.button("清空", () -> {
+                        btns.button(bundle("spdb.action.clear", "Clear"), () -> {
                             debugLines.clear();
                             refresh();
                         }).height(36f).growX();
-                        btns.button("复制", this::copyAll).height(36f).growX();
+                        btns.button(bundle("spdb.action.copy", "Copy"), this::copyAll).height(36f).growX();
                     }).growX();
                 }else{
-                    top.add("[accent]SPDB 调试面板[]  最近 UID 解析记录").left().growX();
-                    top.button("刷新", this::refresh).height(36f);
-                    top.button("清空", () -> {
+                    top.add("[accent]" + bundle("spdb.query.debug.title", "SPDB debug panel") + "[]  " + bundle("spdb.query.debug.recent", "Recent UID parsing records")).left().growX();
+                    top.button(bundle("spdb.action.refresh", "Refresh"), this::refresh).height(36f);
+                    top.button(bundle("spdb.action.clear", "Clear"), () -> {
                         debugLines.clear();
                         refresh();
                     }).height(36f);
-                    top.button("复制", this::copyAll).height(36f);
+                    top.button(bundle("spdb.action.copy", "Copy"), this::copyAll).height(36f);
                 }
             }).growX().row();
 
             root.table(Styles.black3, parser -> {
                 parser.left().top().defaults().left().pad(4f).growX();
-                parser.add("聊天行解析回放（粘贴原始聊天行，实时看 name/uid/message）").left().row();
+                parser.add(bundle("spdb.query.debug.replay", "Chat line parser replay (paste a raw chat line to inspect name/UID/message)")).left().row();
                 if(compact){
                     parser.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         replayField = line.field("", text -> {}).growX().get();
-                        replayField.setMessageText("粘贴一整行聊天文本，例: [coral]...[gray]dNFX...: 测试文本");
+                        replayField.setMessageText(bundle("spdb.query.debug.replay.placeholder", "Paste one raw chat line, e.g. [coral]...[gray]dNFX...: sample text"));
                     }).growX().row();
                     parser.table(line -> {
                         line.left().defaults().left().padRight(6f).growX();
-                        line.button("解析", this::parseReplay).height(34f).growX();
-                        line.button("清空", () -> {
+                        line.button(bundle("spdb.query.debug.parse", "Parse"), this::parseReplay).height(34f).growX();
+                        line.button(bundle("spdb.action.clear", "Clear"), () -> {
                             replayField.setText("");
                             replayResult.clear();
                         }).height(34f).growX();
@@ -3570,9 +3637,9 @@ public class ServerPlayerDataBaseMod extends Mod{
                     parser.table(line -> {
                         line.left().defaults().left().padRight(6f);
                         replayField = line.field("", text -> {}).growX().get();
-                        replayField.setMessageText("粘贴一整行聊天文本，例: [coral]...[gray]dNFX...: 测试文本");
-                        line.button("解析", this::parseReplay).height(34f);
-                        line.button("清空", () -> {
+                        replayField.setMessageText(bundle("spdb.query.debug.replay.placeholder", "Paste one raw chat line, e.g. [coral]...[gray]dNFX...: sample text"));
+                        line.button(bundle("spdb.query.debug.parse", "Parse"), this::parseReplay).height(34f);
+                        line.button(bundle("spdb.action.clear", "Clear"), () -> {
                             replayField.setText("");
                             replayResult.clear();
                         }).height(34f);
@@ -3595,7 +3662,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             lines.left().top();
 
             if(debugLines.isEmpty()){
-                lines.add("暂无调试记录。进行聊天后会自动出现解析日志。", Styles.outlineLabel).left().row();
+                lines.add(bundle("spdb.query.debug.empty", "No debug records yet. Parser logs will appear after chatting."), Styles.outlineLabel).left().row();
                 return;
             }
 
@@ -3613,22 +3680,22 @@ public class ServerPlayerDataBaseMod extends Mod{
 
             String raw = replayField == null ? null : replayField.getText();
             if(raw == null || raw.trim().isEmpty()){
-                replayResult.add("请先粘贴聊天行。", Styles.outlineLabel).left().row();
+                replayResult.add(bundle("spdb.query.debug.required", "Paste a chat line first."), Styles.outlineLabel).left().row();
                 return;
             }
 
             String stripped = Strings.stripColors(raw);
             ChatSnapshot snapshot = parseChatLine(raw, stripped, "");
             if(snapshot == null){
-                replayResult.add("解析失败：未识别为有效聊天行（需包含 ':'）。", Styles.outlineLabel).left().row();
-                addReplayField("去色文本", safeLine(stripped, 220));
+                replayResult.add(bundle("spdb.query.debug.invalid", "Parse failed: this is not a valid chat line (it must contain ':')."), Styles.outlineLabel).left().row();
+                addReplayField(bundle("spdb.query.debug.stripped", "Uncolored text"), safeLine(stripped, 220));
                 return;
             }
 
-            addReplayField("玩家名称", snapshot.senderName == null ? "(none)" : snapshot.senderName);
-            addReplayField("玩家UID", snapshot.uid == null ? "(none)" : snapshot.uid);
-            addReplayField("聊天内容", snapshot.message == null ? "(none)" : snapshot.message);
-            addReplayField("去色文本", safeLine(stripped, 220));
+            addReplayField(bundle("spdb.query.debug.name", "Player name"), snapshot.senderName == null ? bundle("spdb.query.field.none", "(none)") : snapshot.senderName);
+            addReplayField(bundle("spdb.query.debug.uid", "Player UID"), snapshot.uid == null ? bundle("spdb.query.field.none", "(none)") : snapshot.uid);
+            addReplayField(bundle("spdb.query.debug.message", "Chat content"), snapshot.message == null ? bundle("spdb.query.field.none", "(none)") : snapshot.message);
+            addReplayField(bundle("spdb.query.debug.stripped", "Uncolored text"), safeLine(stripped, 220));
 
             appendDebugLine("replay uid=" + (snapshot.uid == null ? "(none)" : snapshot.uid) + " | name=" + safeLine(snapshot.senderName, 32) + " | msg=" + safeLine(snapshot.message, 48));
         }
@@ -3677,7 +3744,7 @@ public class ServerPlayerDataBaseMod extends Mod{
     private void copy(String value){
         if(value == null) return;
         Core.app.setClipboardText(value);
-        if(Vars.ui != null) Vars.ui.showInfoFade("已复制");
+        if(Vars.ui != null) Vars.ui.showInfoFade(bundle("spdb.toast.copy", "Copied"));
     }
 
     private static String safeName(String name){
@@ -3699,12 +3766,12 @@ public class ServerPlayerDataBaseMod extends Mod{
         if(cached != null) return cached;
 
         if(ipGeoPending.add(ip)) requestIpGeoAsync(ip);
-        return "查询中...";
+        return bundle("spdb.query.field.pending", "(loading...)");
     }
 
     private void requestIpGeoAsync(String ip){
         Thread thread = new Thread(() -> {
-            String result = "查询失败";
+            String result = bundle("spdb.query.field.failed", "(lookup failed)");
             HttpURLConnection conn = null;
 
             try{
@@ -4527,13 +4594,13 @@ public class ServerPlayerDataBaseMod extends Mod{
                     ChatIndexFile idx = json.fromJson(ChatIndexFile.class, indexFile.readString("UTF-8"));
                     indexIntegrityState = verifyChatIndexFileIntegrity(idx);
                     if(indexIntegrityState == integrityMismatch){
-                        addIntegrityIssue("聊天索引校验失败：chat_index.json 可能已被修改。");
+                        addIntegrityIssue(bundle("spdb.integrity.chat-index-modified", "Chat index verification failed: chat_index.json may have been modified."));
                     }else if(indexIntegrityState == integrityUnsupported){
-                        addIntegrityIssue("聊天索引校验失败：chat_index.json 使用了不支持的校验算法。");
+                        addIntegrityIssue(bundle("spdb.integrity.chat-index-unsupported", "Chat index verification failed: chat_index.json uses an unsupported verification algorithm."));
                     }
                 }catch(Throwable t){
                     indexIntegrityState = integrityMismatch;
-                    addIntegrityIssue("聊天索引读取失败，无法完成完整性校验。");
+                    addIntegrityIssue(bundle("spdb.integrity.chat-index-read-failed", "Chat index could not be read; integrity verification could not be completed."));
                     Log.err("SPDB: failed to read chat index, rebuilding.", t);
                 }
             }
@@ -4547,7 +4614,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             try{
                 return new SqliteChatBackend();
             }catch(Throwable t){
-                String message = "SQLite 聊天数据库不可用：当前运行环境缺少 SPDB 所需的 Java SQL 组件，已回退到 JSON 分片存储。";
+                String message = bundle("spdb.integrity.sqlite-unavailable", "SQLite chat storage is unavailable because the runtime lacks SPDB's Java SQL components; falling back to JSON shards.");
                 if(fallbackIssues != null && !fallbackIssues.contains(message, false)){
                     fallbackIssues.add(message);
                 }
@@ -4561,7 +4628,7 @@ public class ServerPlayerDataBaseMod extends Mod{
         }
 
         String storageBackendName(){
-            return useSqlite ? "SQLite" : "JSON 分片";
+            return useSqlite ? "SQLite" : bundle("spdb.integrity.json-shards", "JSON shards");
         }
 
         boolean hasPendingWrites(){
@@ -4840,15 +4907,15 @@ public class ServerPlayerDataBaseMod extends Mod{
                             if(state == integrityMissing){
                                 dirtyDates.add(date);
                             }else if(state == integrityMismatch){
-                                addIntegrityIssue("聊天分片校验失败：" + file.name() + " 可能已被修改。");
+                                addIntegrityIssue(bundleFormat("spdb.integrity.shard-modified", "Chat shard verification failed: @ may have been modified.", file.name()));
                             }else if(state == integrityUnsupported){
-                                addIntegrityIssue("聊天分片校验失败：" + file.name() + " 使用了不支持的校验算法。");
+                                addIntegrityIssue(bundleFormat("spdb.integrity.shard-unsupported", "Chat shard verification failed: @ uses an unsupported verification algorithm.", file.name()));
                             }
 
                             entries = normalizeDayEntries(loaded.entries, date, true);
                         }
                     }catch(Throwable t){
-                        addIntegrityIssue("聊天分片读取失败：" + file.name() + " 无法完成完整性校验。");
+                        addIntegrityIssue(bundleFormat("spdb.integrity.shard-read-failed", "Chat shard read failed: integrity verification could not be completed for @.", file.name()));
                         Log.err("SPDB: failed reading chat shard @.", file.path(), t);
                     }
                 }
@@ -4927,7 +4994,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     ChatDayFile loaded = json.fromJson(ChatDayFile.class, file.readString("UTF-8"));
                     if(loaded == null || loaded.entries == null){
                         shardsMismatch++;
-                        addIntegrityIssue("聊天分片读取失败：" + file.name() + " 文件格式无效。");
+                        addIntegrityIssue(bundleFormat("spdb.integrity.shard-invalid", "Chat shard read failed: @ has an invalid file format.", file.name()));
                         continue;
                     }
 
@@ -4938,10 +5005,10 @@ public class ServerPlayerDataBaseMod extends Mod{
                         shardsMissing++;
                     }else if(state == integrityUnsupported){
                         shardsUnsupported++;
-                        addIntegrityIssue("聊天分片校验失败：" + file.name() + " 使用了不支持的校验算法。");
+                        addIntegrityIssue(bundleFormat("spdb.integrity.shard-unsupported", "Chat shard verification failed: @ uses an unsupported verification algorithm.", file.name()));
                     }else{
                         shardsMismatch++;
-                        addIntegrityIssue("聊天分片校验失败：" + file.name() + " 可能已被修改。");
+                        addIntegrityIssue(bundleFormat("spdb.integrity.shard-modified", "Chat shard verification failed: @ may have been modified.", file.name()));
                     }
 
                     Seq<ChatEntry> normalized = normalizeDayEntries(loaded.entries, date, true);
@@ -4955,7 +5022,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     }
                 }catch(Throwable t){
                     shardsMismatch++;
-                    addIntegrityIssue("聊天分片读取失败：" + file.name() + " 无法完成完整性校验。");
+                    addIntegrityIssue(bundleFormat("spdb.integrity.shard-read-failed", "Chat shard read failed: integrity verification could not be completed for @.", file.name()));
                     Log.err("SPDB: failed indexing chat shard @.", file.path(), t);
                 }
             }
@@ -5075,7 +5142,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 return true;
             }catch(Throwable t){
                 integrityState = integrityMismatch;
-                addIntegrityIssue("SQLite 聊天数据库初始化失败，已回退到 JSON 分片存储。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-init-failed", "SQLite chat storage initialization failed; falling back to JSON shards."), t);
                 return false;
             }
         }
@@ -5133,7 +5200,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     out.entries.add(readEntry(rs));
                 }
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天数据库导出读取失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-export-failed", "SQLite chat database export failed."), t);
             }
 
             return out;
@@ -5156,7 +5223,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 conn.commit();
                 totalEntries = countRows(conn);
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天数据库批量写入失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-batch-write-failed", "SQLite chat database batch write failed."), t);
                 return 0;
             }
 
@@ -5204,7 +5271,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 if(changed) totalEntries = countRows(conn);
                 return changed;
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天 UID 合并失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-uid-merge-failed", "SQLite chat UID merge failed."), t);
                 return false;
             }
         }
@@ -5229,7 +5296,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 }
                 return -1;
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天记录写入失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-write-failed", "SQLite chat record write failed."), t);
                 return -1;
             }
         }
@@ -5248,7 +5315,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     }
                 }
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天记录查询失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-query-failed", "SQLite chat record query failed."), t);
             }
 
             return out;
@@ -5269,7 +5336,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                     }
                 }
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天分页查询失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-page-query-failed", "SQLite chat page query failed."), t);
             }
 
             return out;
@@ -5298,14 +5365,14 @@ public class ServerPlayerDataBaseMod extends Mod{
                                 if(insertEntry(stmt, raw) > 0L) migrated++;
                             }
                         }catch(Throwable t){
-                            addIntegrityIssue("SQLite 迁移旧聊天分片失败：" + file.name(), t);
+                            addIntegrityIssue(bundleFormat("spdb.integrity.sqlite-migrate-file-failed", "SQLite migration of old chat shard failed: @", file.name()), t);
                         }
                     }
                 }
 
                 conn.commit();
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 迁移旧聊天分片失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-migrate-failed", "SQLite migration of old chat shards failed."), t);
                 return 0;
             }
 
@@ -5337,7 +5404,7 @@ public class ServerPlayerDataBaseMod extends Mod{
             try(Connection conn = openConnection()){
                 return countRows(conn);
             }catch(Throwable t){
-                addIntegrityIssue("SQLite 聊天总数统计失败。", t);
+                addIntegrityIssue(bundle("spdb.integrity.sqlite-count-failed", "SQLite chat record count failed."), t);
                 return totalEntries;
             }
         }

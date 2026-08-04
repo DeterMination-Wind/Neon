@@ -63,6 +63,8 @@ public final class PinyinScopeContextTest{
             testLocalGlobalUiScope();
             testGlobalUiGroupsAreNeverScopes();
             testSchematicCandidatesRespectNativeFiltering();
+            testResultSnapshotInvalidatedByNativeCardReplacement();
+            testNumericSchematicQueriesRemainEligibleAfterReopen();
         }finally{
             Core.graphics = originalGraphics;
             Core.app = originalApp;
@@ -220,6 +222,34 @@ public final class PinyinScopeContextTest{
             "a schematic removed by native filtering was restored");
         check(MatchEngine.accepts(candidates.first().name(), "mubiao", new MatchEngine.MatchOptions(true, true, true)),
             "the retained schematic did not match its pinyin query");
+    }
+
+    private static void testResultSnapshotInvalidatedByNativeCardReplacement(){
+        Table results = new Table();
+        Element originalCard = new Element();
+        results.add(originalCard);
+
+        Seq<Element> snapshot = new Seq<>();
+        snapshot.add(originalCard);
+        check(FieldDispatcher.ResultSnapshot.sameActors(results, snapshot),
+            "an unchanged native result table did not match its snapshot");
+
+        results.clearChildren();
+        Element replacementCard = new Element();
+        results.add(replacementCard);
+        check(!FieldDispatcher.ResultSnapshot.sameActors(results, snapshot),
+            "native card replacement did not invalidate the result snapshot");
+    }
+
+    private static void testNumericSchematicQueriesRemainEligibleAfterReopen(){
+        for(int open = 0; open < 2; open++){
+            check(FieldDispatcher.shouldDispatchSearch("123", true),
+                "numeric schematic query was rejected on dialog open " + (open + 1));
+            check(!FieldDispatcher.shouldDispatchSearch("", true),
+                "empty schematic query bypassed native rebuild on dialog open " + (open + 1));
+        }
+        check(!FieldDispatcher.shouldDispatchSearch("123", false),
+            "numeric query was incorrectly routed through pinyin filtering outside schematics");
     }
 
     private static Schematic schematic(String name){

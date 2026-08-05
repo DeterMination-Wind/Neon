@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "v*"
+      - "N*"
+      - "B*"
 
 permissions:
   contents: write
@@ -28,6 +29,28 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Resolve Neon release version
+        if: startsWith(github.ref, 'refs/tags/')
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version_code="$(python3 tools/neon_version.py --code "$tag")"
+          release_name="$(python3 tools/neon_version.py --release-name "$tag")"
+          python3 tools/neon_version.py --set-files "$version_code"
+          python3 tools/neon_version.py --check-files "$version_code"
+
+          is_prerelease=false
+          if [[ "$release_name" == B* ]]; then
+            is_prerelease=true
+          fi
+
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
+          echo "Building $release_name ($version_code)"
+
       - name: Install Android build-tools
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
@@ -48,15 +71,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          release_name="${{ steps.version.outputs.release_name }}"
           mkdir -p release-assets
-          cp "dist/Neon.jar" "release-assets/Neon-${tag}.jar"
-          cp "dist/Neon.zip" "release-assets/Neon-${tag}.zip"
+          cp "dist/Neon.jar" "release-assets/Neon-${release_name}.jar"
+          cp "dist/Neon.zip" "release-assets/Neon-${release_name}.zip"
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.version.outputs.release_name }}
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
+          generate_release_notes: false
           body_path: RELEASE_NOTES.md
           files: |
             release-assets/*.jar

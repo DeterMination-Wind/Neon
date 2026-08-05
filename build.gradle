@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "11.0.0"
+version = "110000"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -93,9 +93,18 @@ tasks.register("pinyinScopeContextTest", JavaExec){
     mainClass.set("pinyinsearchsupport.ui.PinyinScopeContextTest")
 }
 
+tasks.register("versionUtilTest", JavaExec){
+    group = "verification"
+    description = "Runs the Neon release-label/version-code regression test."
+    dependsOn tasks.named("testClasses")
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass.set("modupdater.features.VersionUtilTest")
+}
+
 tasks.named("test").configure{
     dependsOn tasks.named("dataImagePackerCompatTest")
     dependsOn tasks.named("pinyinScopeContextTest")
+    dependsOn tasks.named("versionUtilTest")
 }
 
 jar{

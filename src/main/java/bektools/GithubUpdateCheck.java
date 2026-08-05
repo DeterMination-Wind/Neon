@@ -18,13 +18,12 @@ import mindustry.mod.Mods;
 import mindustry.ui.Bar;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
+import modupdater.features.VersionUtil;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Checks this mod's version against the version declared in the GitHub repository.
@@ -37,7 +36,6 @@ final class GithubUpdateCheck{
 
     private static final String mirrorPrefix = "https://ghfile.geekertao.top/";
 
-    private static final Pattern numberPattern = Pattern.compile("\\d+");
     private static boolean checked;
 
     private static final String keyUpdateCheckEnabled = "bek-updatecheck";
@@ -124,7 +122,7 @@ final class GithubUpdateCheck{
         String ignored = Strings.stripColors(Core.settings.getString(keyUpdateCheckIgnoreVersion, ""));
 
         //Prefer GitHub releases list API (lets users select historical versions).
-        String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases?per_page=30";
+        String apiUrl = "https://api.github.com/repos/" + owner + "/" + repo + "/releases?per_page=100";
         Http.get(apiUrl)
         .timeout(30000)
         .header("User-Agent", "Mindustry")
@@ -543,8 +541,7 @@ final class GithubUpdateCheck{
         String publishedAt = Strings.stripColors(json.getString("published_at", ""));
         boolean pre = json.getBool("prerelease", false);
 
-        String version = normalizeVersion(tag);
-        if(version.isEmpty()) version = normalizeVersion(name);
+        String version = VersionUtil.normalizeReleaseVersion(tag, name);
 
         ArrayList<AssetInfo> assets = new ArrayList<>();
         try{
@@ -572,12 +569,7 @@ final class GithubUpdateCheck{
     }
 
     private static String normalizeVersion(String raw){
-        if(raw == null) return "";
-        String v = raw.trim();
-        if(v.startsWith("v") || v.startsWith("V")){
-            v = v.substring(1).trim();
-        }
-        return v;
+        return VersionUtil.normalizeVersion(raw);
     }
 
     private static AssetInfo pickDefaultAsset(ArrayList<AssetInfo> assets){
@@ -624,29 +616,7 @@ final class GithubUpdateCheck{
     }
 
     private static int compareVersions(String a, String b){
-        int[] pa = parseVersionParts(a);
-        int[] pb = parseVersionParts(b);
-        int max = Math.max(pa.length, pb.length);
-        for(int i = 0; i < max; i++){
-            int ai = i < pa.length ? pa[i] : 0;
-            int bi = i < pb.length ? pb[i] : 0;
-            if(ai != bi) return Integer.compare(ai, bi);
-        }
-        return 0;
+        return VersionUtil.compareVersions(a, b);
     }
 
-    private static int[] parseVersionParts(String v){
-        if(v == null) return new int[0];
-        Matcher m = numberPattern.matcher(v);
-        ArrayList<Integer> parts = new ArrayList<>();
-        while(m.find()){
-            try{
-                parts.add(Integer.parseInt(m.group()));
-            }catch(Throwable ignored){
-            }
-        }
-        int[] out = new int[parts.size()];
-        for(int i = 0; i < parts.size(); i++) out[i] = parts.get(i);
-        return out;
-    }
 }

@@ -247,6 +247,12 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `Neon.jar` 并放入 Mindustry 的 `mods` 目录。
 
+### 版本号
+
+- 稳定版使用 `N<版本号>`，例如 `N11`。
+- 预发行版使用 `B<版本号>.<递增构建号>`，例如 `B11.20`。
+- 模组内部版本码对应为 `N11 -> 110000`、`B11.20 -> 110020`。
+
 ### 反馈
 
 【BEK辅助mod反馈群】：https://qm.qq.com/q/cZWzPa4cTu
@@ -483,6 +489,12 @@ Neon is fully client-side; server installation is not required.
 
 Android requires a mod package that includes `classes.dex`.
 Use `Neon.jar` from Releases and place it in the Mindustry `mods` folder.
+
+### Versioning
+
+- Stable releases use `N<version>`, for example `N11`.
+- Pre-releases use `B<version>.<incrementing build>`, for example `B11.20`.
+- Internal mod codes are `N11 -> 110000` and `B11.20 -> 110020`.
 
 ### Feedback
 

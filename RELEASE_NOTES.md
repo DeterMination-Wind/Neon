@@ -1,6 +1,6 @@
-# Neon v11.0.0
+# Neon N11
 
-本说明汇总 `v10.3.1` 之后至 `v11.0.0` 的全部提交。
+本说明汇总 `v10.3.1` 之后至 `N11` 的全部提交。
 
 ## 中文
 
@@ -21,7 +21,7 @@
 
 ## English
 
-This release summarizes every commit after `v10.3.1` through `v11.0.0`.
+This release summarizes every commit after `v10.3.1` through `N11`.
 
 - Expands the Neon aggregate from 19 to 25 client-side tools by adding BetterRTSFormation, BetterTerrainGen-V2, AutoPruner, Color-the-ducts, LogicSugar, and Random, with unified settings integration, isolated initialization, module status reporting, and locked bundled revisions.
 - Integrates BetterRTSFormation with improved RTS control-group creation, selection, and recognition, including formation badges, strict selection, and controls outside command mode.

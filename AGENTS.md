@@ -44,6 +44,7 @@ Neon/
 |   |   |-- bundle.properties
 |   |   \-- bundle_zh_CN.properties
 |   |-- generate_dox.py
+|   |-- neon_version.py
 |   |-- submods.json
 |   |-- submods.lock.json
 |   \-- update_submods.py
@@ -64,6 +65,13 @@ Neon/
 - 保持 Java 8 兼容（如本项目包含 Java 源码）。
 - 变更优先聚焦性能与可读性，不做无关重构。
 - 用户可见文案优先走 bundle/资源文件，不硬编码。
+
+## 版本号与发布
+- 稳定版 Release 使用 `N<稳定版本号>`，例如 `N11`。
+- 预发行版 Release 使用 `B<稳定版本号>.<递增构建号>`，例如 `B11.20`。
+- `N11` 在 `mod.json`、`mod.hjson` 和 `build.gradle` 中统一写为 `110000`；`B11.20` 写为 `110020`。
+- 发布 tag 只使用 `N*` 或 `B*`；CI 通过 `tools/neon_version.py` 计算版本号并同步描述文件。
+- 更新器必须同时兼容新格式、数字版本码和历史 `vX.Y.Z` 版本。
 
 ## 设置接入规范（Neon 风格）
 - 新并入的子模组设置项必须并入 Neon 总设置入口，不允许在 `bekBundled=true` 时再注册独立 `ui.settings.addCategory(...)`。

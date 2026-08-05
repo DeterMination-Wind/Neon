@@ -53,7 +53,7 @@ public final class GithubReleaseClient{
     }
 
     public static void fetchReleases(String repo, Cons<ArrayList<ReleaseInfo>> onSuccess, Cons<Throwable> onError){
-        String apiUrl = "https://api.github.com/repos/" + repo + "/releases?per_page=30";
+        String apiUrl = "https://api.github.com/repos/" + repo + "/releases?per_page=100";
         Http.get(apiUrl)
         .timeout(30000)
         .header("User-Agent", "Mindustry")
@@ -173,8 +173,7 @@ public final class GithubReleaseClient{
         String publishedAt = Strings.stripColors(json.getString("published_at", ""));
         boolean pre = json.getBool("prerelease", false);
 
-        String version = VersionUtil.normalizeVersion(tag);
-        if(version.isEmpty()) version = VersionUtil.normalizeVersion(name);
+        String version = VersionUtil.normalizeReleaseVersion(tag, name);
 
         ArrayList<AssetInfo> assets = new ArrayList<AssetInfo>();
         try{

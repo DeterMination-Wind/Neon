@@ -2,87 +2,64 @@ package modupdater.features;
 
 import arc.Core;
 import arc.files.Fi;
-import arc.graphics.Color;
-import arc.scene.ui.CheckBox;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
-import arc.struct.ObjectMap;
-import arc.struct.Seq;
+import arc.util.Align;
+import arc.util.Http;
 import arc.util.Log;
 import arc.util.OS;
 import arc.util.Strings;
+import arc.util.serialization.Jval;
 import mindustry.Vars;
 import mindustry.gen.Icon;
+import mindustry.graphics.Pal;
 import mindustry.mod.Mods;
 import mindustry.ui.Bar;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.BaseDialog;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Locale;
 
+/**
+ * Neon's single-mod updater. The layout intentionally follows MindustryX's
+ * AutoUpdate dialog: release selection first, download URL second, recent
+ * updates last.
+ */
 public final class ModUpdateCenter{
-    private static final String selfModName = "modupdater";
+    private static final String neonRepo = "DeterMination-Wind/Neon";
+    private static final String neonName = "Neon";
+    private static final float maxContentWidth = 500f;
 
     private static final String keyEnabled = "mu-enabled";
     private static final String keyShowDialog = "mu-show-dialog";
     private static final String keyUseMirror = "mu-use-mirror";
     private static final String keyIntervalHours = "mu-check-interval-hours";
     private static final String keyLastCheckAt = "mu-last-check-at";
-    private static final String keyBlacklist = "mu-blacklist";
-    private static final String keyRepoOverrides = "mu-repo-overrides";
-    private static final String mirrorPrefix = "https://ghfile.geekertao.top/";
+    private static final String keyIgnoreOnce = "mu-ignore-once";
+    private static final String keyIgnoreUntil = "mu-ignore-until";
 
     private static boolean startupChecked;
     private static boolean checking;
+    private static boolean checkFailed;
+    private static boolean manualDialogRequested;
 
-    private static Seq<String> blacklistNames = new Seq<String>();
-    private static ObjectMap<String, String> repoOverrides = new ObjectMap<String, String>();
-    private static Seq<ModEntry> lastEntries = new Seq<ModEntry>();
-
-    private static BaseDialog centerDialog;
-    private static Table centerContent;
-
-    public static final class ModEntry{
-        public final Mods.LoadedMod mod;
-        public final String internalName;
-        public final String displayName;
-        public final String currentVersion;
-        public String repo = "";
-        public boolean blacklisted;
-        public boolean noRepo;
-        public boolean expanded;
-        public boolean checkFailed;
-        public int compareLatest;
-        public GithubReleaseClient.ReleaseInfo latest;
-        public GithubReleaseClient.ReleaseInfo selected;
-        public final ArrayList<GithubReleaseClient.ReleaseInfo> releases = new ArrayList<GithubReleaseClient.ReleaseInfo>();
-
-        public ModEntry(Mods.LoadedMod mod){
-            this.mod = mod;
-            this.internalName = normalizeName(mod == null ? "" : mod.name);
-            this.displayName = displayNameOf(mod);
-            this.currentVersion = VersionUtil.normalizeVersion(Strings.stripColors(mod != null && mod.meta != null ? mod.meta.version : ""));
-        }
-
-        public boolean hasUpdate(){
-            return latest != null && compareLatest > 0;
-        }
-
-        public GithubReleaseClient.ReleaseInfo selectedRelease(){
-            return selected == null ? latest : selected;
-        }
-    }
+    private static Mods.LoadedMod neonMod;
+    private static String currentVersion = "";
+    private static ReleaseState releaseState = new ReleaseState();
+    private static BaseDialog activeDialog;
 
     private ModUpdateCenter(){
     }
 
     public static void init(){
         applyDefaults();
-        reloadLocalSettings();
     }
 
     public static void applyDefaults(){
@@ -90,6 +67,8 @@ public final class ModUpdateCenter{
         Core.settings.defaults(keyShowDialog, true);
         Core.settings.defaults(keyUseMirror, false);
         Core.settings.defaults(keyIntervalHours, 6);
+        Core.settings.defaults(keyIgnoreOnce, "");
+        Core.settings.defaults(keyIgnoreUntil, "");
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table){
@@ -97,10 +76,8 @@ public final class ModUpdateCenter{
         table.checkPref(keyEnabled, true);
         table.checkPref(keyShowDialog, true);
         table.checkPref(keyUseMirror, false);
-        table.sliderPref(keyIntervalHours, 6, 1, 48, 1, v -> (int)v + "h");
-
+        table.sliderPref(keyIntervalHours, 6, 1, 48, 1, value -> (int)value + "h");
         table.pref(new ButtonSetting("mu-open-center", () -> showCenter(true)));
-        table.pref(new ButtonSetting("mu-open-blacklist", ModUpdateCenter::showBlacklistDialog));
     }
 
     public static void checkOnceAtStartup(){
@@ -109,406 +86,353 @@ public final class ModUpdateCenter{
 
         if(Vars.headless || Vars.mods == null) return;
         applyDefaults();
-        reloadLocalSettings();
         if(!Core.settings.getBool(keyEnabled, true)) return;
 
         long now = System.currentTimeMillis();
         long last = Core.settings.getLong(keyLastCheckAt, 0L);
         long hours = Math.max(1, Core.settings.getInt(keyIntervalHours, 6));
-        long intervalMs = hours * 60L * 60L * 1000L;
-        if(last > 0L && now - last < intervalMs) return;
+        long interval = hours * 60L * 60L * 1000L;
+        if(last > 0L && now - last < interval) return;
         Core.settings.put(keyLastCheckAt, now);
 
         runCheck(true);
     }
 
+    /** Opens the MindustryX-style updater dialog. */
     public static void showCenter(boolean refresh){
-        ensureCenterDialog();
-        if(refresh || lastEntries.isEmpty()){
-            runCheck(false);
-        }else{
-            rebuildCenter();
-        }
-        centerDialog.show();
-    }
-
-    private static void ensureCenterDialog(){
-        if(centerDialog != null) return;
-
-        centerDialog = new BaseDialog(Core.bundle.get("mu.dialog.title"));
-        centerDialog.cont.margin(12f);
-
-        centerContent = new Table();
-        centerContent.left().defaults().left();
-        ScrollPane pane = new ScrollPane(centerContent);
-        pane.setFadeScrollBars(false);
-        centerDialog.cont.add(pane).width(760f).height(Math.min(720f, Core.graphics.getHeight() * 0.8f)).row();
-
-        centerDialog.buttons.defaults().size(220f, 56f).pad(6f);
-        centerDialog.buttons.button("@mu.action.refresh", Icon.refresh, () -> runCheck(false));
-        centerDialog.buttons.button("@mu.action.update-all", Icon.download, ModUpdateCenter::updateAll);
-        centerDialog.buttons.button("@mu.action.blacklist", Icon.cancel, ModUpdateCenter::showBlacklistDialog);
-        centerDialog.addCloseButton();
-    }
-
-    private static void rebuildCenter(){
-        if(centerContent == null) return;
-        centerContent.clearChildren();
-
-        if(checking){
-            centerContent.add(Core.bundle.get("mu.checking")).color(Color.lightGray).padBottom(6f).row();
-        }
-
-        if(lastEntries.isEmpty()){
-            centerContent.add(Core.bundle.get("mu.empty")).color(Color.gray).row();
-            return;
-        }
-
-        Seq<ModEntry> updatable = selectEntries(e -> e.hasUpdate() && !e.blacklisted && !e.noRepo && !e.checkFailed);
-        Seq<ModEntry> upToDate = selectEntries(e -> !e.hasUpdate() && !e.blacklisted && !e.noRepo && !e.checkFailed);
-        Seq<ModEntry> blacklisted = selectEntries(e -> e.blacklisted);
-        Seq<ModEntry> noRepo = selectEntries(e -> e.noRepo && !e.blacklisted);
-
-        addGroup("mu.group.updatable", updatable);
-        addGroup("mu.group.uptodate", upToDate);
-        addGroup("mu.group.blacklisted", blacklisted);
-        addGroup("mu.group.norepo", noRepo);
-    }
-
-    private static void addGroup(String titleKey, Seq<ModEntry> entries){
-        if(entries.isEmpty()) return;
-
-        centerContent.image().color(Color.darkGray).height(2f).growX().padTop(6f).padBottom(6f).row();
-        centerContent.add(Core.bundle.get(titleKey) + " (" + entries.size + ")").color(Color.white).left().padBottom(4f).row();
-
-        for(ModEntry e : entries){
-            addEntryCard(e);
-        }
-    }
-
-    private static void addEntryCard(ModEntry e){
-        centerContent.table(card -> {
-            card.left().defaults().left();
-
-            String fold = e.expanded ? "▼ " : "▶ ";
-            String status = statusText(e);
-            String title = fold + e.displayName + " [lightgray](" + e.internalName + ")[]";
-            String version = e.currentVersion.isEmpty() ? "-" : e.currentVersion;
-            if(e.latest != null && !e.latest.version.isEmpty()){
-                version += " -> " + e.latest.version;
-            }
-
-            card.button(title + "\n[lightgray]" + version + "[]  " + status, Styles.flatt, () -> {
-                e.expanded = !e.expanded;
-                rebuildCenter();
-            }).width(730f).left().row();
-
-            if(!e.expanded) return;
-
-            card.add("[lightgray]repo:[] " + (e.repo.isEmpty() ? Core.bundle.get("mu.repo.none") : e.repo)).wrap().width(730f).padTop(4f).row();
-
-            if(e.noRepo){
-                final String[] value = {e.repo};
-                TextField field = card.field(e.repo, v -> value[0] = v).width(600f).left().padTop(4f).get();
-                field.setMessageText(Core.bundle.get("mu.repo.input"));
-                card.row();
-                card.button("@mu.action.repo.save", Icon.save, () -> {
-                    String repo = RepoResolver.sanitizeRepo(value[0]);
-                    if(repo.isEmpty()){
-                        removeRepoOverride(e.internalName);
-                        Vars.ui.showInfoToast(Core.bundle.get("mu.repo.cleared"), 3f);
-                    }else{
-                        setRepoOverride(e.internalName, repo);
-                        if(e.mod != null){
-                            e.mod.setRepo(repo);
-                        }
-                        Vars.ui.showInfoToast(Core.bundle.get("mu.repo.saved"), 3f);
-                    }
-                    runCheck(false);
-                }).size(220f, 46f).left().padTop(4f).row();
-            }
-
-            card.table(actions -> {
-                actions.defaults().size(180f, 46f).pad(3f);
-
-                actions.button("@mu.action.open", Icon.link, () -> {
-                    String url = e.selectedRelease() != null && !e.selectedRelease().htmlUrl.isEmpty() ? e.selectedRelease().htmlUrl :
-                        (e.repo.isEmpty() ? "" : "https://github.com/" + e.repo + "/releases");
-                    if(!url.isEmpty()){
-                        Core.app.openURI(url);
-                    }
-                });
-
-                actions.button(e.blacklisted ? "@mu.action.unblacklist" : "@mu.action.blacklist-add", Icon.cancel, () -> {
-                    toggleBlacklist(e.internalName, !e.blacklisted);
-                    runCheck(false);
-                });
-
-                if(e.hasUpdate()){
-                    actions.button("@mu.action.update-one", Icon.download, () -> updateOne(e));
-                }
-            }).left().row();
-
-            if(!e.releases.isEmpty()){
-                addReleaseSection(card, e, false);
-                addReleaseSection(card, e, true);
-            }
-        }).left().padBottom(6f).row();
-    }
-
-    private static void addReleaseSection(Table card, ModEntry e, boolean preRelease){
-        ArrayList<GithubReleaseClient.ReleaseInfo> list = new ArrayList<GithubReleaseClient.ReleaseInfo>();
-        for(GithubReleaseClient.ReleaseInfo r : e.releases){
-            if(r.preRelease == preRelease){
-                list.add(r);
-            }
-        }
-        if(list.isEmpty()) return;
-
-        card.add(preRelease ? Core.bundle.get("mu.release.prerelease") : Core.bundle.get("mu.release.stable"))
-            .color(Color.lightGray).padTop(6f).row();
-
-        for(final GithubReleaseClient.ReleaseInfo r : list){
-            String marker = e.selected == r ? "[accent]*[] " : "";
-            String label = marker + r.version + (r == e.latest ? " [" + Core.bundle.get("mu.release.latest") + "]" : "");
-
-            card.table(row -> {
-                row.left().defaults().left();
-                row.button(label, Styles.togglet, () -> {
-                    e.selected = r;
-                    rebuildCenter();
-                }).checked(e.selected == r).width(520f).left();
-
-                row.button(Icon.link, () -> {
-                    if(!r.htmlUrl.isEmpty()) Core.app.openURI(r.htmlUrl);
-                }).size(40f).padLeft(4f);
-
-                if(e.hasUpdate()){
-                    GithubReleaseClient.AssetInfo asset = GithubReleaseClient.pickDefaultAsset(r.assets);
-                    if(asset != null){
-                        row.button(Icon.download, () -> updateOne(e)).size(40f).padLeft(4f);
-                    }
-                }
-            }).left().row();
-        }
-    }
-
-    private static String statusText(ModEntry e){
-        if(e.blacklisted) return "[scarlet]" + Core.bundle.get("mu.status.blacklisted") + "[]";
-        if(e.noRepo) return "[lightgray]" + Core.bundle.get("mu.status.norepo") + "[]";
-        if(e.hasUpdate()) return "[accent]" + Core.bundle.get("mu.status.update") + "[]";
-        return "[green]" + Core.bundle.get("mu.status.latest") + "[]";
-    }
-
-    private static Seq<ModEntry> selectEntries(Boolf1<ModEntry> filter){
-        Seq<ModEntry> out = new Seq<ModEntry>();
-        for(ModEntry e : lastEntries){
-            if(filter.get(e)) out.add(e);
-        }
-        return out;
-    }
-
-    private static void runCheck(boolean startupPrompt){
         if(Vars.headless || Vars.mods == null) return;
-        if(checking) return;
 
-        reloadLocalSettings();
-        checking = true;
-        rebuildCenter();
-
-        Seq<ModEntry> fresh = collectEntries();
-        if(hasMissingRepos(fresh)){
-            RepoResolver.loadModIndex(loaded -> {
-                if(loaded) resolveMissingReposFromIndex(fresh);
-                continueCheck(fresh, startupPrompt);
-            });
-            return;
+        manualDialogRequested = true;
+        if(refresh){
+            releaseState = new ReleaseState();
+            checkFailed = false;
         }
 
-        continueCheck(fresh, startupPrompt);
-    }
-
-    private static void continueCheck(Seq<ModEntry> fresh, boolean startupPrompt){
-        Seq<ModEntry> needsFetch = new Seq<ModEntry>();
-        for(ModEntry e : fresh){
-            if(!e.blacklisted && !e.noRepo){
-                needsFetch.add(e);
-            }
-        }
-
-        if(needsFetch.isEmpty()){
-            onCheckFinished(fresh, startupPrompt);
-            return;
-        }
-
-        fetchEntry(needsFetch, 0, fresh, startupPrompt);
-    }
-
-    private static void fetchEntry(Seq<ModEntry> needsFetch, int index, Seq<ModEntry> fresh, boolean startupPrompt){
-        if(index >= needsFetch.size){
-            onCheckFinished(fresh, startupPrompt);
-            return;
-        }
-
-        ModEntry entry = needsFetch.get(index);
-        GithubReleaseClient.fetchReleases(entry.repo, releases -> {
-            if(releases == null || releases.isEmpty()){
-                fallbackRaw(entry, () -> fetchEntry(needsFetch, index + 1, fresh, startupPrompt));
-                return;
-            }
-
-            entry.releases.clear();
-            entry.releases.addAll(releases);
-            entry.latest = GithubReleaseClient.pickLatestRelease(releases);
-            entry.selected = entry.latest;
-            if(entry.latest != null && !entry.latest.version.isEmpty() && !entry.currentVersion.isEmpty()){
-                entry.compareLatest = VersionUtil.compareVersions(entry.latest.version, entry.currentVersion);
-            }
-            fetchEntry(needsFetch, index + 1, fresh, startupPrompt);
-        }, err -> fallbackRaw(entry, () -> fetchEntry(needsFetch, index + 1, fresh, startupPrompt)));
-    }
-
-    private static void fallbackRaw(ModEntry entry, Runnable done){
-        GithubReleaseClient.fetchLatestFromRaw(entry.repo, rel -> {
-            entry.releases.clear();
-            entry.releases.add(rel);
-            entry.latest = rel;
-            entry.selected = rel;
-            if(!entry.currentVersion.isEmpty()){
-                entry.compareLatest = VersionUtil.compareVersions(rel.version, entry.currentVersion);
-            }
-            done.run();
-        }, err -> {
-            // Network failures are expected for offline or unavailable repositories.
-            // Keep the entry out of update results without surfacing the exception.
-            entry.checkFailed = true;
-            done.run();
-        });
-    }
-
-    private static void onCheckFinished(Seq<ModEntry> fresh, boolean startupPrompt){
-        fresh.sort((a, b) -> a.displayName.compareToIgnoreCase(b.displayName));
-        lastEntries = fresh;
-        checking = false;
-        Core.app.post(() -> {
-            rebuildCenter();
-
-            if(startupPrompt && Core.settings.getBool(keyShowDialog, true) && hasUpdates(fresh)){
-                showCenter(false);
-            }
-        });
-    }
-
-    private static Seq<ModEntry> collectEntries(){
-        Seq<ModEntry> out = new Seq<ModEntry>();
-        for(Mods.LoadedMod mod : Vars.mods.list()){
-            if(mod == null || mod.meta == null) continue;
-            if(!mod.enabled()) continue;
-            if(selfModName.equalsIgnoreCase(mod.name)) continue;
-
-            ModEntry e = new ModEntry(mod);
-            e.blacklisted = blacklistNames.contains(e.internalName);
-            e.repo = RepoResolver.resolveRepo(mod, repoOverrides);
-            e.noRepo = e.repo.isEmpty();
-            out.add(e);
-        }
-        return out;
-    }
-
-    private static boolean hasMissingRepos(Seq<ModEntry> entries){
-        for(ModEntry e : entries){
-            if(!e.blacklisted && e.noRepo){
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static void resolveMissingReposFromIndex(Seq<ModEntry> entries){
-        for(ModEntry e : entries){
-            if(e == null || e.blacklisted || !e.noRepo) continue;
-            String repo = RepoResolver.resolveIndexedRepo(e.mod);
-            if(repo.isEmpty()) continue;
-
-            e.repo = repo;
-            e.noRepo = false;
-            if(e.mod != null){
-                e.mod.setRepo(repo);
-            }
-        }
-    }
-
-    private static boolean hasUpdates(Seq<ModEntry> entries){
-        for(ModEntry e : entries){
-            if(e.hasUpdate() && !e.blacklisted && !e.checkFailed && !e.noRepo){
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static void updateOne(ModEntry entry){
-        if(entry == null || !entry.hasUpdate()) return;
-        Seq<ModEntry> one = new Seq<ModEntry>();
-        one.add(entry);
-        runBatchUpdate(one);
-    }
-
-    private static void updateAll(){
-        Seq<ModEntry> all = new Seq<ModEntry>();
-        for(ModEntry e : lastEntries){
-            if(e.hasUpdate() && !e.blacklisted && !e.noRepo && !e.checkFailed){
-                all.add(e);
-            }
-        }
-        if(all.isEmpty()){
-            Vars.ui.showInfoToast(Core.bundle.get("mu.toast.noupdate"), 3f);
-            return;
-        }
-        runBatchUpdate(all);
-    }
-
-    private static void runBatchUpdate(Seq<ModEntry> entries){
-        boolean useMirror = Core.settings.getBool(keyUseMirror, false);
-        Seq<BatchUpdateInstaller.UpdateTarget> targets = new Seq<BatchUpdateInstaller.UpdateTarget>();
-        for(ModEntry e : entries){
-            GithubReleaseClient.ReleaseInfo rel = e.selectedRelease();
-            if(rel == null) rel = e.latest;
-            if(rel == null) continue;
-
-            GithubReleaseClient.AssetInfo asset = GithubReleaseClient.pickDefaultAsset(rel.assets);
-            if(asset == null) continue;
-            String downloadUrl = buildDownloadUrl(asset.url, useMirror);
-            targets.add(new BatchUpdateInstaller.UpdateTarget(e.mod, e.repo, rel, asset, downloadUrl));
-        }
-
-        if(targets.isEmpty()){
-            Vars.ui.showInfoToast(Core.bundle.get("mu.toast.noasset"), 3f);
-            return;
-        }
-
-        final int[] done = {0};
-        final int total = targets.size;
-
-        BaseDialog progress = new BaseDialog(Core.bundle.get("mu.update.batch.title"));
-        progress.cont.margin(10f);
-        progress.cont.add(new Bar(() -> Core.bundle.format("mu.update.batch.progress", done[0], total), () -> Color.valueOf("5ec7ff"), () -> total == 0 ? 0f : done[0] / (float)total))
-            .width(520f).height(66f).row();
-        progress.buttons.button("@cancel", Icon.cancel, progress::hide).size(180f, 56f);
-        progress.show();
-
-        BatchUpdateInstaller.installAll(targets, (i, t) -> Core.app.post(() -> done[0] = i), result -> Core.app.post(() -> {
-            progress.hide();
-
-            String summary = Core.bundle.format("mu.update.batch.summary", result.total, result.success, result.failed, result.skipped);
-            Vars.ui.showInfoToast(summary, 6f);
-
-            if(result.success > 0){
-                restartApp();
+        if(refresh || releaseState.releases.isEmpty()){
+            if(checking){
+                showDialog(null);
             }else{
                 runCheck(false);
             }
+        }else{
+            manualDialogRequested = false;
+            showDialog(releaseState.latest);
+        }
+    }
+
+    private static void runCheck(boolean startupPrompt){
+        if(Vars.headless || Vars.mods == null || checking) return;
+
+        neonMod = findNeonMod();
+        if(neonMod == null || neonMod.meta == null){
+            checkFailed = true;
+            if(manualDialogRequested){
+                manualDialogRequested = false;
+                showDialog(null);
+            }
+            return;
+        }
+
+        currentVersion = readCurrentVersion(neonMod);
+        checking = true;
+        checkFailed = false;
+        if(manualDialogRequested) showDialog(null);
+
+        GithubReleaseClient.fetchReleases(neonRepo, releases -> Core.app.post(() -> {
+            releaseState = new ReleaseState(releases);
+            releaseState.latest = pickLatestForCurrentVersion(currentVersion, releaseState.releases);
+            checking = false;
+            checkFailed = releaseState.releases.isEmpty();
+            finishCheck(startupPrompt);
+        }), error -> Core.app.post(() -> {
+            Log.warn("Failed to fetch Neon releases: " + error);
+            releaseState = new ReleaseState();
+            checking = false;
+            checkFailed = true;
+            finishCheck(startupPrompt);
         }));
+    }
+
+    private static void finishCheck(boolean startupPrompt){
+        if(manualDialogRequested){
+            manualDialogRequested = false;
+            showDialog(releaseState.latest);
+            return;
+        }
+
+        if(startupPrompt && shouldShowStartupDialog()){
+            showDialog(releaseState.latest);
+        }
+    }
+
+    private static boolean shouldShowStartupDialog(){
+        return Core.settings.getBool(keyShowDialog, true) && newVersion() != null;
+    }
+
+    private static GithubReleaseClient.ReleaseInfo newVersion(){
+        if(releaseState.latest == null || currentVersion.isEmpty()) return null;
+        if(VersionUtil.compareVersions(releaseState.latest.version, currentVersion) <= 0) return null;
+
+        String ignored = Strings.stripColors(Core.settings.getString(keyIgnoreOnce, ""));
+        if(ignored != null && !ignored.isEmpty() && VersionUtil.compareVersions(releaseState.latest.version, ignored) == 0){
+            return null;
+        }
+
+        String ignoreUntil = Strings.stripColors(Core.settings.getString(keyIgnoreUntil, ""));
+        if(ignoreUntil != null && !ignoreUntil.isEmpty()){
+            try{
+                if(Instant.parse(ignoreUntil).isAfter(Instant.now())) return null;
+            }catch(Throwable ignoredError){
+                // A malformed setting should not disable update checks forever.
+            }
+        }
+        return releaseState.latest;
+    }
+
+    private static void showDialog(GithubReleaseClient.ReleaseInfo requestedVersion){
+        if(Vars.ui == null) return;
+        if(activeDialog != null && activeDialog.isShown()) activeDialog.hide();
+
+        final BaseDialog dialog = new BaseDialog(Core.bundle.get("mu.dialog.title"));
+        activeDialog = dialog;
+        dialog.cont.margin(12f);
+        float width = contentWidth();
+
+        Table content = new Table();
+        content.left().defaults().left();
+        ScrollPane pane = new ScrollPane(content);
+        pane.setFadeScrollBars(false);
+        pane.setScrollingDisabledX(true);
+        dialog.cont.add(pane).width(width).maxHeight(Core.graphics.getHeight() * 0.8f).growY().row();
+
+        String current = currentVersion.isEmpty() ? Core.bundle.get("mu.version.unknown") : currentVersion;
+        content.add(Core.bundle.format("mu.current.version", current)).labelAlign(Align.center).width(width).row();
+
+        GithubReleaseClient.ReleaseInfo update = newVersion();
+        if(update != null){
+            content.add(Core.bundle.format("mu.new.version", update.version)).row();
+        }
+
+        if(checking && releaseState.releases.isEmpty()){
+            content.add(Core.bundle.get("mu.checking")).row();
+        }else if(releaseState.releases.isEmpty()){
+            content.add(checkFailed ? Core.bundle.get("mu.check.failed") : Core.bundle.get("mu.latest")).row();
+        }else{
+            content.image().color(Pal.gray).fillX().height(2f).row();
+            content.add(Core.bundle.get("mu.release.stable")).row();
+            buildReleaseList(content, releaseState.releases, false, requestedVersion, dialog);
+
+            content.image().color(Pal.gray).fillX().height(2f).row();
+            content.add(Core.bundle.get("mu.release.prerelease")).row();
+            buildReleaseList(content, releaseState.releases, true, requestedVersion, dialog);
+
+            content.image().color(Pal.gray).fillX().height(2f).row();
+
+            GithubReleaseClient.ReleaseInfo selected = requestedVersion == null ? releaseState.latest : requestedVersion;
+            if(selected == null){
+                content.add(Core.bundle.get("mu.latest")).row();
+            }else{
+                buildDownloadControls(content, dialog, selected, width);
+            }
+        }
+
+        dialog.cont.row();
+        dialog.cont.add(new RecentUpdatesTable(neonRepo))
+            .height(Core.graphics.getHeight() * 0.3f)
+            .width(width);
+        dialog.addCloseButton();
+        dialog.hidden(() -> {
+            if(activeDialog == dialog) activeDialog = null;
+            manualDialogRequested = false;
+        });
+        dialog.show();
+    }
+
+    private static void buildReleaseList(Table content, ArrayList<GithubReleaseClient.ReleaseInfo> releases,
+                                         boolean preRelease, GithubReleaseClient.ReleaseInfo requestedVersion, BaseDialog parent){
+        boolean found = false;
+        GithubReleaseClient.ReleaseInfo selected = requestedVersion == null ? releaseState.latest : requestedVersion;
+
+        for(GithubReleaseClient.ReleaseInfo release : releases){
+            if(release == null || release.preRelease != preRelease) continue;
+            found = true;
+
+            final GithubReleaseClient.ReleaseInfo version = release;
+            content.table(row -> {
+                row.left().defaults().left();
+                row.check(version.version, version == selected, checked -> {
+                    if(!checked) return;
+                    parent.hide();
+                    showDialog(version);
+                }).left().growX();
+
+                if(!version.body.isEmpty()){
+                    row.button(Icon.infoSmall, Styles.clearNonei, () -> showReleaseNotesDialog(version))
+                        .size(32f)
+                        .padRight(2f)
+                        .tooltip(Core.bundle.get("mu.tooltip.release-notes"));
+                }
+                row.button(Icon.link, Styles.clearNonei, () -> openURI(version.htmlUrl))
+                    .size(32f)
+                    .tooltip(Core.bundle.get("mu.tooltip.release-page"));
+            }).growX().left().row();
+        }
+
+        if(!found) content.add(Core.bundle.get("mu.release.none")).padBottom(4f).row();
+    }
+
+    private static void buildDownloadControls(Table content, BaseDialog parent, GithubReleaseClient.ReleaseInfo selected, float width){
+        final GithubReleaseClient.AssetInfo asset = GithubReleaseClient.pickDefaultAsset(selected.assets);
+        final boolean[] useMirror = {Core.settings.getBool(keyUseMirror, false)};
+        final String[] url = {asset == null ? "" : downloadUrl(asset.url, useMirror[0])};
+        final TextField[] field = {null};
+
+        content.table(row -> {
+            field[0] = row.field(url[0], value -> url[0] = value).minWidth(0f).growX().get();
+            row.button(Icon.link, Styles.clearNonei, () -> openURI(url[0]))
+                .width(50f)
+                .tooltip(Core.bundle.get("mu.tooltip.open-url"));
+        }).growX().fillX().row();
+
+        content.check(Core.bundle.get("mu.mirror"), useMirror[0], checked -> {
+            useMirror[0] = checked;
+            Core.settings.put(keyUseMirror, checked);
+            if(asset != null){
+                url[0] = downloadUrl(asset.url, checked);
+                field[0].setText(url[0]);
+            }
+        }).left().padTop(6f).row();
+
+        if(asset == null){
+            content.add(Core.bundle.get("mu.download.noasset")).wrap().width(width).padTop(8f).row();
+        }
+
+        content.button(Core.bundle.get("mu.action.download"), () -> {
+            if(asset == null || url[0].trim().isEmpty()) return;
+            parent.hide();
+            startDownload(asset, url[0]);
+        }).fillX().row();
+
+        if(selected == newVersion()){
+            content.table(actions -> {
+                actions.button(Core.bundle.get("mu.action.ignore-once"), () -> {
+                    Core.settings.put(keyIgnoreOnce, selected.version);
+                    parent.hide();
+                }).growX();
+                actions.button(Core.bundle.get("mu.action.ignore-seven-days"), () -> {
+                    Core.settings.put(keyIgnoreUntil, Instant.now().plus(7, ChronoUnit.DAYS).toString());
+                    parent.hide();
+                }).growX();
+            }).fillX().row();
+        }
+    }
+
+    private static void showReleaseNotesDialog(GithubReleaseClient.ReleaseInfo release){
+        BaseDialog dialog = new BaseDialog(Core.bundle.get("mu.dialog.title") + " - " + release.version);
+        dialog.cont.margin(12f);
+        float width = contentWidth();
+        if(release.body.isEmpty()){
+            dialog.cont.add(Core.bundle.get("mu.release.notes.empty")).wrap().width(width).row();
+        }else{
+            dialog.cont.pane(p -> p.add(release.body).wrap().growX().left())
+                .height(Math.min(Core.graphics.getHeight() * 0.6f, 420f))
+                .width(width)
+                .row();
+        }
+        dialog.addCloseButton();
+        dialog.show();
+    }
+
+    private static void startDownload(GithubReleaseClient.AssetInfo asset, String url){
+        if(Vars.ui == null) return;
+
+        Fi directory = Vars.tmpDirectory.child("modupdater-update");
+        directory.mkdirs();
+        String fileName = sanitizeFileName(asset.name.isEmpty() ? "Neon-update.zip" : asset.name);
+        for(Fi file : directory.list()){
+            if(!file.name().equals(fileName)) file.delete();
+        }
+
+        Fi file = directory.child(fileName);
+        final float[] progress = {0f};
+        final float[] lengthMb = {0f};
+        final boolean[] canceled = {false};
+
+        BaseDialog progressDialog = new BaseDialog(Core.bundle.get("mu.update.progress.title"));
+        progressDialog.cont.add(new Bar(() -> {
+            if(lengthMb[0] <= 0f) return Core.bundle.get("mu.update.progress.unknown");
+            return Strings.autoFixed(progress[0] * lengthMb[0], 2) + "/" + Strings.autoFixed(lengthMb[0], 2) + " MB";
+        }, () -> Pal.accent, () -> progress[0])).width(400f).height(70f);
+        progressDialog.buttons.button("@cancel", Icon.cancel, () -> {
+            canceled[0] = true;
+            progressDialog.hide();
+        }).size(210f, 64f);
+        progressDialog.setFillParent(false);
+        progressDialog.show();
+
+        Http.get(url)
+            .timeout(30000)
+            .header("User-Agent", "Mindustry")
+            .error(error -> {
+                progressDialog.hide();
+                if(Vars.ui != null) Vars.ui.showException(error);
+            })
+            .submit(response -> {
+                long total = response.getContentLength();
+                lengthMb[0] = total > 0 ? total / 1024f / 1024f : 0f;
+
+                if(total > 0 && file.exists() && file.length() == total){
+                    progressDialog.hide();
+                    Core.app.post(() -> installAndRestart(file));
+                    return;
+                }
+
+                int buffer = 1024 * 1024;
+                long read = 0L;
+                try(InputStream input = response.getResultAsStream(); OutputStream output = file.write(false, buffer)){
+                    byte[] bytes = new byte[buffer];
+                    int count;
+                    while((count = input.read(bytes)) != -1){
+                        if(canceled[0]) break;
+                        output.write(bytes, 0, count);
+                        read += count;
+                        if(total > 0) progress[0] = Math.min(1f, read / (float)total);
+                    }
+                }catch(Throwable error){
+                    file.delete();
+                    progressDialog.hide();
+                    Core.app.post(() -> {
+                        if(Vars.ui != null) Vars.ui.showException(error);
+                    });
+                    return;
+                }
+
+                if(canceled[0]){
+                    file.delete();
+                    return;
+                }
+
+                progress[0] = 1f;
+                progressDialog.hide();
+                Core.app.post(() -> installAndRestart(file));
+            });
+    }
+
+    private static void installAndRestart(Fi file){
+        try{
+            Vars.mods.importMod(file);
+            file.delete();
+            if(OS.isAndroid || Vars.mobile){
+                Vars.ui.showInfoToast(Core.bundle.get("mu.update.installed"), 5f);
+                Vars.ui.mods.show();
+                return;
+            }
+
+            Vars.ui.showInfoToast(Core.bundle.get("mu.update.restarting"), 4f);
+            restartApp();
+        }catch(Throwable error){
+            if(Vars.ui != null) Vars.ui.showException(error);
+        }
     }
 
     private static void restartApp(){
@@ -523,140 +447,226 @@ public final class ModUpdateCenter{
                 new String[]{Vars.javaPath, "-XstartOnFirstThread", "-jar", jar.absolutePath()} :
                 new String[]{Vars.javaPath, "-jar", jar.absolutePath()};
             Runtime.getRuntime().exec(args);
-        }catch(Throwable t){
-            Log.err("Failed to restart Mindustry.", t);
+        }catch(Throwable error){
+            Log.err("Failed to restart Mindustry.", error);
         }
-
         Core.app.exit();
     }
 
-    private static void reloadLocalSettings(){
-        blacklistNames = loadBlacklist();
-        repoOverrides = RepoResolver.loadOverrides(keyRepoOverrides);
-    }
+    private static Mods.LoadedMod findNeonMod(){
+        Mods.LoadedMod mod = Vars.mods.getMod(neonName);
+        if(mod != null) return mod;
+        mod = Vars.mods.getMod("Neon-dev");
+        if(mod != null) return mod;
 
-    private static Seq<String> loadBlacklist(){
-        Seq<String> raw = Core.settings.getJson(keyBlacklist, Seq.class, String.class, Seq::new);
-        Seq<String> out = new Seq<String>();
-        for(String s : raw){
-            String n = normalizeName(s);
-            if(!n.isEmpty() && !out.contains(n)){
-                out.add(n);
+        for(Mods.LoadedMod candidate : Vars.mods.list()){
+            if(candidate != null && candidate.meta != null && neonRepo.equalsIgnoreCase(candidate.meta.repo)){
+                return candidate;
             }
         }
-        out.sort();
-        return out;
+        return null;
     }
 
-    private static void saveBlacklist(){
-        Seq<String> sorted = blacklistNames.copy();
-        sorted.sort();
-        Core.settings.putJson(keyBlacklist, String.class, sorted);
+    private static String readCurrentVersion(Mods.LoadedMod mod){
+        if(mod == null || mod.meta == null) return "";
+        String value = Strings.stripColors(mod.meta.version == null ? "" : mod.meta.version);
+        return VersionUtil.normalizeVersion(value);
     }
 
-    private static void toggleBlacklist(String internalName, boolean add){
-        String n = normalizeName(internalName);
-        if(n.isEmpty()) return;
-        if(add){
-            if(!blacklistNames.contains(n)) blacklistNames.add(n);
-        }else{
-            blacklistNames.remove(n);
+    private static GithubReleaseClient.ReleaseInfo pickLatestForCurrentVersion(String current, ArrayList<GithubReleaseClient.ReleaseInfo> releases){
+        if(releases == null || releases.isEmpty()) return null;
+
+        String normalized = VersionUtil.normalizeVersion(current);
+        int code = VersionUtil.versionCode(normalized);
+        boolean preview = normalized.regionMatches(true, 0, "B", 0, 1) || (code >= 0 && code % 10000 != 0);
+        GithubReleaseClient.ReleaseInfo best = null;
+        for(GithubReleaseClient.ReleaseInfo release : releases){
+            if(release == null || release.version.isEmpty()) continue;
+            if(release.preRelease != preview) continue;
+            if(best == null || VersionUtil.compareVersions(release.version, best.version) > 0){
+                best = release;
+            }
         }
-        saveBlacklist();
+        return best == null ? GithubReleaseClient.pickLatestRelease(releases) : best;
     }
 
-    private static void setRepoOverride(String internalName, String repo){
-        String n = normalizeName(internalName);
-        String r = RepoResolver.sanitizeRepo(repo);
-        if(n.isEmpty() || r.isEmpty()) return;
-        repoOverrides.put(n, r);
-        RepoResolver.saveOverrides(keyRepoOverrides, repoOverrides);
+    private static String downloadUrl(String original, boolean useMirror){
+        return GithubReleaseClient.buildDownloadUrl(original, useMirror);
     }
 
-    private static void removeRepoOverride(String internalName){
-        String n = normalizeName(internalName);
-        if(n.isEmpty()) return;
-        repoOverrides.remove(n);
-        RepoResolver.saveOverrides(keyRepoOverrides, repoOverrides);
+    private static float contentWidth(){
+        if(Core.scene == null || Core.scene.getWidth() <= 0f) return maxContentWidth;
+        return Math.min(maxContentWidth, Core.scene.getWidth() * 0.84f);
     }
 
-    private static String normalizeName(String name){
-        return Strings.stripColors(name == null ? "" : name).trim().toLowerCase(Locale.ROOT);
+    private static void openURI(String url){
+        if(url != null && !url.trim().isEmpty()) Core.app.openURI(url.trim());
     }
 
-    private static String displayNameOf(Mods.LoadedMod mod){
-        if(mod == null || mod.meta == null) return "unknown";
-        String n = Strings.stripColors(mod.meta.displayName == null ? mod.meta.name : mod.meta.displayName);
-        if(n == null || n.isEmpty()) n = mod.name;
-        return n == null || n.isEmpty() ? "unknown" : n;
+    private static String sanitizeFileName(String name){
+        String value = Strings.stripColors(name == null ? "" : name).trim();
+        if(value.isEmpty()) return "Neon-update.zip";
+        return value.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
-    private static String buildDownloadUrl(String original, boolean mirror){
-        String url = original == null ? "" : original.trim();
-        if(url.isEmpty()) return url;
-        if(mirror){
-            if(url.startsWith(mirrorPrefix)) return url;
-            return mirrorPrefix + url;
+    private static final class ReleaseState{
+        final ArrayList<GithubReleaseClient.ReleaseInfo> releases;
+        GithubReleaseClient.ReleaseInfo latest;
+
+        ReleaseState(){
+            this(new ArrayList<GithubReleaseClient.ReleaseInfo>());
         }
-        if(url.startsWith(mirrorPrefix)){
-            return url.substring(mirrorPrefix.length());
+
+        ReleaseState(ArrayList<GithubReleaseClient.ReleaseInfo> releases){
+            this.releases = releases == null ? new ArrayList<GithubReleaseClient.ReleaseInfo>() : releases;
         }
-        return url;
     }
 
-    private static void showBlacklistDialog(){
-        ensureCenterDialog();
+    private static final class CommitInfo{
+        final String message;
+        final String author;
+        final String date;
+        final String url;
 
-        BaseDialog dialog = new BaseDialog(Core.bundle.get("mu.blacklist.title"));
-        dialog.cont.margin(12f);
-        final boolean[] changed = {false};
+        CommitInfo(String message, String author, String date, String url){
+            this.message = message == null ? "" : message;
+            this.author = author == null || author.isEmpty() ? "???" : author;
+            this.date = date == null ? "" : date;
+            this.url = url == null ? "" : url;
+        }
+    }
 
-        Table list = new Table();
-        list.left().defaults().left();
-        Seq<ModEntry> entries = lastEntries.copy();
-        entries.sort((a, b) -> a.displayName.compareToIgnoreCase(b.displayName));
+    /** Lightweight version of MindustryX's CommitsTable, kept inside the updater. */
+    private static final class RecentUpdatesTable extends Table{
+        private static final ArrayList<CommitInfo> cached = new ArrayList<CommitInfo>();
+        private static boolean requested;
+        private static boolean loading;
+        private static String error = "";
 
-        if(entries.isEmpty()){
-            list.add(Core.bundle.get("mu.blacklist.empty")).color(Color.gray).row();
-        }else{
-            for(ModEntry e : entries){
-                CheckBox box = list.check(e.displayName + " [lightgray](" + e.internalName + ")[]", blacklistNames.contains(e.internalName), v -> {
-                    toggleBlacklist(e.internalName, v);
-                    changed[0] = true;
-                }).left().growX().get();
-                box.getLabel().setWrap(true);
-                list.row();
+        private final String repo;
+        private final Table rows = new Table();
+
+        RecentUpdatesTable(String repo){
+            this.repo = repo;
+            defaults().left();
+            table(top -> {
+                top.defaults().left();
+                top.add(this.repo).style(Styles.outlineLabel).pad(4f);
+                top.add(Core.bundle.get("mu.recent.title")).color(Pal.lightishGray);
+            }).padBottom(16f).padTop(8f).growX();
+            row();
+            pane(Styles.noBarPane, table -> table.add(rows).minHeight(200f).grow()).grow();
+
+            if(!requested) request();
+            rebuild();
+        }
+
+        private void request(){
+            requested = true;
+            loading = true;
+            Http.get("https://api.github.com/repos/" + repo + "/commits?per_page=20")
+                .timeout(30000)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "Mindustry")
+                .error(failure -> Core.app.post(() -> {
+                    loading = false;
+                    error = failure == null ? "" : failure.toString();
+                    rebuild();
+                }))
+                .submit(response -> {
+                    ArrayList<CommitInfo> parsed = parseCommits(response.getResultAsString());
+                    Core.app.post(() -> {
+                        loading = false;
+                        cached.clear();
+                        cached.addAll(parsed);
+                        rebuild();
+                    });
+                });
+        }
+
+        private void rebuild(){
+            rows.clearChildren();
+            if(loading){
+                rows.add(Core.bundle.get("mu.recent.loading")).style(Styles.outlineLabel).expand().center();
+                return;
+            }
+            if(!error.isEmpty()){
+                rows.add(Core.bundle.get("mu.recent.failed")).style(Styles.outlineLabel).expand().center();
+                return;
+            }
+            if(cached.isEmpty()){
+                rows.add(Core.bundle.get("mu.recent.empty")).style(Styles.outlineLabel).expand().center();
+                return;
+            }
+
+            rows.image().color(Pal.accent).width(1.5f).growY();
+            Table right = rows.table().growX().get();
+            String lastDate = "";
+            for(CommitInfo commit : cached){
+                String date = commit.date.length() >= 10 ? commit.date.substring(0, 10) : commit.date;
+                if(!date.equals(lastDate)){
+                    right.table(split -> {
+                        split.image().color(Pal.accent).width(8f).height(1.5f);
+                        split.add(date).color(Pal.accent).padLeft(8f).padRight(8f);
+                        split.image().color(Pal.accent).height(1.5f).padRight(8f).growX();
+                    }).padTop(lastDate.isEmpty() ? 0f : 16f).padBottom(8f).growX();
+                    right.row();
+                    lastDate = date;
+                }
+
+                final CommitInfo info = commit;
+                right.table(commitRow -> {
+                    String[] lines = info.message.split("\\n");
+                    String firstLine = lines.length == 0 ? "" : lines[0] + (lines.length > 1 ? "..." : "");
+                    commitRow.table(left -> {
+                        left.defaults().left();
+                        left.add(firstLine).style(Styles.outlineLabel).minWidth(0f).wrap().growX().left();
+                        left.row();
+                        left.add(info.author).style(Styles.outlineLabel).color(Pal.lightishGray);
+                    }).growX();
+                    commitRow.add().growX();
+                    commitRow.button(Icon.link, Styles.cleari, () -> openURI(info.url))
+                        .size(38f)
+                        .tooltip(Core.bundle.get("mu.tooltip.commit"));
+                }).padLeft(16f).growX();
+                right.row();
             }
         }
 
-        ScrollPane pane = new ScrollPane(list);
-        pane.setFadeScrollBars(false);
-        dialog.cont.add(pane).width(700f).height(Math.min(640f, Core.graphics.getHeight() * 0.75f)).row();
-        dialog.addCloseButton();
-        dialog.hidden(() -> {
-            if(changed[0]){
-                runCheck(false);
+        private static ArrayList<CommitInfo> parseCommits(String raw){
+            ArrayList<CommitInfo> result = new ArrayList<CommitInfo>();
+            try{
+                Jval root = Jval.read(raw);
+                if(root == null || !root.isArray()) return result;
+                for(Jval item : root.asArray()){
+                    if(item == null || !item.isObject()) continue;
+                    Jval commit = item.get("commit");
+                    if(commit == null) continue;
+                    Jval author = commit.get("author");
+                    String message = commit.getString("message", "");
+                    String authorName = author == null ? "" : author.getString("name", "");
+                    String date = author == null ? "" : author.getString("date", "");
+                    String url = item.getString("html_url", "");
+                    if(!message.isEmpty()) result.add(new CommitInfo(message, authorName, date, url));
+                }
+            }catch(Throwable ignored){
             }
-        });
-        dialog.show();
+            return result;
+        }
     }
 
-    private interface Boolf1<T>{
-        boolean get(T value);
-    }
-
-    private static class ButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
+    private static final class ButtonSetting extends SettingsMenuDialog.SettingsTable.Setting{
         private final Runnable action;
 
-        public ButtonSetting(String name, Runnable action){
+        ButtonSetting(String name, Runnable action){
             super(name);
             this.action = action;
         }
 
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
-            TextButton b = table.button(title, action).growX().margin(14f).pad(6f).center().get();
-            b.getLabel().setWrap(true);
+            TextButton button = table.button(title, action).growX().margin(14f).pad(6f).center().get();
+            button.getLabel().setWrap(true);
         }
     }
 }

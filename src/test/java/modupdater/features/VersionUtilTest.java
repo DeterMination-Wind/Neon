@@ -1,5 +1,7 @@
 package modupdater.features;
 
+import arc.util.serialization.Jval;
+
 public final class VersionUtilTest{
     private VersionUtilTest(){
     }
@@ -18,6 +20,22 @@ public final class VersionUtilTest{
 
         check(VersionUtil.normalizeReleaseVersion("v11.0.0", "N11").equals("N11"), "canonical release name");
         check(VersionUtil.normalizeReleaseVersion("v10.3.1", "v10.3.1").equals("10.3.1"), "legacy tag fallback");
+
+        String githubUrl = "https://github.com/DeterMination-Wind/Neon/releases/download/v11.0.0/Neon-v11.0.0.zip";
+        String mirrorUrl = "http://121.199.60.4/github/mod-assets/DeterMination-Wind/Neon/v11.0.0/Neon-v11.0.0.zip";
+        check(GithubReleaseClient.buildDownloadUrl(githubUrl, true).equals(mirrorUrl), "server mirror URL");
+        check(GithubReleaseClient.buildDownloadUrl(mirrorUrl, false).equals(githubUrl), "restore GitHub URL");
+
+        Jval backup = Jval.read("{\"tag_name\":\"v11.0.0\",\"name\":\"N11\",\"body\":\"notes\",\"assets\":[{\"name\":\"Neon-v11.0.0.zip\",\"browser_download_url\":\"" + githubUrl + "\"}]}");
+        java.util.ArrayList<GithubReleaseClient.ReleaseInfo> releases = GithubReleaseClient.parseReleasesPayload("DeterMination-Wind/Neon", backup);
+        check(releases.size() == 1, "single release backup payload");
+        check(releases.get(0).version.equals("N11"), "backup release version");
+        check(releases.get(0).body.equals("notes"), "backup release body");
+        check(releases.get(0).assets.size() == 1, "backup release asset");
+
+        Jval beta = Jval.read("{\"tag_name\":\"B11.20\",\"name\":\"B11.20\"}");
+        java.util.ArrayList<GithubReleaseClient.ReleaseInfo> betaReleases = GithubReleaseClient.parseReleasesPayload("DeterMination-Wind/Neon", beta);
+        check(betaReleases.size() == 1 && betaReleases.get(0).preRelease, "beta release channel");
     }
 
     private static void check(boolean condition, String name){

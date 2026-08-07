@@ -1,17 +1,15 @@
-# Neon B11.1
+# Neon B11.2
 
-本说明汇总 `v11.0.0` 之后至 `B11.1` 的全部提交。
+本说明汇总 `B11.1` 之后至 `B11.2` 的全部提交。
 
 ## 中文
 
-- 更新内置 LogicSugar 至 v1.1.3：修复与 MindustryX 的兼容性——加载时替换逻辑编辑对话框后，旧对话框上的浮层面板（逻辑辅助器X）会一并消失；现在会将这些面板转移到新的 LogicSugar 对话框，使其在 LogicSugar 存在时恢复显示。同时修复删除 `jump` 跳转目标后残留引用导致逻辑编辑器崩溃的问题，并同步清理 `dest` 与 `destIndex`。
-- 重构模组更新中心：移除旧的 `GithubUpdateCheck` 与 `RepoResolver`，改用新的 `GithubReleaseClient` 直接对接 GitHub Release，重写 `ModUpdateCenter` 的版本检测、更新列表与安装流程，并新增版本号回归测试。
-- 采用新的发布版本命名（`N11` / `B11.1` 格式）与数字版本码；更新器同时兼容新格式、数字版本码与历史 `vX.Y.Z` 版本。
+- 修复 MindustryX 环境下 Neon 设置页的运行时问题：总开关切换后模块不再实时移动、嵌套/折叠组状态卡死且重进设置页不重绘、折叠组内设置项右侧被截断。改用与 vanilla 行为等价的整表重绘方案绕开 MindustryX `SettingsTable` 的 `rebuild` 短路，为嵌套设置表短路自动重建，并将组布局改为随可用宽度自适应；同时为设置页增加宽度锚定，避免折叠状态下页面整体缩窄、展开时突然重绘。
+- 全面降低内置子模组的运行时资源消耗：按需缓存分类查询与计算结果并在相关事件时失效（BetterHotKey 方块分类、WhoUsesThisBuilding 遮挡/标注计算、ServerPlayerDataBase 等），Tripwire 渲染、StealthPath、ForeignServerTranslator 翻译缓存、CustomMarker、PinyinSearchSupport、Random、PatchViewer、LongWindowFlow 等模块均减少不必要的每帧重算与空转。
 
 ## English
 
-This release summarizes every commit after `v11.0.0` through `B11.1`.
+This release summarizes every commit after `B11.1` through `B11.2`.
 
-- Updates the bundled LogicSugar to v1.1.3: fixes MindustryX compatibility — after replacing the logic editor dialog at load time, floating overlay panels attached to the old dialog (Logic Support X) were discarded and disappeared; they are now transferred onto the new LogicSugar dialog so they reappear when LogicSugar is installed. Also fixes the logic editor crash caused by stale `jump` destination references after deleting a target statement, clearing both `dest` and `destIndex` during deletion.
-- Refactors the mod update center: removes the old `GithubUpdateCheck` and `RepoResolver`, switches to a new `GithubReleaseClient` that talks to GitHub Releases directly, rewrites `ModUpdateCenter`'s version detection, release list, and install flow, and adds a version-code regression test.
-- Adopts the new release naming scheme (`N11` / `B11.1`) with numeric version codes; the updater supports the new format, numeric version codes, and legacy `vX.Y.Z` versions.
+- Fixes runtime issues on the Neon settings page under MindustryX: toggling a module master switch no longer relocates the module in real time, nested/collapsed group state could freeze and the page did not repaint after re-entering settings, and settings inside collapsed groups were clipped on the right edge. The fix replaces the rebuild path with a full table redraw equivalent to vanilla behavior (bypassing MindustryX's short-circuited `SettingsTable.rebuild`), short-circuits the auto-build on nested settings tables, makes group layout adapt to the available width, and anchors the settings page width so it no longer shrinks while collapsed or suddenly repaints on expansion.
+- Reduces runtime resource consumption across bundled sub-mods: category lookups and computation results are now cached and invalidated on relevant events (BetterHotKey block categories, WhoUsesThisBuilding occlusion/label computation, ServerPlayerDataBase and more), and Tripwire rendering, StealthPath, ForeignServerTranslator translation cache, CustomMarker, PinyinSearchSupport, Random, PatchViewer, and LongWindowFlow all avoid unnecessary per-frame recomputation and idle work.

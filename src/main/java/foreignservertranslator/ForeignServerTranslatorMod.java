@@ -24,7 +24,6 @@ public class ForeignServerTranslatorMod extends Mod{
         TranslatorFeature.init();
         MarkerTranslator.init();
         TokenStats.init();
-        LanguageCatalog.init();
         Events.on(ClientLoadEvent.class, event -> installUi());
         installUi();
     }

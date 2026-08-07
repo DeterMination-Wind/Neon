@@ -73,7 +73,11 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 
@@ -118,7 +122,12 @@ public class ServerPlayerDataBaseMod extends Mod{
     private final PlayerDatabase playerDb = new PlayerDatabase();
     private final ChatDatabase chatDb = new ChatDatabase();
     private final OverlayUiBridge overlayUI;
-    private final ObjectMap<String, String> ipGeoCache = new ObjectMap<>();
+    private final Map<String, String> ipGeoCache = new LinkedHashMap<>(64, 0.75f, true){
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, String> eldest){
+            return size() > 512;
+        }
+    };
     private final ObjectSet<String> ipGeoPending = new ObjectSet<>();
     private final Seq<String> debugLines = new Seq<>();
     private final Vec2 overlayStagePos = new Vec2();
@@ -224,7 +233,10 @@ public class ServerPlayerDataBaseMod extends Mod{
             saveDirty(true);
         });
 
-        Events.on(DisposeEvent.class, e -> shutdownSemanticSearchResources(true));
+        Events.on(DisposeEvent.class, e -> {
+            shutdownSemanticSearchResources(true);
+            ipGeoExecutor.shutdownNow();
+        });
 
         Events.on(PlayerChatEvent.class, e -> {
             if(Vars.headless || e == null || e.player == null || e.message == null) return;
@@ -3769,8 +3781,14 @@ public class ServerPlayerDataBaseMod extends Mod{
         return bundle("spdb.query.field.pending", "(loading...)");
     }
 
+    private final ExecutorService ipGeoExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "spdb-ipgeo");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     private void requestIpGeoAsync(String ip){
-        Thread thread = new Thread(() -> {
+        ipGeoExecutor.execute(() -> {
             String result = bundle("spdb.query.field.failed", "(lookup failed)");
             HttpURLConnection conn = null;
 
@@ -3826,9 +3844,7 @@ public class ServerPlayerDataBaseMod extends Mod{
                 ipGeoPending.remove(ip);
                 if(overlayQueryContent != null) overlayQueryContent.refreshLast();
             });
-        }, "spdb-ipgeo");
-        thread.setDaemon(true);
-        thread.start();
+        });
     }
 
     private static String deriveUidFromUuidLike(String input){

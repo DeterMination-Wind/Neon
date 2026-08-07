@@ -28,6 +28,7 @@ public final class WorldTextTranslator{
         installed = true;
 
         Events.run(Trigger.update, () -> {
+            if(!TranslatorFeature.hasMarkedForeignServer()) return;
             try{
                 updateMessageBlockOverlay();
             }catch(Throwable error){

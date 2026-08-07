@@ -2,6 +2,7 @@ package foreignservertranslator;
 
 import arc.Core;
 import arc.struct.ObjectSet;
+import arc.struct.Seq;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -14,6 +15,8 @@ public final class TranslatorCache{
 
     private static ObjectSet<String> translationKeys;
     private static ObjectSet<String> serverLanguageKeys;
+    private static final int maxTranslationKeys = 1500;
+    private static final Seq<String> translationOrder = new Seq<>();
 
     private TranslatorCache(){
     }
@@ -21,6 +24,8 @@ public final class TranslatorCache{
     public static void init(){
         translationKeys = Core.settings.getJson(translationIndexKey, ObjectSet.class, String.class, ObjectSet::new);
         serverLanguageKeys = Core.settings.getJson(serverLanguageIndexKey, ObjectSet.class, String.class, ObjectSet::new);
+        translationOrder.clear();
+        translationOrder.addAll(translationKeys);
     }
 
     public static String getTranslation(String server, String sourceLanguage, String targetLanguage, String text){
@@ -33,7 +38,15 @@ public final class TranslatorCache{
 
         ensureLoaded();
         String key = translationKey(server, sourceLanguage, targetLanguage, text);
-        translationKeys.add(key);
+        if(translationKeys.add(key)){
+            translationOrder.add(key);
+            while(translationOrder.size > maxTranslationKeys){
+                String oldest = translationOrder.first();
+                translationOrder.remove(0);
+                translationKeys.remove(oldest);
+                Core.settings.remove(translationValuePrefix + oldest);
+            }
+        }
         Core.settings.put(translationValuePrefix + key, translated);
         Core.settings.putJson(translationIndexKey, String.class, translationKeys);
     }
@@ -60,6 +73,7 @@ public final class TranslatorCache{
             Core.settings.remove(translationValuePrefix + key);
         }
         translationKeys.clear();
+        translationOrder.clear();
         Core.settings.putJson(translationIndexKey, String.class, translationKeys);
     }
 

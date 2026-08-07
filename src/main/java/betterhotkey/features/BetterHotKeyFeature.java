@@ -85,6 +85,17 @@ public class BetterHotKeyFeature {
     private static final Seq<KeyCode> tappedKeys = new Seq<>();
     private static boolean compiledDirty = true;
 
+    private static boolean categoryCacheDirty = true;
+    private static final ObjectMap<Category, Seq<Block>> categoryBlocksWithTerrainCache = new ObjectMap<>();
+    private static final ObjectMap<Category, Seq<Block>> categoryBlocksSkipTerrainCache = new ObjectMap<>();
+
+    private static int lastBadgeCellFingerprint = -1;
+    private static Category lastBadgeCategory;
+    private static int lastBadgeSettingsFingerprint;
+    private static int lastKeepOrderFingerprint = -1;
+    private static Category lastKeepOrderCategory;
+    private static int lastKeepOrderSettingsFingerprint;
+
     private static KeyCode pendingFirst;
     private static long pendingAt;
 
@@ -150,6 +161,11 @@ public class BetterHotKeyFeature {
             lastHandledBlockSelectSeqMillis = 0L;
             lastHandledBlockSelectSeq = -1;
             lastHandledBlockSelectEnd = false;
+            categoryCacheDirty = true;
+        });
+
+        Events.on(EventType.UnlockEvent.class, e -> {
+            categoryCacheDirty = true;
         });
 
         // Hook update after the UI is fully created.
@@ -286,6 +302,7 @@ public class BetterHotKeyFeature {
 
     private static void saveSkipTerrainIgnoreList() {
         Core.settings.putJson(keySkipTerrainIgnoreList, String.class, skipTerrainIgnoreNames);
+        categoryCacheDirty = true;
     }
 
     private static void refreshSettings() {
@@ -790,6 +807,9 @@ public class BetterHotKeyFeature {
     }
 
     private static Seq<Block> getByCategoryWithTerrain(Category cat) {
+        Seq<Block> cached = categoryBlocksWithTerrainCache.get(cat);
+        if (cached != null) return cached;
+
         Seq<Block> out = new Seq<>();
         for (Block block : content.blocks()) {
             if (block == null) continue;
@@ -798,10 +818,14 @@ public class BetterHotKeyFeature {
             if (!block.environmentBuildable()) continue;
             out.add(block);
         }
+        categoryBlocksWithTerrainCache.put(cat, out);
         return out;
     }
 
     private static Seq<Block> getByCategorySkipTerrain(Category cat) {
+        Seq<Block> cached = categoryBlocksSkipTerrainCache.get(cat);
+        if (cached != null) return cached;
+
         Seq<Block> out = new Seq<>();
 
         Block anchor = null;
@@ -834,6 +858,7 @@ public class BetterHotKeyFeature {
             if (!canSelect(block)) continue;
             out.add(block);
         }
+        categoryBlocksSkipTerrainCache.put(cat, out);
         return out;
     }
 
@@ -1004,6 +1029,17 @@ public class BetterHotKeyFeature {
             Table table = (Table) tableObj;
             Category cat = (Category) catObj;
 
+            int keepOrderFingerprint = tableContentFingerprint(table);
+            int keepOrderSettingsFingerprint = (keepOrder ? 1 : 0) | (menuColumns << 1);
+            if (!categoryCacheDirty && keepOrderFingerprint == lastKeepOrderFingerprint
+                && cat == lastKeepOrderCategory && keepOrderSettingsFingerprint == lastKeepOrderSettingsFingerprint) {
+                return;
+            }
+            categoryCacheDirty = false;
+            lastKeepOrderFingerprint = keepOrderFingerprint;
+            lastKeepOrderCategory = cat;
+            lastKeepOrderSettingsFingerprint = keepOrderSettingsFingerprint;
+
             ObjectMap<String, Element> actorByBlock = new ObjectMap<>();
             Seq<String> currentOrder = new Seq<>();
 
@@ -1056,6 +1092,17 @@ public class BetterHotKeyFeature {
             }
         } catch (Throwable ignored) {
         }
+    }
+
+    private static int tableContentFingerprint(Table table) {
+        if (table == null) return 0;
+        int fp = 0;
+        for (Cell<?> cell : table.getCells()) {
+            Element actor = cell.get();
+            if (actor == null || actor.name == null) continue;
+            fp = fp * 31 + actor.name.hashCode();
+        }
+        return fp;
     }
 
     private static int detectBuildMenuColumns(Table table) {
@@ -1295,6 +1342,7 @@ public class BetterHotKeyFeature {
         if (ui == null || ui.hudfrag == null || ui.hudfrag.blockfrag == null) return;
         if (state == null || !state.isGame()) return;
 
+        boolean compiledWasDirty = compiledDirty;
         rebuildCompiledBindings();
         tryInitReflection();
         if (!reflectReady) return;
@@ -1307,6 +1355,23 @@ public class BetterHotKeyFeature {
 
             Table table = (Table) tableObj;
             Category cat = (Category) catObj;
+
+            int cellFingerprint = tableContentFingerprint(table);
+            int settingsFingerprint = (enabled ? 1 : 0) | (showIconHotkeys ? 2 : 0) | (customEnabled ? 4 : 0) | (skipTerrainHotkeys ? 8 : 0);
+            settingsFingerprint = settingsFingerprint * 31 + Float.floatToIntBits(badgeFontScale);
+            settingsFingerprint = settingsFingerprint * 31 + menuColumns;
+            settingsFingerprint = settingsFingerprint * 31
+                + ((int)(iconHotkeyColor.r * 255f) << 16) + ((int)(iconHotkeyColor.g * 255f) << 8) + (int)(iconHotkeyColor.b * 255f);
+
+            if (!compiledWasDirty && !categoryCacheDirty && cellFingerprint == lastBadgeCellFingerprint
+                && cat == lastBadgeCategory && settingsFingerprint == lastBadgeSettingsFingerprint) {
+                return;
+            }
+            categoryCacheDirty = false;
+            lastBadgeCellFingerprint = cellFingerprint;
+            lastBadgeCategory = cat;
+            lastBadgeSettingsFingerprint = settingsFingerprint;
+
             for (Cell<?> cell : table.getCells()) {
                 Element actor = cell.get();
                 if (!(actor instanceof ImageButton) || actor.name == null || !actor.name.startsWith("block-")) continue;

@@ -40,6 +40,7 @@ public final class TripwireRenderer {
     private static final float minimapBaseSize = 16f;
     private static final Interval interval = new Interval(3);
     private static final Rect viewRect = new Rect();
+    private static final Rect cameraRect = new Rect();
     private static final Mat transform = new Mat();
     private static final Mat oldTransform = new Mat();
 
@@ -57,7 +58,10 @@ public final class TripwireRenderer {
     private static void drawWorld() {
         if (!TripwireSettings.showFences() || state == null || !state.isGame()) return;
         Draw.z(156f);
-        for (TripwireFence fence : TripwireData.fences) drawFence(fence, true, 1f);
+        Core.camera.bounds(cameraRect);
+        for (TripwireFence fence : TripwireData.fences) {
+            if (fence.intersects(cameraRect)) drawFence(fence, true, 1f);
+        }
         drawCreatingPreview();
         drawDeleteRect();
         Draw.reset();
@@ -136,31 +140,23 @@ public final class TripwireRenderer {
     private static void drawUnitIcons(TripwireFence fence, float scale) {
         if (fence.selectedUnits.isEmpty()) return;
         float size = Math.max(4f, TripwireSettings.iconSize() * scale);
-        if (selectsAllNonCoreUnits(fence)) {
+        refreshFenceIconCache(fence);
+        if (fence.cachedAllUnits) {
             drawAllUnitsIcon(fence, size, scale);
             return;
         }
 
-        Seq<UnitType> icons = new Seq<>();
-        for (UnitType type : fence.selectedUnits) {
-            if (type != null && type.uiIcon != null) icons.add(type);
-        }
+        Seq<UnitType> icons = fence.cachedIcons;
         if (icons.isEmpty()) return;
-        icons.sort((a, b) -> Integer.compare(a.id, b.id));
 
+        ensureFenceLengths(fence);
         int segments = fence.points.size - 1;
         if (segments <= 0) return;
-        float[] lengths = new float[segments];
-        float total = 0f;
-        for (int i = 0; i < segments; i++) {
-            Vec2 a = fence.points.get(i), b = fence.points.get(i + 1);
-            lengths[i] = Mathf.dst(a.x, a.y, b.x, b.y);
-            total += lengths[i];
-        }
+        float total = fence.cachedTotal;
         if (total <= 0.001f) return;
 
         float threshold = 0.5f * icons.size * size;
-        Seq<IconRun> runs = buildIconRuns(lengths, threshold);
+        Seq<IconRun> runs = buildIconRuns(fence.cachedLengths, threshold);
         if (runs.size == 1 && runs.first().length < threshold) {
             drawIconsOnRun(fence, icons, 0, segments - 1, total, size, scale);
             return;
@@ -169,6 +165,45 @@ public final class TripwireRenderer {
         for (IconRun run : runs) {
             drawIconsOnRun(fence, icons, run.start, run.end, run.length, size, scale);
         }
+    }
+
+    private static void refreshFenceIconCache(TripwireFence fence) {
+        int fp = fence.direction.ordinal() + 31;
+        for (UnitType type : fence.selectedUnits) {
+            fp = fp * 31 + (type == null ? 0 : type.id);
+        }
+        if (fence.iconsValid && fp == fence.iconsFingerprint) return;
+
+        fence.iconsFingerprint = fp;
+        fence.iconsValid = true;
+        fence.cachedAllUnits = selectsAllNonCoreUnits(fence);
+        Seq<UnitType> icons = new Seq<>();
+        for (UnitType type : fence.selectedUnits) {
+            if (type != null && type.uiIcon != null) icons.add(type);
+        }
+        icons.sort((a, b) -> Integer.compare(a.id, b.id));
+        fence.cachedIcons = icons;
+    }
+
+    private static void ensureFenceLengths(TripwireFence fence) {
+        if (fence.lengthsCached) return;
+        int segments = fence.points.size - 1;
+        if (segments <= 0) {
+            fence.lengthsCached = true;
+            fence.cachedLengths = new float[0];
+            fence.cachedTotal = 0f;
+            return;
+        }
+        float[] lengths = new float[segments];
+        float total = 0f;
+        for (int i = 0; i < segments; i++) {
+            Vec2 a = fence.points.get(i), b = fence.points.get(i + 1);
+            lengths[i] = Mathf.dst(a.x, a.y, b.x, b.y);
+            total += lengths[i];
+        }
+        fence.cachedLengths = lengths;
+        fence.cachedTotal = total;
+        fence.lengthsCached = true;
     }
 
     private static boolean selectsAllNonCoreUnits(TripwireFence fence) {
@@ -183,13 +218,8 @@ public final class TripwireRenderer {
     }
 
     private static void drawAllUnitsIcon(TripwireFence fence, float size, float scale) {
-        int segments = fence.points.size - 1;
-        if (segments <= 0) return;
-        float total = 0f;
-        for (int i = 0; i < segments; i++) {
-            Vec2 a = fence.points.get(i), b = fence.points.get(i + 1);
-            total += Mathf.dst(a.x, a.y, b.x, b.y);
-        }
+        ensureFenceLengths(fence);
+        float total = fence.cachedTotal;
         if (total <= 0.001f) return;
         drawAllIconAtDistance(fence, total / 2f, size, scale);
     }
@@ -373,7 +403,9 @@ public final class TripwireRenderer {
             transform.translate(tilesize / 2f, tilesize / 2f);
             Draw.trans(transform);
 
-            for (TripwireFence fence : TripwireData.fences) drawFence(fence, false, invScale);
+            for (TripwireFence fence : TripwireData.fences) {
+                if (fence.intersects(r)) drawFence(fence, false, invScale);
+            }
 
             Draw.trans(oldTransform);
             Draw.reset();

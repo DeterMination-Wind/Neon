@@ -67,6 +67,12 @@ public class WhoUsesThisBuildingMod extends Mod{
     private long lastScanAt;
     private float fontScale = 1f;
 
+    private final Seq<RectArea> blockObstacles = new Seq<>();
+    private final Seq<LabelPlacement> occupiedPlacements = new Seq<>();
+    private final Seq<PlacementDraw> computedDraws = new Seq<>();
+    private final Seq<CrowdedDraw> crowdedDraws = new Seq<>();
+    private Building lastPlacementTarget;
+
     public WhoUsesThisBuildingMod(){
         Core.settings.defaults(keyEnabled, true);
         Core.settings.defaults(keyHotkey, defaultHotkey);
@@ -134,29 +140,47 @@ public class WhoUsesThisBuildingMod extends Mod{
     private void drawOverlay(){
         if(!overlayActive || matches.isEmpty()) return;
 
-        Seq<RectArea> blockObstacles = new Seq<>();
-        for(ProcessorMatch match : matches){
-            LogicBuild processor = match.processor;
-            if(processor == null || !processor.isValid()) continue;
-            Drawf.square(processor.x, processor.y, processor.block.size * tilesize / 2f + 1f, Color.sky);
-            float half = processor.block.size * tilesize / 2f + 5f;
-            blockObstacles.add(new RectArea(processor.id, processor.x - half, processor.y - half, processor.x + half, processor.y + half));
-        }
+        boolean recompute = lastPlacementTarget != currentTarget;
+        lastPlacementTarget = currentTarget;
 
-        Seq<LabelPlacement> occupied = new Seq<>();
-        for(ProcessorMatch match : matches){
-            LogicBuild processor = match.processor;
-            if(processor == null || !processor.isValid()) continue;
-            if(isCardinallyCrowded(processor)){
-                String compact = "L" + match.line;
-                drawCenteredText(processor, compact, Pal.accent, fontScale);
-                continue;
+        if(recompute){
+            blockObstacles.clear();
+            for(ProcessorMatch match : matches){
+                LogicBuild processor = match.processor;
+                if(processor == null || !processor.isValid()) continue;
+                float half = processor.block.size * tilesize / 2f + 5f;
+                blockObstacles.add(new RectArea(processor.id, processor.x - half, processor.y - half, processor.x + half, processor.y + half));
             }
 
-            LabelPlacement placement = chooseLabelPlacement(processor, match.text, fontScale, occupied, blockObstacles);
-            if(placement == null) continue;
-            drawPlaceTextScaled(match.text, placement.centerX, placement.lineY, processor.x, processor.y, Pal.accent, false, fontScale);
-            occupied.add(placement);
+            occupiedPlacements.clear();
+            computedDraws.clear();
+            crowdedDraws.clear();
+            for(ProcessorMatch match : matches){
+                LogicBuild processor = match.processor;
+                if(processor == null || !processor.isValid()) continue;
+                if(isCardinallyCrowded(processor)){
+                    crowdedDraws.add(new CrowdedDraw(processor, "L" + match.line));
+                    continue;
+                }
+                LabelPlacement placement = chooseLabelPlacement(processor, match.text, fontScale, occupiedPlacements, blockObstacles);
+                if(placement == null) continue;
+                occupiedPlacements.add(placement);
+                computedDraws.add(new PlacementDraw(placement, match.text, processor.x, processor.y));
+            }
+        }
+
+        for(RectArea obstacle : blockObstacles){
+            float centerX = (obstacle.minX + obstacle.maxX) / 2f;
+            float centerY = (obstacle.minY + obstacle.maxY) / 2f;
+            Drawf.square(centerX, centerY, (obstacle.maxX - obstacle.minX) / 2f - 4f, Color.sky);
+        }
+
+        for(CrowdedDraw crowded : crowdedDraws){
+            drawCenteredText(crowded.processor, crowded.text, Pal.accent, fontScale);
+        }
+
+        for(PlacementDraw draw : computedDraws){
+            drawPlaceTextScaled(draw.text, draw.placement.centerX, draw.placement.lineY, draw.anchorX, draw.anchorY, Pal.accent, false, fontScale);
         }
     }
 
@@ -646,6 +670,30 @@ public class WhoUsesThisBuildingMod extends Mod{
             this.processor = processor;
             this.text = text;
             this.line = line;
+        }
+    }
+
+    private static final class PlacementDraw{
+        final LabelPlacement placement;
+        final String text;
+        final float anchorX;
+        final float anchorY;
+
+        PlacementDraw(LabelPlacement placement, String text, float anchorX, float anchorY){
+            this.placement = placement;
+            this.text = text;
+            this.anchorX = anchorX;
+            this.anchorY = anchorY;
+        }
+    }
+
+    private static final class CrowdedDraw{
+        final Building processor;
+        final String text;
+
+        CrowdedDraw(Building processor, String text){
+            this.processor = processor;
+            this.text = text;
         }
     }
 

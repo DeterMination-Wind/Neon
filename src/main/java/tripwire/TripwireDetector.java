@@ -3,6 +3,7 @@ package tripwire;
 import arc.Events;
 import arc.math.geom.Vec2;
 import arc.struct.ObjectMap;
+import arc.struct.Seq;
 import arc.util.Time;
 import mindustry.game.EventType;
 import mindustry.gen.Groups;
@@ -14,6 +15,7 @@ import static mindustry.Vars.state;
 public final class TripwireDetector {
     private static final ObjectMap<Unit, Vec2> lastPositions = new ObjectMap<>();
     private static float nextDetectTime;
+    private static final Seq<Unit> staleUnits = new Seq<>();
 
     private TripwireDetector() {
     }
@@ -34,9 +36,22 @@ public final class TripwireDetector {
         if (Time.time < nextDetectTime) return;
         nextDetectTime = Time.time + TripwireSettings.detectionMillis() / 1000f * 60f;
 
+        staleUnits.clear();
+        for (Unit unit : lastPositions.keys()) {
+            if (unit == null || !unit.isValid() || !unit.isAdded() || unit.dead()) staleUnits.add(unit);
+        }
+        for (int i = 0; i < staleUnits.size; i++) lastPositions.remove(staleUnits.get(i));
+
         for (int i = 0; i < Groups.unit.size(); i++) {
             Unit unit = Groups.unit.index(i);
-            if (unit == null || !unit.isValid() || unit.type == null) continue;
+            if (unit == null || !unit.isValid() || unit.type == null) {
+                if (unit != null) lastPositions.remove(unit);
+                continue;
+            }
+            if (!unit.isAdded() || unit.dead()) {
+                lastPositions.remove(unit);
+                continue;
+            }
             Vec2 last = lastPositions.get(unit);
             if (last != null && unit.team != player.team()) {
                 checkUnit(unit, last.x, last.y);

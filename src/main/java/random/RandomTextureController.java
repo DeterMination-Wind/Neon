@@ -23,6 +23,7 @@ public final class RandomTextureController{
     private final RandomStateStore store;
     private final IdentityHashMap<UnlockableContent, Visual> visuals = new IdentityHashMap<>();
     private final LinkedHashMap<String, Visual> byId = new LinkedHashMap<>();
+    private final List<Visual> animatedItems = new ArrayList<>();
     private Map<String, String> mapping = new LinkedHashMap<>();
     private boolean active;
 
@@ -66,6 +67,7 @@ public final class RandomTextureController{
             if(visual == null) continue;
             visuals.put(content, visual);
             byId.put(id(content), visual);
+            if(content instanceof Item && ((Item)content).frames > 0) animatedItems.add(visual);
         }
     }
 
@@ -121,7 +123,7 @@ public final class RandomTextureController{
     /** Called after Mindustry's own animated item listeners on every update tick. */
     public void update(){
         if(!active) return;
-        for(Visual target : visuals.values()){
+        for(Visual target : animatedItems){
             if(target.item == null || target.item.frames <= 0 || target.appliedFull == null || target.appliedUi == null) continue;
             int frameCount = Math.max(1, target.item.frames * (target.item.transitionFrames + 1));
             float frameTime = Math.max(0.001f, target.item.frameTime);
@@ -141,6 +143,7 @@ public final class RandomTextureController{
         for(Visual visual : visuals.values()) visual.restore();
         visuals.clear();
         byId.clear();
+        animatedItems.clear();
         mapping = new LinkedHashMap<>();
         active = false;
     }

@@ -107,6 +107,7 @@ public final class NeonProfilerFeature{
         Events.run(EventType.Trigger.update, () -> {
             if(Vars.headless) return;
             NeonProfiler.setShowAll(Core.settings.getBool(keyShowAll, false));
+            if(!NeonProfiler.isEnabled()) return;
             if(Time.time >= nextAttachAttempt){
                 nextAttachAttempt = Time.time + 60f;
                 ensureAttached();

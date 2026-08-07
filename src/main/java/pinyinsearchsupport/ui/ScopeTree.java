@@ -71,8 +71,8 @@ public final class ScopeTree{
     }
 
     public void postFilter(String query, MatchEngine.MatchOptions opts){
-        if(query == null || query.isEmpty()) return;
         SearchTextExtractor.invalidate();
+        if(query == null || query.isEmpty()) return;
         for(int i = 0; i < scopes.size; i++){
             scopes.get(i).filter(query, opts);
         }

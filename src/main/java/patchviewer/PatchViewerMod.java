@@ -110,6 +110,9 @@ public class PatchViewerMod extends Mod{
     private UnlockableContent lastQuickHudContent;
     private float lastQuickHudWidth = -1f;
     private Table lastBuildInfoRoot;
+    private UnlockableContent lastBuildInfoContent;
+    private CompactDiff lastBuildInfoCompact;
+    private Table lastBuildInfoRebuildRoot;
     private boolean baselineCaptured;
     private boolean placementReflectReady;
     private boolean mi2uAvailable;
@@ -222,6 +225,7 @@ public class PatchViewerMod extends Mod{
 
     private void captureBaselineAtStartup(){
         if(baselineCaptured || Vars.content == null) return;
+        if(!isPatchViewerEnabled()) return;
         baselineSnapshots.clear();
 
         Seq<UnlockableContent> all = collectAllContents();
@@ -263,6 +267,7 @@ public class PatchViewerMod extends Mod{
     }
 
     private void updateQuickDisplay(){
+        if(!baselineCaptured && isPatchViewerEnabled()) captureBaselineAtStartup();
         if(!shouldShowQuickDiff()){
             hideQuickHud();
             hideInjectedRows(lastBuildInfoRoot);
@@ -457,6 +462,12 @@ public class PatchViewerMod extends Mod{
         Table root = target == null ? null : target.topTable;
         if(root == null) return false;
         lastBuildInfoRoot = root;
+
+        boolean changed = target.content != lastBuildInfoContent || compact != lastBuildInfoCompact || root != lastBuildInfoRebuildRoot;
+        lastBuildInfoContent = target.content;
+        lastBuildInfoCompact = compact;
+        lastBuildInfoRebuildRoot = root;
+
         Table extra = (Table)root.find(quickBuildInfoName);
         if(extra == null){
             extra = new Table();
@@ -464,6 +475,9 @@ public class PatchViewerMod extends Mod{
             insertBuildInfoTable(root, extra);
         }
         extra.visible = true;
+
+        if(!changed) return true;
+
         extra.clearChildren();
         extra.left().top().defaults().left().top();
 

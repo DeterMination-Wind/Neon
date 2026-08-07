@@ -137,6 +137,7 @@ public class BetterMiniMapFeature {
         });
 
         Events.run(EventType.Trigger.update, () -> {
+            if (!Core.settings.getBool(keyEnabled, false)) return;
             if (interval.check(idSettings, settingsRefreshTime)) refreshSettings();
             if (interval.check(idAttach, attachRefreshTime)) ensureOverlayAttached();
         });

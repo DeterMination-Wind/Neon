@@ -6,21 +6,29 @@ import arc.util.Http;
 import arc.util.Log;
 import arc.util.serialization.Jval;
 import arc.util.serialization.Jval.JsonMap;
+import mindustry.Vars;
 
 public final class LanguageCatalog{
     private static final String microsoftLanguages = "https://api.cognitive.microsofttranslator.com/languages?api-version=3.0&scope=translation";
     private static Seq<Language> languages = fallbackLanguages();
     private static boolean loading;
     private static boolean requested;
+    private static boolean started;
     private static String status = "fallback";
 
     private LanguageCatalog(){
     }
 
     public static void init(){
-        if(requested) return;
+        if(requested || Vars.headless) return;
         requested = true;
         refresh();
+    }
+
+    public static void ensureStarted(){
+        if(started) return;
+        started = true;
+        init();
     }
 
     public static void refresh(){
@@ -57,19 +65,23 @@ public final class LanguageCatalog{
     }
 
     public static Seq<Language> languages(){
+        ensureStarted();
         return languages;
     }
 
     public static String status(){
+        ensureStarted();
         return status;
     }
 
     public static String display(String code){
+        ensureStarted();
         Language language = find(code);
         return language == null ? code : language.label();
     }
 
     public static Language find(String code){
+        ensureStarted();
         if(code == null) return null;
         for(Language language : languages){
             if(language.code.equalsIgnoreCase(code)) return language;

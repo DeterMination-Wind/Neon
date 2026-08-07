@@ -224,6 +224,14 @@ public class CustomMarkerFeature {
     private static void update() {
         try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("CM", "Update", "update", NeonProfiler.threadMain)){
         reloadRuntimeSettings();
+
+        if(!enabled){
+            closePanel();
+            removeMarkHitter();
+            syncOverlayButtonWindow(false);
+            return;
+        }
+
         guardChatWindowScrollFocus();
 
         if (Time.time >= nextAttachTryAt) {
@@ -233,11 +241,6 @@ public class CustomMarkerFeature {
         syncOverlayWindowStateFromOverlayUi();
         syncOverlayButtonWindow(false);
 
-        if (!enabled) {
-            closePanel();
-            removeMarkHitter();
-            return;
-        }
         if (!canUseMarkerUi()) {
             closePanel();
             removeMarkHitter();

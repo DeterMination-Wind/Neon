@@ -88,6 +88,12 @@ public class LongWindowFlowFeature {
     private static boolean itemIconCacheReady;
     private static int itemIconCacheSize = -1;
 
+    private static ItemModule lastFlowStructureItems;
+    private static boolean lastFlowStructureShowTotal;
+    private static final ObjectMap<Integer, Label> flowItemLabels = new ObjectMap<>();
+    private static final Seq<Integer> flowItemOrder = new Seq<>();
+    private static Label totalFlowLabel;
+
     private static Building trackedBuild;
     private static BuildFlowTracker trackedTracker;
 
@@ -383,8 +389,7 @@ public class LongWindowFlowFeature {
     private static void rebuildExtraRows(Table extra, ItemModule flowItems, BuildFlowTracker tracker) {
         if (extra == null || flowItems == null || tracker == null) return;
 
-        extra.clearChildren();
-        extra.left();
+        ensureFlowRowStructure(extra, flowItems);
 
         long now = Time.millis();
         String speedLabel = Core.bundle.format("bls.flow.avg.label", windowSeconds);
@@ -394,18 +399,18 @@ public class LongWindowFlowFeature {
         int totalCount = 0;
         int shown = 0;
 
-        for (Item item : content.items()) {
-            if (!flowItems.hasFlowItem(item)) continue;
+        for (int i = 0; i < flowItemOrder.size; i++) {
+            int itemId = flowItemOrder.get(i);
+            Label line = flowItemLabels.get(itemId);
+            if (line == null) continue;
+            Item item = content.item(itemId);
+            if (item == null) continue;
 
-            float avg = tracker.average(item.id, now);
+            float avg = tracker.average(itemId, now);
             String valueText = avg < 0f
                 ? Core.bundle.get("bls.flow.na")
                 : Strings.fixed(avg, decimals) + perSecond;
-
-            extra.image(item.uiIcon).scaling(Scaling.fit).padRight(3f);
-            Label line = extra.add(speedLabel + ": " + valueText).left().color(Color.lightGray).get();
-            line.setWrap(false);
-            extra.row();
+            line.setText(speedLabel + ": " + valueText);
 
             if (avg >= 0f) {
                 total += avg;
@@ -414,14 +419,37 @@ public class LongWindowFlowFeature {
             shown++;
         }
 
-        if (showTotal && shown > 0) {
+        if (showTotal && totalFlowLabel != null) {
             String valueText = totalCount == 0
                 ? Core.bundle.get("bls.flow.na")
                 : Strings.fixed(total, decimals) + perSecond;
-            extra.add(Core.bundle.get("bls.flow.total.label") + ": " + valueText)
-                .left()
-                .color(Color.lightGray)
-                .colspan(2);
+            totalFlowLabel.setText(Core.bundle.get("bls.flow.total.label") + ": " + valueText);
+        }
+    }
+
+    private static void ensureFlowRowStructure(Table extra, ItemModule flowItems) {
+        if (lastFlowStructureItems == flowItems && lastFlowStructureShowTotal == showTotal && extra.getChildren().size > 0) return;
+
+        extra.clearChildren();
+        extra.left();
+        flowItemLabels.clear();
+        flowItemOrder.clear();
+        totalFlowLabel = null;
+        lastFlowStructureItems = flowItems;
+        lastFlowStructureShowTotal = showTotal;
+
+        for (Item item : content.items()) {
+            if (!flowItems.hasFlowItem(item)) continue;
+            extra.image(item.uiIcon).scaling(Scaling.fit).padRight(3f);
+            Label line = extra.add("").left().color(Color.lightGray).get();
+            line.setWrap(false);
+            flowItemLabels.put((int)item.id, line);
+            flowItemOrder.add((int)item.id);
+            extra.row();
+        }
+
+        if (showTotal && flowItemOrder.size > 0) {
+            totalFlowLabel = extra.add("").left().color(Color.lightGray).colspan(2).get();
             extra.row();
         }
     }

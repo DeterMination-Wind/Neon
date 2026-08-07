@@ -6,7 +6,7 @@ import arc.func.Cons;
 import arc.struct.ObjectMap;
 import arc.util.Log;
 import mindustry.Vars;
-import mindustry.game.EventType.Trigger;
+import mindustry.game.EventType;
 import mindustry.game.MapObjectives.MapObjective;
 import mindustry.game.MapObjectives.ObjectiveMarker;
 import mindustry.game.MapObjectives.ShapeTextMarker;
@@ -27,7 +27,8 @@ public final class MarkerTranslator{
         if(installed) return;
         installed = true;
 
-        Events.run(Trigger.draw, () -> {
+        Events.run(EventType.Trigger.draw, () -> {
+            if(!TranslatorFeature.hasMarkedForeignServer()) return;
             try{
                 for(ObjectiveMarker marker : Vars.state.markers){
                     updateMarker(marker);
@@ -48,6 +49,9 @@ public final class MarkerTranslator{
                 }
             }
         });
+
+        Events.on(EventType.WorldLoadEvent.class, e -> originalTexts.clear());
+        Events.on(EventType.ResetEvent.class, e -> originalTexts.clear());
     }
 
     public static boolean shouldTranslate(String text){

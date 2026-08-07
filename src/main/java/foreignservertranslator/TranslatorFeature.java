@@ -44,6 +44,8 @@ public final class TranslatorFeature{
     private static final Seq<ChatEntry> chatHistory = new Seq<>();
     private static final Seq<RecentPlayerLine> recentPlayerLines = new Seq<>();
     private static final Seq<PendingServerTranslation> pendingServerTranslations = new Seq<>();
+    private static final int maxInFlightChatTranslations = 3;
+    private static int inFlightChatTranslations;
     private static final ObjectSet<String> detectingServers = new ObjectSet<>();
     private static ObjectSet<String> foreignServers;
     private static String selectedServerKey;
@@ -227,10 +229,18 @@ public final class TranslatorFeature{
     public static void translateServerChatLine(String renderedMessage){
         if(!shouldTranslateServerText(renderedMessage) || isRecentPlayerChatLine(renderedMessage)) return;
 
+        if(inFlightChatTranslations >= maxInFlightChatTranslations){
+            Time.runTask(Math.min(2f, 0.5f + inFlightChatTranslations * 0.25f), () -> translateServerChatLine(renderedMessage));
+            return;
+        }
+        inFlightChatTranslations++;
+
         TranslationSlot slot = reserveIncomingSlot("", renderedMessage);
         translateWorldText(renderedMessage, translated -> {
+            inFlightChatTranslations--;
             completeIncomingSlot(slot, "[lightgray]=> " + renderMarkup(translated) + "[]");
         }, error -> {
+            inFlightChatTranslations--;
             Log.warn("ForeignServerTranslator failed to translate server chat line: @", error.getMessage());
             completeIncomingSlot(slot, Core.bundle.get("fst.translate.server.failed", "[scarlet]Failed to translate server message.[]"));
         });

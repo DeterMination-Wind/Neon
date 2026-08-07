@@ -15,6 +15,16 @@ public class TripwireFence {
     public DirectionMode direction = DirectionMode.all;
     public Team team;
 
+    /** Cached per-segment lengths; points never change after a fence is added. */
+    public transient boolean lengthsCached;
+    public transient float[] cachedLengths;
+    public transient float cachedTotal;
+    /** Cache of selectsAllNonCoreUnits + sorted icons, keyed by selection fingerprint. */
+    public transient int iconsFingerprint;
+    public transient boolean iconsValid;
+    public transient boolean cachedAllUnits;
+    public transient Seq<UnitType> cachedIcons;
+
     public TripwireFence(int id, Team team) {
         this.id = id;
         this.team = team;

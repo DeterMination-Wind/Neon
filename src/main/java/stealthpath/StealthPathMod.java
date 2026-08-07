@@ -320,6 +320,7 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private ThreatMap threatMapScratch;
     private short[] safeDistScratch;
     private int[] safeDistQueueScratch;
+    private float nextHoverDpsDebugUpdate = 0f;
 
     // Reused threat lists for building ThreatMap (sequential use only).
     private final Seq<Threat> tmpThreats = new Seq<>();
@@ -1229,11 +1230,22 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private void registerTriggers(){
         Events.run(Trigger.update, this::update);
         Events.run(Trigger.draw, this::draw);
+        Events.on(ResetEvent.class, e -> releaseThreatMapScratch());
+        Events.on(WorldLoadEvent.class, e -> releaseThreatMapScratch());
+    }
+
+    private void releaseThreatMapScratch(){
+        threatMapScratch = null;
+        safeDistScratch = null;
+        safeDistQueueScratch = null;
     }
 
     private void update(){
         if(mobile) return;
-        if(!Core.settings.getBool(keyEnabled, true)) return;
+        if(!Core.settings.getBool(keyEnabled, true)){
+            releaseThreatMapScratch();
+            return;
+        }
 
         ensureOverlayWindowsAttached();
 
@@ -2477,6 +2489,9 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     private void updateHoverTurretDpsDebugData(){
+        if(Time.time < nextHoverDpsDebugUpdate) return;
+        nextHoverDpsDebugUpdate = Time.time + previewRefreshInterval();
+
         if(world == null || player == null){
             clearHoverDpsDebugData("(not in game)");
             return;

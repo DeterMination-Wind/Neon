@@ -95,6 +95,7 @@ public class BetterScreenShotFeature {
         Events.on(EventType.WorldLoadEvent.class, e -> updateSizeHint());
 
         Events.run(EventType.Trigger.update, () -> {
+            if (!Core.settings.getBool(keyEnabled, true)) return;
             try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BSS", "Update", "update", NeonProfiler.threadMain)){
             if (interval.check(idSettings, settingsRefreshTime)) refreshSettings();
             if (interval.check(idAttach, attachRefreshTime)) ensurePanelAttached();

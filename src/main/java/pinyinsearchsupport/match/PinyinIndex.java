@@ -11,6 +11,7 @@ import net.sourceforge.pinyin4j.format.HanyuPinyinVCharType;
 public final class PinyinIndex{
     private static final HanyuPinyinOutputFormat format = new HanyuPinyinOutputFormat();
     private static final ObjectMap<String, Profile> cache = new ObjectMap<>();
+    private static final int maxCacheEntries = 2048;
 
     static{
         format.setCaseType(HanyuPinyinCaseType.LOWERCASE);
@@ -26,6 +27,7 @@ public final class PinyinIndex{
         Profile p = cache.get(key);
         if(p != null) return p;
         p = build(key);
+        if(cache.size >= maxCacheEntries) cache.clear();
         cache.put(key, p);
         return p;
     }

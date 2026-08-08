@@ -6,6 +6,7 @@ import dataclasses
 import datetime as dt
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -711,6 +712,107 @@ def inject_overlay_compat_hooks(mod_id: str, java_src: str) -> str:
     return java_src
 
 
+def brace_delta(src: str) -> int:
+    """Counts { minus } outside of strings, chars and comments (lexical sanity check)."""
+    delta = 0
+    i = 0
+    n = len(src)
+    in_line_comment = False
+    in_block_comment = False
+    in_string = False
+    in_char = False
+    while i < n:
+        ch = src[i]
+        nxt = src[i + 1] if i + 1 < n else ""
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+        elif in_block_comment:
+            if ch == "*" and nxt == "/":
+                in_block_comment = False
+                i += 1
+        elif in_string:
+            if ch == "\\":
+                i += 1
+            elif ch == '"':
+                in_string = False
+        elif in_char:
+            if ch == "\\":
+                i += 1
+            elif ch == "'":
+                in_char = False
+        elif ch == "/" and nxt == "/":
+            in_line_comment = True
+            i += 1
+        elif ch == "/" and nxt == "*":
+            in_block_comment = True
+            i += 1
+        elif ch == '"':
+            in_string = True
+        elif ch == "'":
+            in_char = True
+        elif ch == "{":
+            delta += 1
+        elif ch == "}":
+            delta -= 1
+        i += 1
+    return delta
+
+
+def assert_injected_structure(mod_id: str, file_name: str, java_src: str) -> List[str]:
+    """
+    Structural assertions over a hook-injected main class.
+
+    inject_bek_hooks() rewrites upstream text, so any unrecognized upstream shape may
+    silently leave the bundled build registering duplicate settings/UIs (or none).
+    These assertions fail fast with a precise pointer when the injection contract breaks.
+    Returns a list of problems; empty means the injection looks structurally sound.
+    """
+    problems: List[str] = []
+
+    flag_count = len(re.findall(r"public\s+static\s+boolean\s+bekBundled\s*=", java_src))
+    if flag_count != 1:
+        problems.append(
+            f"expected exactly 1 'public static boolean bekBundled' declaration, found {flag_count}"
+        )
+
+    method_count = len(
+        re.findall(
+            r"public\s+void\s+bekBuildSettings\s*\(\s*SettingsMenuDialog\.SettingsTable\s+\w+\s*\)\s*\{",
+            java_src,
+        )
+    )
+    if method_count != 1:
+        problems.append(
+            "expected exactly 1 'public void bekBuildSettings(SettingsMenuDialog.SettingsTable ...)' method, "
+            f"found {method_count}"
+        )
+
+    # Every ui.settings.addCategory call must sit on a line guarded by if(!bekBundled),
+    # otherwise the bundled mod registers a second settings category inside Neon.
+    guarded_re = re.compile(r"^\s*if\s*\(\s*!bekBundled\s*\)", re.MULTILINE)
+    for m in re.finditer(r"(?m)^\s*(?:ui|Vars\.ui)\.settings\.addCategory\(", java_src):
+        line_end = java_src.find("\n", m.start())
+        if line_end == -1:
+            line_end = len(java_src)
+        line = java_src[m.start(): line_end]
+        if not guarded_re.match(line):
+            line_no = java_src.count("\n", 0, m.start()) + 1
+            problems.append(f"line {line_no}: unguarded settings.addCategory call")
+
+    # A registerSettings() method must early-return when bundled, otherwise it would
+    # run the full standalone registration path inside Neon.
+    if re.search(r"(?:private|protected|public)\s+void\s+registerSettings\s*\(", java_src):
+        if not re.search(r"if\s*\(\s*bekBundled\s*\)\s*return\s*;", java_src):
+            problems.append("registerSettings() exists but has no 'if(bekBundled) return;' early return")
+
+    delta = brace_delta(java_src)
+    if delta != 0:
+        problems.append(f"brace balance mismatch after lexical scan (delta {delta:+d})")
+
+    return problems
+
+
 def ensure_bundled_return(java_src: str) -> str:
     # Insert `if(bekBundled) return;` right after the ui/settings null check.
     # Works for:
@@ -896,6 +998,13 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
             ):
                 if mod.inject_bek_hooks:
                     text = inject_bek_hooks(mod.id, text)
+                    problems = assert_injected_structure(mod.id, src_path.name, text)
+                    if problems:
+                        raise RuntimeError(
+                            f"[{mod.id}] injected structure assertions failed for {src_path.name}:\n"
+                            + "\n".join(f"  - {problem}" for problem in problems)
+                            + "\nUpdate inject_bek_hooks() to recognize the new upstream shape."
+                        )
                 text = inject_overlay_compat_hooks(mod.id, text)
             write_text(dst_path, text)
 
@@ -958,6 +1067,11 @@ def main(argv: List[str]) -> int:
         nargs="+",
         metavar="ID",
         help="Only sync the selected child IDs; unselected workspaces and lock entries are preserved.",
+    )
+    ap.add_argument(
+        "--verify-build",
+        action="store_true",
+        help="After syncing, run gradlew compileJava to prove the injected sources still compile.",
     )
     args = ap.parse_args(argv)
 
@@ -1037,6 +1151,11 @@ def main(argv: List[str]) -> int:
 
     if not updated_any:
         print("No local source changes detected since the last synced lock; bundles/lock refreshed.")
+
+    if args.verify_build:
+        gradlew = "gradlew.bat" if os.name == "nt" else "gradlew"
+        run([str(ROOT / gradlew), "compileJava"], cwd=ROOT)
+        print("Injected sources compiled successfully (gradlew compileJava).")
     return 0
 
 

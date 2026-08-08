@@ -649,6 +649,12 @@ public class BetterHotKeyFeature {
     private static void sanitizeInvalidPlacementSelection() {
         if (control == null || control.input == null) return;
 
+        // The terrain-skip number-key remap may have already resolved a valid target
+        // for this press (deferredRemapBlock). When MindustryX's allUnlocked (解禁)
+        // reveals hidden blocks, vanilla can hand air/spawn to the selection; the
+        // air/spawn fallback must not override the remapped block.
+        if (deferredRemapBlock != null) return;
+
         Block current = control.input.block;
         if (!shouldForceDistributionFallback(current)) return;
 

@@ -38,6 +38,7 @@ public final class BetterRTSFormationFeature {
     private static final String keyOutsideCommandMode = "brf-outside-command-mode";
     private static final String keyAddControlGroup = "brf-add-control-group";
     private static final String keySelectControlGroup = "brf-select-control-group";
+    private static final String keyDeleteControlGroup = "brf-delete-control-group";
     private static final String keybindCategory = "better-rts-formation";
 
     private static final int groupCount = 10;
@@ -75,6 +76,7 @@ public final class BetterRTSFormationFeature {
 
     private static KeyBind addControlGroup;
     private static KeyBind selectControlGroup;
+    private static KeyBind deleteControlGroup;
     private static InputProcessor boxInputProcessor;
     private static boolean initialized;
     private static boolean keybindRegistered;
@@ -86,6 +88,7 @@ public final class BetterRTSFormationFeature {
     private static boolean previousSelectionReady;
     private static boolean restoreSelectionBeforeDraw;
     private static boolean formationBoxActive;
+    private static boolean formationBoxDeleteMode;
     private static boolean formationBoxMouseCaptured;
     private static boolean formationBoxMouseReleased;
     private static float formationBoxStartX;
@@ -153,6 +156,7 @@ public final class BetterRTSFormationFeature {
         keybindRegistered = true;
         addControlGroup = KeyBind.add(keyAddControlGroup, KeyCode.unset, keybindCategory);
         selectControlGroup = KeyBind.add(keySelectControlGroup, KeyCode.unset, keybindCategory);
+        deleteControlGroup = KeyBind.add(keyDeleteControlGroup, KeyCode.unset, keybindCategory);
     }
 
     private static void registerBoxInputProcessor() {
@@ -165,8 +169,11 @@ public final class BetterRTSFormationFeature {
                 if (Core.scene != null && Core.scene.hasMouse()) return false;
                 if (!formationBoxActive) {
                     InputHandler input = control == null ? null : control.input;
-                    if (!canStartFormationBox(input)) return false;
-                    beginFormationBox(input, screenX, screenY);
+                    if (canStartDeleteFormationBox(input)) {
+                        beginDeleteFormationBox(input, screenX, screenY);
+                    } else if (canStartFormationBox(input)) {
+                        beginFormationBox(input, screenX, screenY);
+                    }
                 }
                 if (!formationBoxActive) return false;
 
@@ -330,14 +337,18 @@ public final class BetterRTSFormationFeature {
     }
 
     private static void updateFormationBox(InputHandler input, boolean addPrefix) {
+        boolean deletePrefix = hasDeleteKey() && isKeyDown(deleteControlGroup);
         if (!formationBoxActive) {
-            if (addPrefix && Core.input.keyTap(addControlGroup) && !Core.scene.hasMouse()) {
+            if (addPrefix && deletePrefix && !Core.scene.hasMouse()
+                && (Core.input.keyTap(addControlGroup) || Core.input.keyTap(deleteControlGroup))) {
+                beginDeleteFormationBox(input);
+            } else if (addPrefix && !deletePrefix && Core.input.keyTap(addControlGroup) && !Core.scene.hasMouse()) {
                 beginFormationBox(input);
             }
             return;
         }
 
-        if (formationBoxMouseReleased || !addPrefix) {
+        if (formationBoxMouseReleased || !addPrefix || (formationBoxDeleteMode && !deletePrefix)) {
             finishFormationBox(input);
         }
     }
@@ -348,6 +359,10 @@ public final class BetterRTSFormationFeature {
             && !input.commandMode && !isKeyDown(Binding.commandMode) && isKeyDown(addControlGroup);
     }
 
+    private static boolean canStartDeleteFormationBox(InputHandler input) {
+        return hasDeleteKey() && isKeyDown(deleteControlGroup) && canStartFormationBox(input);
+    }
+
     private static void beginFormationBox(InputHandler input) {
         if (input == null || formationBoxActive) return;
 
@@ -355,6 +370,17 @@ public final class BetterRTSFormationFeature {
         if (emptyGroup < 0) return;
 
         formationBoxGroup = emptyGroup;
+        formationBoxStartX = Core.input.mouseWorldX();
+        formationBoxStartY = Core.input.mouseWorldY();
+        formationBoxMouseReleased = false;
+        formationBoxActive = true;
+    }
+
+    private static void beginDeleteFormationBox(InputHandler input) {
+        if (input == null || formationBoxActive) return;
+
+        formationBoxDeleteMode = true;
+        formationBoxGroup = -1;
         formationBoxStartX = Core.input.mouseWorldX();
         formationBoxStartY = Core.input.mouseWorldY();
         formationBoxMouseReleased = false;
@@ -373,6 +399,16 @@ public final class BetterRTSFormationFeature {
         setFormationBoxStart(screenX, screenY);
     }
 
+    private static void beginDeleteFormationBox(InputHandler input, int screenX, int screenY) {
+        if (input == null || formationBoxActive) return;
+
+        formationBoxDeleteMode = true;
+        formationBoxGroup = -1;
+        formationBoxMouseReleased = false;
+        formationBoxActive = true;
+        setFormationBoxStart(screenX, screenY);
+    }
+
     private static void setFormationBoxStart(int screenX, int screenY) {
         formationBoxStartX = Core.input.mouseWorld(screenX, screenY).x;
         formationBoxStartY = Core.input.mouseWorld(screenX, screenY).y;
@@ -384,25 +420,45 @@ public final class BetterRTSFormationFeature {
             return;
         }
 
-        if (formationBoxGroup >= 0 && formationBoxGroup < input.controlGroups.length) {
-            float endX = Core.input.mouseWorldX();
-            float endY = Core.input.mouseWorldY();
-            Seq<Unit> units = input.selectedCommandUnits(
-                formationBoxStartX,
-                formationBoxStartY,
-                endX - formationBoxStartX,
-                endY - formationBoxStartY
-            );
+        float endX = Core.input.mouseWorldX();
+        float endY = Core.input.mouseWorldY();
+        Seq<Unit> units = input.selectedCommandUnits(
+            formationBoxStartX,
+            formationBoxStartY,
+            endX - formationBoxStartX,
+            endY - formationBoxStartY
+        );
+
+        if (formationBoxDeleteMode) {
+            deleteFormations(input, units);
+        } else if (formationBoxGroup >= 0 && formationBoxGroup < input.controlGroups.length) {
             createGroup(input, formationBoxGroup, units);
         }
 
         formationBoxActive = false;
+        formationBoxDeleteMode = false;
         formationBoxGroup = -1;
         formationBoxMouseReleased = false;
     }
 
+    private static void deleteFormations(InputHandler input, Seq<Unit> units) {
+        if (input == null || units == null || units.isEmpty() || input.controlGroups == null) return;
+
+        for (int i = 0; i < units.size; i++) {
+            Unit unit = units.get(i);
+            if (!isValidGroupUnit(unit)) continue;
+
+            for (int g = 0; g < input.controlGroups.length; g++) {
+                IntSeq group = input.controlGroups[g];
+                if (group == null) continue;
+                group.removeValue(unit.id);
+            }
+        }
+    }
+
     private static void cancelFormationBox() {
         formationBoxActive = false;
+        formationBoxDeleteMode = false;
         formationBoxGroup = -1;
         formationBoxMouseReleased = false;
     }
@@ -431,6 +487,11 @@ public final class BetterRTSFormationFeature {
     private static boolean hasSelectKey() {
         return selectControlGroup != null && selectControlGroup.value != null
             && selectControlGroup.value.key != null && selectControlGroup.value.key != KeyCode.unset;
+    }
+
+    private static boolean hasDeleteKey() {
+        return deleteControlGroup != null && deleteControlGroup.value != null
+            && deleteControlGroup.value.key != null && deleteControlGroup.value.key != KeyCode.unset;
     }
 
     private static void createGroup(InputHandler input, int groupIndex) {
@@ -520,14 +581,18 @@ public final class BetterRTSFormationFeature {
     }
 
     private static void drawFormationBox() {
-        if (!formationBoxActive || formationBoxGroup < 0 || formationBoxGroup >= groupColors.length
-            || state == null || !state.isGame() || Core.input == null || Core.camera == null) return;
+        if (!formationBoxActive || state == null || !state.isGame() || Core.input == null || Core.camera == null) return;
 
         float endX = Core.input.mouseWorldX();
         float endY = Core.input.mouseWorldY();
         formationBoxRect.set(formationBoxStartX, formationBoxStartY, endX - formationBoxStartX, endY - formationBoxStartY).normalize();
 
-        Draw.color(groupColors[formationBoxGroup], 0.3f);
+        if (formationBoxDeleteMode) {
+            Draw.color(Color.scarlet, 0.3f);
+        } else {
+            if (formationBoxGroup < 0 || formationBoxGroup >= groupColors.length) return;
+            Draw.color(groupColors[formationBoxGroup], 0.3f);
+        }
         Fill.crect(formationBoxRect.x, formationBoxRect.y, formationBoxRect.width, formationBoxRect.height);
         Draw.reset();
     }

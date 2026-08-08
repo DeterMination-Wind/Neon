@@ -85,6 +85,10 @@ public final class TripwireInput {
         }
         if (Core.scene.hasKeyboard()) return;
 
+        // Shift is used by command mode to add units to a formation / box-select units;
+        // never capture fence hotkeys or drags while it is held.
+        if (isShiftHeld()) return;
+
         if (Core.input.keyTap(createKey) && !deleteModeActive()) toggleCreate();
 
         updateKeyboardDelete();
@@ -289,6 +293,10 @@ public final class TripwireInput {
         if (createKey.value.key != null) return createKey.value.key.toString();
         if (createKey.value.min != null && createKey.value.max != null) return createKey.value.min.toString() + "/" + createKey.value.max.toString();
         return "?";
+    }
+
+    private static boolean isShiftHeld() {
+        return Core.input != null && (Core.input.keyDown(KeyCode.shiftLeft) || Core.input.keyDown(KeyCode.shiftRight));
     }
 
     private static boolean isConfigured(KeyBind bind) {

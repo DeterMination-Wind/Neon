@@ -1,15 +1,15 @@
-# Neon B11.2
+# Neon B11.3
 
-本说明汇总 `B11.1` 之后至 `B11.2` 的全部提交。
+本说明汇总 `B11.2` 之后至 `B11.3` 的全部提交。
 
 ## 中文
 
-- 修复 MindustryX 环境下 Neon 设置页的运行时问题：总开关切换后模块不再实时移动、嵌套/折叠组状态卡死且重进设置页不重绘、折叠组内设置项右侧被截断。改用与 vanilla 行为等价的整表重绘方案绕开 MindustryX `SettingsTable` 的 `rebuild` 短路，为嵌套设置表短路自动重建，并将组布局改为随可用宽度自适应；同时为设置页增加宽度锚定，避免折叠状态下页面整体缩窄、展开时突然重绘。
-- 全面降低内置子模组的运行时资源消耗：按需缓存分类查询与计算结果并在相关事件时失效（BetterHotKey 方块分类、WhoUsesThisBuilding 遮挡/标注计算、ServerPlayerDataBase 等），Tripwire 渲染、StealthPath、ForeignServerTranslator 翻译缓存、CustomMarker、PinyinSearchSupport、Random、PatchViewer、LongWindowFlow 等模块均减少不必要的每帧重算与空转。
+- **合并 LogicSugar 2.0（函数支持）**：逻辑编辑器新增函数积木（`Func Def` / `Func Call` / `Return`），支持参数（完整表达式）、可选返回值、void 函数、提前 `return` 与函数间互相调用（递归编译报错）；新增全局函数库，定义一次、任意处理器可调用，库函数不会修改调用方变量（写入变量自动混淆）；可在设置或编辑器工具栏打开函数库，直接在处理器编辑器中编辑，关闭时自动校验保存，保存失败自动重开且修改不丢失；函数模式（`normal` 子程序 / `inline` 内联）与函数库入口已并入 Neon 总设置。
+- 地理围栏报警（Tripwire）新增位移保护；Better RTS Formation 新增删除编队的拖拽手势；betterHotKey 修复数字键重映射冲突。
 
 ## English
 
-This release summarizes every commit after `B11.1` through `B11.2`.
+This release summarizes every commit after `B11.2` through `B11.3`.
 
-- Fixes runtime issues on the Neon settings page under MindustryX: toggling a module master switch no longer relocates the module in real time, nested/collapsed group state could freeze and the page did not repaint after re-entering settings, and settings inside collapsed groups were clipped on the right edge. The fix replaces the rebuild path with a full table redraw equivalent to vanilla behavior (bypassing MindustryX's short-circuited `SettingsTable.rebuild`), short-circuits the auto-build on nested settings tables, makes group layout adapt to the available width, and anchors the settings page width so it no longer shrinks while collapsed or suddenly repaints on expansion.
-- Reduces runtime resource consumption across bundled sub-mods: category lookups and computation results are now cached and invalidated on relevant events (BetterHotKey block categories, WhoUsesThisBuilding occlusion/label computation, ServerPlayerDataBase and more), and Tripwire rendering, StealthPath, ForeignServerTranslator translation cache, CustomMarker, PinyinSearchSupport, Random, PatchViewer, and LongWindowFlow all avoid unnecessary per-frame recomputation and idle work.
+- **Bundles LogicSugar 2.0 (function support)**: the logic editor gains function blocks (`Func Def` / `Func Call` / `Return`) with parameters (full expressions), optional return values, void functions, early `return`, and mutual calls (recursion is a compile error); a global function library lets you define functions once and call them from any processor without touching caller variables (written names are auto-mangled); the library is edited inside the processor editor (from Settings or the editor toolbar) and is validated and saved on close — failed saves reopen the editor with your work kept; function mode (`normal` subroutine / `inline`) and the library entry are merged into the Neon settings page.
+- Tripwire gains a geofence shift guard, Better RTS Formation adds a delete-formation drag gesture, and betterHotKey fixes a number-key remap conflict.

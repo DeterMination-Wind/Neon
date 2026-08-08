@@ -9,6 +9,7 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.LogicIO;
 import mindustry.logic.LAssembler;
 import mindustry.logic.LogicDialog;
+import mindustry.logic.SugarFunctions;
 import mindustry.logic.SugarLogicDialog;
 import mindustry.logic.SugarStatements;
 import mindustry.mod.Mod;
@@ -27,6 +28,7 @@ public class LogicSugarMod extends Mod{
     @Override
     public void init(){
         registerStatements();
+        SugarFunctions.setLibrarySource(FunctionLibrary::index);
         on(ClientLoadEvent.class, event -> Core.app.post(() -> {
             if(Vars.ui != null && !(Vars.ui.logic instanceof SugarLogicDialog)){
                 LogicDialog old = Vars.ui.logic;
@@ -35,10 +37,12 @@ public class LogicSugarMod extends Mod{
                 Vars.ui.logic = sugar;
             }
             if(Vars.ui != null && Vars.ui.logic != null){
-                if(!bekBundled) JumpLineColor.setupSettings();
                 Vars.ui.logic.hidden(JumpLineColor::clearCache);
                 BoxSelect.init();
                 ExprHook.init();
+                // one settings category: functions + jump line coloring (the latter is
+                // bundled by Neon when bekBundled, so it is skipped there)
+                LogicSugarSettings.setup(!bekBundled);
             }
         }));
     }
@@ -71,6 +75,9 @@ public class LogicSugarMod extends Mod{
         LogicIO.allStatements.add(SugarStatements.CaseStatement::new);
         LogicIO.allStatements.add(SugarStatements.BreakStatement::new);
         LogicIO.allStatements.add(SugarStatements.BlockEndStatement::new);
+        LogicIO.allStatements.add(SugarStatements.FuncDefStatement::new);
+        LogicIO.allStatements.add(SugarStatements.FuncCallStatement::new);
+        LogicIO.allStatements.add(SugarStatements.ReturnStatement::new);
 
         LAssembler.customParsers.put("forbegin", SugarStatements::parseForBegin);
         LAssembler.customParsers.put("forbeginc", tokens -> SugarStatements.parseForBegin(tokens, true));
@@ -81,6 +88,10 @@ public class LogicSugarMod extends Mod{
         LAssembler.customParsers.put("case", SugarStatements::parseCase);
         LAssembler.customParsers.put("break", tokens -> new SugarStatements.BreakStatement());
         LAssembler.customParsers.put("blockend", tokens -> new SugarStatements.BlockEndStatement());
+        LAssembler.customParsers.put("funcdef", SugarStatements::parseFuncDef);
+        LAssembler.customParsers.put("funcdefc", tokens -> SugarStatements.parseFuncDef(tokens, true));
+        LAssembler.customParsers.put("funccall", SugarStatements::parseFuncCall);
+        LAssembler.customParsers.put("return", SugarStatements::parseReturn);
 
         // Read-only compatibility for markers produced by the first development version.
         LAssembler.customParsers.put("forend", tokens -> new SugarStatements.BlockEndStatement());
@@ -88,7 +99,10 @@ public class LogicSugarMod extends Mod{
         LAssembler.customParsers.put("switchend", tokens -> new SugarStatements.BlockEndStatement());
     }
 
+    /** Host (Neon) settings aggregation: function mode, library entry and jump line coloring. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
+        table.pref(new LogicSugarSettings.FuncModeSetting(LogicSugarSettings.settingFuncMode, "normal"));
+        table.pref(new LogicSugarSettings.LibraryButtonSetting("logicsugar.funclib"));
         JumpLineColor.buildSettings(table);
     }
 }

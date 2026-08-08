@@ -42,8 +42,21 @@ dependencies{
         compileOnly files(localMindustryClasspath)
         testImplementation files(localMindustryClasspath)
     }else{
-        compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-        testImplementation "com.github.Anuken.Mindustry:core:$mindustryVersion"
+        // jitpack's Mindustry v159 pom references arc-core/arcnet at an orphan commit
+        // (6aee8e7686) that can no longer be built, so exclude the arc transitive
+        // dependencies and use the bundled arc build from tools/deps/ instead.
+        def bundledArcClasspath = [
+            new File(rootDir, "tools/deps/arc-core.jar"),
+            new File(rootDir, "tools/deps/arcnet.jar")
+        ].findAll{ it.exists() }
+        compileOnly("com.github.Anuken.Mindustry:core:$mindustryVersion"){
+            exclude group: "com.github.Anuken.Arc"
+        }
+        testImplementation("com.github.Anuken.Mindustry:core:$mindustryVersion"){
+            exclude group: "com.github.Anuken.Arc"
+        }
+        compileOnly files(bundledArcClasspath)
+        testImplementation files(bundledArcClasspath)
     }
 
     // def mindustryXClasses = [

@@ -195,6 +195,31 @@ public final class BetterRTSFormationFeature {
             public boolean touchDragged(int screenX, int screenY, int pointer) {
                 return pointer == 0 && formationBoxMouseCaptured;
             }
+
+            @Override
+            public boolean keyDown(KeyCode keycode) {
+                return false;
+            }
+
+            @Override
+            public boolean keyUp(KeyCode keycode) {
+                return false;
+            }
+
+            @Override
+            public boolean keyTyped(char character) {
+                return false;
+            }
+
+            @Override
+            public boolean mouseMoved(int screenX, int screenY) {
+                return false;
+            }
+
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                return false;
+            }
         };
 
         Core.input.getInputProcessors().insert(0, boxInputProcessor);

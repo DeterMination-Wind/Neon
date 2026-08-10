@@ -1,21 +1,21 @@
-# Neon B11.7
+# Neon B11.8
 
-本说明汇总 `B11.6` 之后至 `B11.7` 的全部提交。
+本说明汇总 `B11.7` 之后至 `B11.8` 的全部提交。
 
 ## 中文
 
-- **LogicSugar 更新至 v2.1.2（内置逻辑辅助模块）**：
-  - `call foo(...)` 实参为空时，灰色占位提示现在显示**被调函数的参数列表**（如 `data1, count2, block3`），不再是一成不变的 `a, b+1`；
-  - 提示实时跟随：改名或修改函数定义后立即更新，重开编辑器后依然正确；
-  - 解析顺序与编译器一致：本地 `func` 定义优先，全局函数库兜底；函数不存在或无参数时退回通用提示；
-  - 附带 v2.1.1 兼容性修复：表达式编译器改用 Java 8 兼容集合写法（`Set.of` → 不可变 `HashSet`），修复 Android 11 以下设备上逻辑表达式相关崩溃。
+- **模组更新中心的镜像地址改为运行时解析**（支持镜像服务器迁移）：
+  - 版本列表、发布备份与镜像文件下载请求不再使用写死的服务器地址，改为在每次请求时通过 `play.mindustry.men` 域名动态解析出服务器 IPv4 后直连；
+  - 镜像服务器迁移后无需修改模组或重新发布，客户端重启即自动跟随新地址；
+  - 解析失败时自动回退为域名直连，不影响正常使用；
+  - 镜像下载相关的界面文案同步更新。
 
 ## English
 
-This release summarizes every commit after `B11.6` through `B11.7`.
+This release summarizes every commit after `B11.7` through `B11.8`.
 
-- **LogicSugar updated to v2.1.2** (bundled logic-assist module):
-  - when a `call foo(...)` statement has empty arguments, the gray placeholder now shows the **parameter list of the called function** (e.g. `data1, count2, block3`) instead of the static `a, b+1`;
-  - the hint follows live: rename the function or edit its definition and the placeholder updates immediately; it stays correct after reopening the editor;
-  - resolution order matches the compiler: local `func` definitions win, the global function library is the fallback; unknown functions and functions without parameters fall back to the generic hint;
-  - includes the v2.1.1 compatibility fix: the expression compiler now uses Java 8-compatible set construction (`Set.of` → unmodifiable `HashSet`), fixing crashes related to logic expressions on Android below 11.
+- **Mod updater mirror host is now resolved at runtime** (mirror server migration support):
+  - version-list, release-backup and mirror download requests no longer use a hard-coded server address; each request resolves the current IPv4 of `play.mindustry.men` at runtime and connects to it directly;
+  - after the mirror server migrates, no mod update or republish is required — clients pick up the new address automatically on the next request;
+  - on resolution failure the request falls back to the domain name, so normal use is unaffected;
+  - mirror-related UI strings updated accordingly.

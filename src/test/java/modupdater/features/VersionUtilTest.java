@@ -22,9 +22,14 @@ public final class VersionUtilTest{
         check(VersionUtil.normalizeReleaseVersion("v10.3.1", "v10.3.1").equals("10.3.1"), "legacy tag fallback");
 
         String githubUrl = "https://github.com/DeterMination-Wind/Neon/releases/download/v11.0.0/Neon-v11.0.0.zip";
-        String mirrorUrl = "http://121.199.60.4/github/mod-assets/DeterMination-Wind/Neon/v11.0.0/Neon-v11.0.0.zip";
+        String mirrorUrl = "http://play.mindustry.men/github/mod-assets/DeterMination-Wind/Neon/v11.0.0/Neon-v11.0.0.zip";
         check(GithubReleaseClient.buildDownloadUrl(githubUrl, true).equals(mirrorUrl), "server mirror URL");
         check(GithubReleaseClient.buildDownloadUrl(mirrorUrl, false).equals(githubUrl), "restore GitHub URL");
+
+        check(PlayMirrorResolver.resolveHost(githubUrl).equals(githubUrl), "non-mirror host untouched");
+        check(PlayMirrorResolver.resolveHost("http://example.com/x").equals("http://example.com/x"), "other host untouched");
+        check(PlayMirrorResolver.resolveHost(null) == null, "null URL falls back to null");
+        check(PlayMirrorResolver.resolveHost("not a url").equals("not a url"), "malformed URL falls back as-is");
 
         Jval backup = Jval.read("{\"tag_name\":\"v11.0.0\",\"name\":\"N11\",\"body\":\"notes\",\"assets\":[{\"name\":\"Neon-v11.0.0.zip\",\"browser_download_url\":\"" + githubUrl + "\"}]}");
         java.util.ArrayList<GithubReleaseClient.ReleaseInfo> releases = GithubReleaseClient.parseReleasesPayload("DeterMination-Wind/Neon", backup);

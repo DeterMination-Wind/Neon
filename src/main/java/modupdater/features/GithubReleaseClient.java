@@ -11,9 +11,10 @@ import java.util.Collections;
 
 public final class GithubReleaseClient{
     private static final String neonRepo = "DeterMination-Wind/Neon";
-    private static final String neonReleaseBackupUrl = "http://121.199.60.4/github/mod-assets/DeterMination-Wind/Neon/release-backup.json";
+    // mirror URLs keep the domain; the host is resolved to an IPv4 right before each request (see PlayMirrorResolver), falling back to the domain when resolution fails
+    private static final String neonReleaseBackupUrl = "http://play.mindustry.men/github/mod-assets/DeterMination-Wind/Neon/release-backup.json";
     private static final String githubDownloadPrefix = "https://github.com/";
-    private static final String mirrorDownloadPrefix = "http://121.199.60.4/github/mod-assets/";
+    private static final String mirrorDownloadPrefix = "http://play.mindustry.men/github/mod-assets/";
 
     public static final class AssetInfo{
         public final String name;
@@ -74,7 +75,8 @@ public final class GithubReleaseClient{
     }
 
     private static void fetchReleasesUrl(String repo, String url, Cons<ArrayList<ReleaseInfo>> onSuccess, Cons<Throwable> onError){
-        Http.get(url)
+        // resolve the mirror host to an IPv4 right before the request; a no-op for non-mirror hosts
+        Http.get(PlayMirrorResolver.resolveHost(url))
         .timeout(30000)
         .header("User-Agent", "Mindustry")
         .error(onError::get)

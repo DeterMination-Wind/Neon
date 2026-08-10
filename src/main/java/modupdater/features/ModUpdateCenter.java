@@ -370,7 +370,8 @@ public final class ModUpdateCenter{
         progressDialog.setFillParent(false);
         progressDialog.show();
 
-        Http.get(url)
+        // resolve the mirror host to an IPv4 right before the request; a no-op for non-mirror hosts (see PlayMirrorResolver)
+        Http.get(PlayMirrorResolver.resolveHost(url))
             .timeout(30000)
             .header("User-Agent", "Mindustry")
             .error(error -> {

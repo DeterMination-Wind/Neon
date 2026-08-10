@@ -12,7 +12,7 @@ import mindustry.mod.Mods;
 import java.util.Locale;
 
 public final class RepoResolver{
-    private static final String modIndexUrl = "http://121.199.60.4/github/repos/Anuken/mindustry-mods/mods.json";
+    private static final String modIndexUrl = "http://mindustry.men/github/repos/Anuken/mindustry-mods/mods.json";
     private static final ObjectMap<String, String> builtinMap = new ObjectMap<>();
     private static final ObjectMap<String, String> modIndexMap = new ObjectMap<>();
     private static final Seq<Cons<Boolean>> modIndexWaiters = new Seq<>();

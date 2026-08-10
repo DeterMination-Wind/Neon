@@ -40,6 +40,11 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 19 �
 - 你不需要再额外安装单独的 OverlayCompatBridge，除非你想把这套兼容层提供给其他模组使用。
 - 发布说明见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
 
+### v10.0.2 / v10.0.1 修复
+
+- v10.0.1：修复 Android 端 D8 桥接类加载问题，Overlay 兼容层在 Android 上不再加载失败；在自带 OverlayUI 的 MindustryX 中也不再错误加载 overlaycompatbridge。
+- v10.0.2：修复拼音搜索在 v10.0.0 升级后的重复加载问题；模组内部名恢复为稳定的 `Neon`，避免与旧 `bek-tools` 被同时加载。
+
 ### 功能一览
 
 #### 1) 电网小地图（Power Grid Minimap）
@@ -262,6 +267,11 @@ Note: Neon already contains these nineteen modules. Do not enable standalone ver
 - The overlay gear button is fixed at the left-middle edge of the screen for easier discovery, and you can also toggle it with `Z`.
 - You no longer need a separate OverlayCompatBridge install unless you want to provide the same compatibility layer for other mods.
 - Release details are listed in [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
+### v10.0.2 / v10.0.1 Fixes
+
+- v10.0.1: fixed Android D8 bridge class loading so the overlay compatibility layer no longer fails on Android, and stopped loading overlaycompatbridge in MindustryX builds that already ship OverlayUI.
+- v10.0.2: fixed duplicate pinyin-search loading after the v10.0.0 upgrade; the internal mod name is back to the stable `Neon` so old `bek-tools` installs are not loaded side by side.
 
 ### Module Highlights
 

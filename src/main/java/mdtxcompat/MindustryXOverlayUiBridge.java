@@ -42,6 +42,8 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
     private Method registerWindowMethod;
     private Method getOpenMethod;
     private Method toggleMethod;
+    private Method initMethod;
+    private Method isAttachedMethod;
 
     @Override
     public boolean isSupported() {
@@ -54,6 +56,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         try {
             Object overlayInstance = instanceField.get(null);
             if (overlayInstance == null) return NO_WINDOW;
+            initializeIfDetached(overlayInstance);
             Object window = registerWindowMethod.invoke(overlayInstance, name, table);
             if (window == null) return NO_WINDOW;
             if (availability != null) {
@@ -96,6 +99,8 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             registerWindowMethod = overlayClass.getMethod("registerWindow", String.class, Table.class);
             getOpenMethod = overlayClass.getMethod("getOpen");
             toggleMethod = overlayClass.getMethod("toggle");
+            initMethod = optionalMethod(overlayClass, "init");
+            isAttachedMethod = optionalMethod(overlayClass, "isAttached");
             resolved = true;
             if (!resolvedLogged) {
                 resolvedLogged = true;
@@ -124,7 +129,17 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         registerWindowMethod = null;
         getOpenMethod = null;
         toggleMethod = null;
+        initMethod = null;
+        isAttachedMethod = null;
         Log.err(message, t);
+    }
+
+    private void initializeIfDetached(Object overlayInstance) throws Exception {
+        if (initMethod == null || isAttachedMethod == null) return;
+        Object attached = isAttachedMethod.invoke(overlayInstance);
+        if (!Boolean.TRUE.equals(attached)) {
+            initMethod.invoke(overlayInstance);
+        }
     }
 
     private static void logLoadedModSnapshot() {
@@ -135,10 +150,11 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             }
 
             Mods.LoadedMod bridge = Vars.mods.locateMod("overlay-compat-bridge");
+            if (bridge == null) bridge = Vars.mods.locateMod("overlay-compat-bridge-dev");
             if (bridge == null) {
-                Log.info("Neon OverlayUI integration: Vars.mods.locateMod('overlay-compat-bridge') = null.");
+                Log.info("Neon OverlayUI integration: Vars.mods.locateMod('overlay-compat-bridge'/'overlay-compat-bridge-dev') = null.");
             } else {
-                Log.info("Neon OverlayUI integration: located overlay-compat-bridge: " + describeMod(bridge));
+                Log.info("Neon OverlayUI integration: located overlay bridge: " + describeMod(bridge));
             }
 
             StringBuilder related = new StringBuilder();
@@ -195,6 +211,14 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             m.invoke(target, arg);
         } catch (NoSuchMethodException ignored) {
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static Method optionalMethod(Class<?> type, String methodName) {
+        try {
+            return type.getMethod(methodName);
+        } catch (NoSuchMethodException ignored) {
+            return null;
         }
     }
 

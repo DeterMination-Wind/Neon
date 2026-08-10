@@ -25,6 +25,7 @@ Neon/
 |       |   |-- foreignservertranslator/(外语服务器翻译)
 |       |   |-- mdtxcompat/            (MindustryX 兼容桥接)
 |       |   |-- mindustry/ui/fragments/(翻译聊天 UI 组件)
+|       |   |-- neoncompat/overlay/    (Neon OverlayUI 兼容层: AdsorptionSystem/NeonOverlayBootstrap/OverlayUI)
 |       |   |-- modupdater/            (模组更新中心)
 |       |   |-- patchviewer/           (补丁查看器)
 |       |   |-- pinyinsearchsupport/   (拼音搜索支持)
@@ -61,7 +62,7 @@ Neon/
 ```
 
 ## 维护约束
-- 保持 Java 8 兼容（如本项目包含 Java 源码）。
+- 保持 Java 17 兼容（`build.gradle` 中 `sourceCompatibility/targetCompatibility = JavaVersion.VERSION_17`）。
 - 变更优先聚焦性能与可读性，不做无关重构。
 - 用户可见文案优先走 bundle/资源文件，不硬编码。
 

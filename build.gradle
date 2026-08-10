@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "10.0.2"
+version = "0.0.0"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -90,6 +90,25 @@ tasks.register("jarAndroid", Jar){
 
 // Keep a copy in workspace root "构建/<mod-name>/" (mod name + version).
 def buildOutDir = new File(rootDir.parentFile, "构建/${releaseArtifactBaseName}")
+def localDevOutputDir = new File(rootDir.parentFile, "构建/Neon")
+
+tasks.register("jarLocalDev", Jar){
+    group = "build"
+    description = "Packages the local Neon dev test jar."
+    dependsOn tasks.named("classes")
+    archiveFileName = "Neon-dev.jar"
+    destinationDirectory.set(localDevOutputDir)
+    from(sourceSets.main.output)
+    from({ configurations.runtimeClasspath.collect{ zipTree(it) } }){
+        exclude "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA"
+    }
+    from(projectDir){
+        include "mod.json"
+        include "mod.hjson"
+        include "icon.png"
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
 
 tasks.register("copyZipToBuildDir", Copy){
     doNotTrackState("Copies into build output folder for convenience.")

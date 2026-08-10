@@ -268,8 +268,6 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 【BEK辅助mod反馈群】：https://qm.qq.com/q/cZWzPa4cTu
 
-![BEK辅助mod反馈群二维码](docs/bek-feedback-group.png)
-
 ### 构建（可选，开发者）
 
 一键构建桌面+安卓通用包（含 `classes.dex`）：
@@ -291,7 +289,7 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 
 ### Overview
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-five modules into one package:
+Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-six modules into one package:
 
 - Power Grid Minimap
 - Stealth Path

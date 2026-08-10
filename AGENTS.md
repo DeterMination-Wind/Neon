@@ -29,6 +29,7 @@ Neon/
 |       |   |-- colortheducts/        (导管染色)
 |       |   |-- custommarker/          (自定义标记)
 |       |   |-- foreignservertranslator/(外语服务器翻译)
+|       |   |-- lockattack/            (锁定攻击)
 |       |   |-- logicsugar/            (逻辑辅助)
 |       |   |-- mdtxcompat/            (MindustryX 兼容桥接)
 |       |   |-- mindustry/             (游戏包内扩展)
@@ -55,6 +56,7 @@ Neon/
 |   |-- bektools-bundles/
 |   |   |-- bundle.properties
 |   |   \-- bundle_zh_CN.properties
+|   |-- generate_detail.py
 |   |-- generate_dox.py
 |   |-- neon_version.py
 |   |-- submods.json

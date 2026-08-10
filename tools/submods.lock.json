@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-08-09T16:20:52Z",
+  "generatedAtUtc": "2026-08-10T05:54:45Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -300,6 +300,19 @@
       "repoUrl": null,
       "branch": null,
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\LogicSugar"
+    },
+    "la": {
+      "sourceKind": "git",
+      "syncedHead": "83b756e139655a7ab73b2b23012b5ab80584c1e5",
+      "workspaceHeadAtSync": "83b756e139655a7ab73b2b23012b5ab80584c1e5",
+      "workspaceDirtyAtSync": false,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "83b756e139655a7ab73b2b23012b5ab80584c1e5",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\LockAttack"
     }
   }
 }

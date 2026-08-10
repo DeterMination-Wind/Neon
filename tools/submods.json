@@ -251,6 +251,16 @@
       "mainClassFile": "RandomMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "injectBekHooks": false
+    },
+    {
+      "id": "la",
+      "name": "LockAttack",
+      "localPath": "../LockAttack",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/lockattack",
+      "mainClassFile": "LockAttackMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
     }
   ]
 }

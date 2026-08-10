@@ -35,6 +35,7 @@ import custommarker.features.CustomMarkerFeature;
 import foreignservertranslator.ForeignServerTranslatorMod;
 import foreignservertranslator.TranslatorFeature;
 import logicsugar.LogicSugarMod;
+import lockattack.LockAttackMod;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
@@ -88,6 +89,7 @@ public class BekToolsMod extends Mod{
     private static final String moduleBetterPolyAi = "bpa";
     private static final String moduleAdvancedReplace = "ar";
     private static final String moduleRandom = "random";
+    private static final String moduleLockAttack = "la";
     private static final String moduleProfiler = "profiler";
     private static final String moduleUsageReporter = "usage-reporter";
 
@@ -116,6 +118,7 @@ public class BekToolsMod extends Mod{
     private final BetterPolyAiMod betterPolyAi;
     private final AdvancedReplaceMod advancedReplace;
     private final RandomMod random;
+    private final LockAttackMod lockAttack;
     private final PostHogUsageReporter postHogUsageReporter;
     private boolean settingsRegistered;
 
@@ -170,6 +173,7 @@ public class BekToolsMod extends Mod{
         markBundled(moduleBetterPolyAi, () -> BetterPolyAiMod.bekBundled = true);
         markBundled(moduleAdvancedReplace, () -> AdvancedReplaceMod.bekBundled = true);
         markBundled(moduleRandom, () -> RandomMod.bekBundled = true);
+        markBundled(moduleLockAttack, () -> LockAttackMod.bekBundled = true);
 
         pgmm = initializeModule(modulePgmm, pgmmSupplier);
         stealthPath = initializeModule(moduleStealthPath, stealthPathSupplier);
@@ -256,6 +260,11 @@ public class BekToolsMod extends Mod{
         });
         random = initializeModule(moduleRandom, () -> {
             RandomMod mod = new RandomMod();
+            mod.init();
+            return mod;
+        });
+        lockAttack = initializeModule(moduleLockAttack, () -> {
+            LockAttackMod mod = new LockAttackMod();
             mod.init();
             return mod;
         });
@@ -376,6 +385,7 @@ public class BekToolsMod extends Mod{
         addSubmodState(states, "更好的 PolyAI", moduleBetterPolyAi, betterPolyAi != null, false);
         addSubmodState(states, "高级替换", moduleAdvancedReplace, advancedReplace != null, true);
         addSubmodState(states, "随机化", moduleRandom, random != null, false);
+        addSubmodState(states, "锁定攻击", moduleLockAttack, lockAttack != null, false);
         return states;
     }
 
@@ -446,6 +456,7 @@ public class BekToolsMod extends Mod{
         entries.add(new ModuleEntry(moduleTripwire, tripwire != null, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, null, false, st -> tripwire.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, "bpa-enabled", false, st -> betterPolyAi.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, null, false, st -> advancedReplace.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleLockAttack, lockAttack != null, Core.bundle.get("bektools.section.la", "Lock Attack"), Icon.lock, null, false, st -> lockAttack.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleProfiler, !isModuleFailed(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, "neon-profiler-enabled", false, NeonProfilerFeature::buildSettings));
         return entries;
     }

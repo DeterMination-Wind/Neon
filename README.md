@@ -13,7 +13,7 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 25 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 26 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
@@ -40,10 +40,11 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 25 �
 - Color-the-ducts（导管染色）
 - LogicSugar（逻辑辅助）
 - Random（随机化）
+- LockAttack（锁定攻击）
 
-如果你只想安装一次、一次性获得这二十五类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助 + 随机化"功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这二十六类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助 + 随机化"功能，Neon 会更省事。
 
-提示：Neon 已包含上述 25 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 26 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -193,6 +194,13 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 25 �
 - 同时随机打乱方块、物品、单位和战役区块图标，不改变逻辑行为。
 - Neon 聚合版不添加独立设置组；在主菜单点击“千万别点”后，下一局世界启用文本与贴图随机化。
 
+#### 26) LockAttack（锁定攻击）
+
+- 按锁定键（默认 `L`）锁定鼠标指向的敌方单位或建筑，直接控制的单位会持续瞄准并集火该目标。
+- 选中的指挥单位会通过原版网络命令路径收到一次性集火命令（单机与多人均有效）。
+- 在另一目标上按锁定键可切换；点空地或己方目标解锁；目标死亡自动解锁。
+- 锁定框、目标连线与可选目标血条（设置页可开关）；键位可在 `设置 → 控制` 中修改。
+
 ### 快速上手
 
 1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
@@ -203,6 +211,7 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 25 �
 - 快捷键增强（betterHotKey）：组合键/数字键相关条目
 - BetterScreenShot：世界截图快捷键（默认 `F8`）
 - 圆盘快捷建造：打开圆盘 HUD 的热键（以及可选的“切换槽位组”热键）
+- 锁定攻击（LockAttack）：锁定键（默认 `L`）
 
 3) 设置：在 `设置 → 模组 → Neon` 下按分组统一调整：
 
@@ -230,6 +239,7 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 25 �
 - 地理围栏报警（Tripwire）
 - BetterPolyAi
 - 高级替换（AdvancedReplace）
+- LockAttack（锁定攻击）
 
 4) Overlay 窗口：
 
@@ -307,10 +317,11 @@ Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-five modu
 - Color-the-ducts
 - LogicSugar
 - Random
+- LockAttack
 
-If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, terrain generation, RTS formation controls, and randomized presentation, Neon is the all-in-one option.
+If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, terrain generation, RTS formation controls, randomized presentation, and lock-on focus fire, Neon is the all-in-one option.
 
-Note: Neon already contains these twenty-five modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
+Note: Neon already contains these twenty-six modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
 
 ### Module Highlights
 
@@ -460,6 +471,13 @@ Note: Neon already contains these twenty-five modules. Do not enable standalone 
 - Randomizes block, item, unit, and campaign sector icons without changing logic behavior.
 - The bundled version has no separate settings group; click `Do Not Click` in the main menu to enable randomized text and textures for the next world.
 
+#### 26) LockAttack
+
+- Tap the lock key (default `L`) to lock on to the enemy unit or building under the cursor; the directly controlled unit keeps aiming at and firing on the target.
+- Selected command units receive a one-shot attack order through the vanilla network command path (singleplayer and multiplayer).
+- Tap on another target to switch; tap empty ground or a friendly target to unlock; auto-unlock when the target dies.
+- Rotating lock box, target line, and an optional target HP bar (toggle in settings); the key is rebindable in `Settings -> Controls`.
+
 ### Quick Start
 
 1) Install `Neon.zip` to Mindustry `mods` folder and enable it in game.
@@ -470,6 +488,7 @@ Note: Neon already contains these twenty-five modules. Do not enable standalone 
 - betterHotKey combo/number hotkeys
 - BetterScreenShot capture hotkey (`F8` by default)
 - Radial Build Menu hotkey (plus optional slot-group toggle)
+- LockAttack lock key (`L` by default)
 
 3) Configure all modules in `Settings -> Mods -> Neon`, including WhoUsesThisBuilding, PatchViewer, PinyinSearchSupport, ForeignServerTranslator, Tripwire, BetterPolyAi, AdvancedReplace, BetterRTSFormation, AutoPruner, Color-the-ducts, and LogicSugar groups.
 

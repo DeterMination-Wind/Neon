@@ -1,25 +1,21 @@
-# Neon B11.6
+# Neon B11.7
 
-本说明汇总 `B11.5` 之后至 `B11.6` 的全部提交。
+本说明汇总 `B11.6` 之后至 `B11.7` 的全部提交。
 
 ## 中文
 
-- **新增内置模块 LockAttack（锁定攻击）**（独立仓库 [DeterMination-Wind/LockAttack](https://github.com/DeterMination-Wind/LockAttack)，v1.0.0）：
-  - 按锁定键（默认 `L`）锁定鼠标指向的敌方单位或建筑，直接控制的单位每帧强制瞄准并集火目标；
-  - 选中的指挥单位通过原版 `Call.commandUnits` 网络命令路径收到一次性攻击命令（单机与多人均有效），目标死亡后游戏自动清除命令；
-  - 再次按键切换目标，点空地或己方目标解锁，目标死亡/进迷雾/变友方自动解锁；
-  - 视觉反馈：旋转锁定框、目标连线、可选目标血条（含名称与血量，设置中可开关）；
-  - 键位为标准游戏键位，可在 `设置 → 控制` 中修改；聚合设置页新增“锁定攻击”分组；
-  - 修复血条与文字的居中对齐问题（`Fill.rect` 为中心锚定，血条背景改为以目标为中心，血量填充左锚定）。
+- **LogicSugar 更新至 v2.1.2（内置逻辑辅助模块）**：
+  - `call foo(...)` 实参为空时，灰色占位提示现在显示**被调函数的参数列表**（如 `data1, count2, block3`），不再是一成不变的 `a, b+1`；
+  - 提示实时跟随：改名或修改函数定义后立即更新，重开编辑器后依然正确；
+  - 解析顺序与编译器一致：本地 `func` 定义优先，全局函数库兜底；函数不存在或无参数时退回通用提示；
+  - 附带 v2.1.1 兼容性修复：表达式编译器改用 Java 8 兼容集合写法（`Set.of` → 不可变 `HashSet`），修复 Android 11 以下设备上逻辑表达式相关崩溃。
 
 ## English
 
-This release summarizes every commit after `B11.5` through `B11.6`.
+This release summarizes every commit after `B11.6` through `B11.7`.
 
-- **New bundled module: LockAttack** (standalone repo [DeterMination-Wind/LockAttack](https://github.com/DeterMination-Wind/LockAttack), v1.0.0):
-  - tap the lock key (default `L`) to lock on to the enemy unit or building under the cursor; the directly controlled unit is forced to aim at and fire on the target every frame;
-  - selected command units receive a one-shot attack order through the vanilla `Call.commandUnits` network path (singleplayer and multiplayer); the game clears the order automatically when the target dies;
-  - tap again on another target to switch, tap empty ground or a friendly target to unlock, auto-unlock when the target dies, leaves fog, or turns friendly;
-  - visual feedback: rotating lock box, target line, optional target HP bar (name + health, toggleable in settings);
-  - the key is a standard game keybind, rebindable in `Settings -> Controls`; a new “Lock Attack” group appears in the Neon aggregate settings page;
-  - fixed the HP bar/text centering (the bar background is now centered on the target while the health fill stays left-anchored).
+- **LogicSugar updated to v2.1.2** (bundled logic-assist module):
+  - when a `call foo(...)` statement has empty arguments, the gray placeholder now shows the **parameter list of the called function** (e.g. `data1, count2, block3`) instead of the static `a, b+1`;
+  - the hint follows live: rename the function or edit its definition and the placeholder updates immediately; it stays correct after reopening the editor;
+  - resolution order matches the compiler: local `func` definitions win, the global function library is the fallback; unknown functions and functions without parameters fall back to the generic hint;
+  - includes the v2.1.1 compatibility fix: the expression compiler now uses Java 8-compatible set construction (`Set.of` → unmodifiable `HashSet`), fixing crashes related to logic expressions on Android below 11.

@@ -74,6 +74,7 @@ public class LogicSugarMod extends Mod{
         LogicIO.allStatements.add(SugarStatements.SwitchBeginStatement::new);
         LogicIO.allStatements.add(SugarStatements.CaseStatement::new);
         LogicIO.allStatements.add(SugarStatements.BreakStatement::new);
+        LogicIO.allStatements.add(SugarStatements.ContinueStatement::new);
         LogicIO.allStatements.add(SugarStatements.BlockEndStatement::new);
         LogicIO.allStatements.add(SugarStatements.FuncDefStatement::new);
         LogicIO.allStatements.add(SugarStatements.FuncCallStatement::new);

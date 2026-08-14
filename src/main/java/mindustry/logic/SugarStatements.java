@@ -308,6 +308,13 @@ public final class SugarStatements{
         @Override public void write(StringBuilder out){ out.append("break"); }
     }
 
+    public static class ContinueStatement extends SugarStatement{
+        @Override public void build(Table table){}
+        @Override public String name(){ return text("continue", "Continue"); }
+        @Override public String typeName(){ return "Continue"; }
+        @Override public void write(StringBuilder out){ out.append("continue"); }
+    }
+
     public static class BlockEndStatement extends SugarStatement{
         @Override public void build(Table table){}
         @Override public String name(){ return "}"; }

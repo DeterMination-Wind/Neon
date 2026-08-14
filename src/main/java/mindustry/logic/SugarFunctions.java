@@ -14,6 +14,7 @@ import mindustry.logic.SugarCompiler.FuncMode;
 import mindustry.logic.SugarStatements.BeginStatement;
 import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.BreakStatement;
+import mindustry.logic.SugarStatements.ContinueStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
@@ -856,6 +857,7 @@ public final class SugarFunctions{
                              StringBuilder out, CallIds ids, String funcName){
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
+        int[] continueOwner = continueOwners(statements);
         boolean[] statementLabels = statementLabels(statements, breakOwner);
         String[] optimizedOperations = optimizeOperations(statements, statementLabels);
 
@@ -868,13 +870,10 @@ public final class SugarFunctions{
             LStatement statement = statements.get(i);
 
             if(statement instanceof ForBeginStatement begin){
-                out.append("jump ").append(label(prefix, "for_check_", i)).append(" notEqual ").append(label(prefix, "for_init_", i)).append(" 0\n");
                 if(!begin.initial.isEmpty()) out.append("set ").append(begin.variable).append(' ').append(begin.initial).append('\n');
-                out.append("set ").append(label(prefix, "for_init_", i)).append(" 1\n");
                 out.append(label(prefix, "for_check_", i)).append(":\n");
                 out.append("jump ").append(label(prefix, "for_body_", i)).append(' ').append(begin.op.name()).append(' ')
                     .append(begin.variable).append(' ').append(begin.compare).append('\n');
-                out.append("set ").append(label(prefix, "for_init_", i)).append(" 0\n");
                 out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
                 out.append(label(prefix, "for_body_", i)).append(":\n");
             }else if(statement instanceof WhileBeginStatement begin){
@@ -895,10 +894,20 @@ public final class SugarFunctions{
                 if(breakOwner[i] < 0) throw error("break", i, "is outside a loop or switch");
                 BeginStatement owner = (BeginStatement)statements.get(breakOwner[i]);
                 out.append("jump ").append(label(prefix, "stmt_", owner.destIndex + 1)).append(" always x false\n");
+            }else if(statement instanceof ContinueStatement){
+                int owner = continueOwner[i];
+                if(owner < 0) throw error("continue", i, "is outside a loop");
+                LStatement ownerStmt = statements.get(owner);
+                if(ownerStmt instanceof ForBeginStatement){
+                    out.append("jump ").append(label(prefix, "for_continue_", owner)).append(" always x false\n");
+                }else if(ownerStmt instanceof WhileBeginStatement){
+                    out.append("jump ").append(label(prefix, "stmt_", owner)).append(" always x false\n");
+                }
             }else if(statement instanceof BlockEndStatement){
                 int beginIndex = findOwner(statements, i);
                 LStatement owner = statements.get(beginIndex);
                 if(owner instanceof ForBeginStatement begin){
+                    out.append(label(prefix, "for_continue_", beginIndex)).append(":\n");
                     if(!begin.step.isEmpty()) out.append("op add ").append(begin.variable).append(' ').append(begin.variable).append(' ').append(begin.step).append('\n');
                     out.append("jump ").append(label(prefix, "for_check_", beginIndex)).append(" always x false\n");
                 }else if(owner instanceof WhileBeginStatement){
@@ -1023,6 +1032,19 @@ public final class SugarFunctions{
             while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
             if(isBreakable(statements.get(i))) stack.push(i);
+        }
+        return result;
+    }
+
+    /** Returns the innermost enclosing loop that accepts a continue statement. */
+    private static int[] continueOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof ForBeginStatement || statements.get(i) instanceof WhileBeginStatement) stack.push(i);
         }
         return result;
     }

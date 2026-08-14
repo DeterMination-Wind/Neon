@@ -7,6 +7,7 @@ import mindustry.logic.LExecutor;
 import mindustry.logic.SugarStatements.BeginStatement;
 import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.BreakStatement;
+import mindustry.logic.SugarStatements.ContinueStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
@@ -330,11 +331,15 @@ public final class SugarCompiler{
 
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
+        int[] continueOwner = continueOwners(statements);
         for(int i = 0; i < statements.size; i++){
             if(statements.get(i) instanceof CaseStatement && switchOwner[i] < 0){
                 invalid[i] = true;
             }
             if(statements.get(i) instanceof BreakStatement && breakOwner[i] < 0){
+                invalid[i] = true;
+            }
+            if(statements.get(i) instanceof ContinueStatement && continueOwner[i] < 0){
                 invalid[i] = true;
             }
         }

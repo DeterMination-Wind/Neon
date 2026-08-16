@@ -141,6 +141,11 @@ jar{
         include "mod.hjson"
         include "icon.png"
     }
+    // Bundle runtime dependencies (kotlin-stdlib, pinyin4j, sqlite-jdbc) so the desktop
+    // mod loader can resolve them; ModClassLoader only reads the mod archive itself.
+    from({ configurations.runtimeClasspath.collect{ zipTree(it) } }){
+        exclude "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA"
+    }
 }
 
 tasks.register("jarAndroid", Jar){

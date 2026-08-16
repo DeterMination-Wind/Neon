@@ -71,6 +71,21 @@ public final class IfElseCompileTest{
         // invalid: elif outside if must throw
         expectFailure("elif a equal 0\n", "elif outside if rejected");
 
+        // round-trip: statement.write() -> LAssembler.read() (what MindustryX toggleComment relies on)
+        SugarStatements.IfBeginStatement ifBegin = new SugarStatements.IfBeginStatement();
+        ifBegin.value = "a";
+        ifBegin.op = ConditionOp.greaterThan;
+        ifBegin.compare = "5";
+        ifBegin.destIndex = 3;
+        StringBuilder text = new StringBuilder();
+        ifBegin.write(text);
+        check(text.toString().equals("ifbegin a greaterThan 5 3"), "ifbegin serializes via write()");
+        LStatement parsed = LAssembler.read(text.toString(), true).first();
+        check(parsed instanceof SugarStatements.IfBeginStatement, "ifbegin round-trips back to IfBeginStatement");
+        SugarStatements.IfBeginStatement parsedIf = (SugarStatements.IfBeginStatement)parsed;
+        check(parsedIf.value.equals("a") && parsedIf.op == ConditionOp.greaterThan && parsedIf.compare.equals("5") && parsedIf.destIndex == 3,
+            "ifbegin fields survive round-trip");
+
         System.out.println("ALL CHECKS PASSED");
     }
 

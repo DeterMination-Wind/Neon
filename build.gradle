@@ -25,6 +25,9 @@ def localMindustryDesktopJar = new File(rootDir.parentFile, "Mindustry-master/de
 def localArcCoreJar = new File(rootDir.parentFile, "Arc/arc-core/build/libs/arc-core-1.0.jar")
 
 repositories{
+    maven { url 'https://maven.aliyun.com/repository/central' }
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
     mavenCentral()
     maven{ url "https://jitpack.io" }
 }
@@ -114,10 +117,19 @@ tasks.register("versionUtilTest", JavaExec){
     mainClass.set("modupdater.features.VersionUtilTest")
 }
 
+tasks.register("ifElseCompileTest", JavaExec){
+    group = "verification"
+    description = "Runs the Logic Sugar if/elif/else compile smoke test."
+    dependsOn tasks.named("testClasses")
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass.set("mindustry.logic.IfElseCompileTest")
+}
+
 tasks.named("test").configure{
     dependsOn tasks.named("dataImagePackerCompatTest")
     dependsOn tasks.named("pinyinScopeContextTest")
     dependsOn tasks.named("versionUtilTest")
+    dependsOn tasks.named("ifElseCompileTest")
 }
 
 jar{

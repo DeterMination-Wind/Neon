@@ -16,9 +16,12 @@ import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.BreakStatement;
 import mindustry.logic.SugarStatements.ContinueStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
+import mindustry.logic.SugarStatements.ElseIfStatement;
+import mindustry.logic.SugarStatements.ElseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
 import mindustry.logic.SugarStatements.FuncDefStatement;
+import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.ReturnStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
@@ -405,6 +408,7 @@ public final class SugarFunctions{
         for(Function function : index.functions.values()){
             int[] switchOwner = switchOwners(function.body);
             int[] breakOwner = breakOwners(function.body);
+            int[] ifOwner = ifOwners(function.body);
             for(int i = 0; i < function.body.size; i++){
                 LStatement statement = function.body.get(i);
                 if(statement instanceof CaseStatement && switchOwner[i] < 0){
@@ -412,6 +416,12 @@ public final class SugarFunctions{
                 }
                 if(statement instanceof BreakStatement && breakOwner[i] < 0){
                     throw error("break", i, "in library function '" + function.name + "' is outside a loop or switch");
+                }
+                if(statement instanceof ElseIfStatement && ifOwner[i] < 0){
+                    throw error("elif", i, "in library function '" + function.name + "' is outside an if");
+                }
+                if(statement instanceof ElseStatement && ifOwner[i] < 0){
+                    throw error("else", i, "in library function '" + function.name + "' is outside an if");
                 }
                 if(statement instanceof FuncCallStatement call){
                     Function target = index.functions.get(call.name);
@@ -858,6 +868,8 @@ public final class SugarFunctions{
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
         int[] continueOwner = continueOwners(statements);
+        int[] ifOwner = ifOwners(statements);
+        int[] nextBranch = nextBranch(statements, ifOwner);
         boolean[] statementLabels = statementLabels(statements, breakOwner);
         String[] optimizedOperations = optimizeOperations(statements, statementLabels);
 
@@ -877,7 +889,8 @@ public final class SugarFunctions{
                 out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
                 out.append(label(prefix, "for_body_", i)).append(":\n");
             }else if(statement instanceof WhileBeginStatement begin){
-                out.append("jump ").append(label(prefix, "while_body_", i)).append(" notEqual ").append(begin.condition).append(" false\n");
+                out.append("jump ").append(label(prefix, "while_body_", i)).append(' ').append(begin.op.name()).append(' ')
+                    .append(begin.value).append(' ').append(begin.compare).append('\n');
                 out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
                 out.append(label(prefix, "while_body_", i)).append(":\n");
             }else if(statement instanceof SwitchBeginStatement begin){
@@ -890,6 +903,35 @@ public final class SugarFunctions{
             }else if(statement instanceof CaseStatement){
                 if(switchOwner[i] < 0) throw error("case", i, "is outside a switch");
                 out.append(label(prefix, "case_", i)).append(":\n");
+            }else if(statement instanceof IfBeginStatement begin){
+                String target = nextBranch[i] >= 0
+                    ? label(prefix, "if_branch_", nextBranch[i])
+                    : label(prefix, "stmt_", begin.destIndex + 1);
+                ConditionOp negated = negate(begin.op);
+                if(negated != null){
+                    out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
+                        .append(begin.value).append(' ').append(begin.compare).append('\n');
+                }
+            }else if(statement instanceof ElseIfStatement item){
+                int owner = ifOwner[i];
+                if(owner < 0) throw error("elif", i, "is outside an if");
+                int end = ((BeginStatement)statements.get(owner)).destIndex;
+                out.append("jump ").append(label(prefix, "stmt_", end + 1)).append(" always x false\n");
+                out.append(label(prefix, "if_branch_", i)).append(":\n");
+                String target = nextBranch[i] >= 0
+                    ? label(prefix, "if_branch_", nextBranch[i])
+                    : label(prefix, "stmt_", end + 1);
+                ConditionOp negated = negate(item.op);
+                if(negated != null){
+                    out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
+                        .append(item.value).append(' ').append(item.compare).append('\n');
+                }
+            }else if(statement instanceof ElseStatement){
+                int owner = ifOwner[i];
+                if(owner < 0) throw error("else", i, "is outside an if");
+                int end = ((BeginStatement)statements.get(owner)).destIndex;
+                out.append("jump ").append(label(prefix, "stmt_", end + 1)).append(" always x false\n");
+                out.append(label(prefix, "if_branch_", i)).append(":\n");
             }else if(statement instanceof BreakStatement){
                 if(breakOwner[i] < 0) throw error("break", i, "is outside a loop or switch");
                 BeginStatement owner = (BeginStatement)statements.get(breakOwner[i]);
@@ -1021,6 +1063,52 @@ public final class SugarFunctions{
             if(statements.get(i) instanceof SwitchBeginStatement) stack.push(i);
         }
         return result;
+    }
+
+    /** Returns the innermost enclosing if block index for each statement. */
+    private static int[] ifOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((IfBeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof IfBeginStatement) stack.push(i);
+        }
+        return result;
+    }
+
+    /** For each if-begin and elif, the index of the next elif/else in the same chain, or -1. */
+    private static int[] nextBranch(Seq<LStatement> statements, int[] ifOwner){
+        int[] next = new int[statements.size];
+        Arrays.fill(next, -1);
+        for(int i = 0; i < statements.size; i++){
+            if(!(statements.get(i) instanceof IfBeginStatement begin)) continue;
+            int prev = i;
+            for(int at = i + 1; at < begin.destIndex; at++){
+                LStatement statement = statements.get(at);
+                if(ifOwner[at] == i && (statement instanceof ElseIfStatement || statement instanceof ElseStatement)){
+                    next[prev] = at;
+                    prev = at;
+                }
+            }
+        }
+        return next;
+    }
+
+    /** Returns the op whose truth is the negation of {@code op}, or null for {@code always}
+     *  (a condition that is always true never needs its false branch taken). */
+    private static ConditionOp negate(ConditionOp op){
+        switch(op){
+            case equal: return ConditionOp.notEqual;
+            case notEqual: return ConditionOp.equal;
+            case lessThan: return ConditionOp.greaterThanEq;
+            case lessThanEq: return ConditionOp.greaterThan;
+            case greaterThan: return ConditionOp.lessThanEq;
+            case greaterThanEq: return ConditionOp.lessThan;
+            case strictEqual: return ConditionOp.notEqual;
+            default: return null; // always
+        }
     }
 
     /** Returns the innermost enclosing structure that accepts a break statement. */

@@ -23,6 +23,9 @@ import mindustry.logic.LStatements.JumpStatement;
 import mindustry.logic.SugarStatements.BeginStatement;
 import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
+import mindustry.logic.SugarStatements.ElseIfStatement;
+import mindustry.logic.SugarStatements.ElseStatement;
+import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import logicsugar.assist.BoxSelect;
 import logicsugar.assist.JumpLineColor;
@@ -529,7 +532,7 @@ public class SugarCanvas extends LCanvas{
                 int index = children.indexOf(child, true);
                 elem.applyStructure(0, false, compilerInvalid[index] || elem.st instanceof BlockEndStatement && !claimed.containsKey(elem));
             }
-            assignRange(0, children.size, 0, false, children);
+            assignRange(0, children.size, 0, false, false, children);
             statements.invalidateHierarchy();
             markJumpHeightsDirty(SugarCanvas.this);
         }
@@ -562,13 +565,19 @@ public class SugarCanvas extends LCanvas{
             }
         }
 
-        private void assignRange(int from, int to, int depth, boolean switchBody, SnapshotSeq<Element> children){
+        private void assignRange(int from, int to, int depth, boolean switchBody, boolean ifBody, SnapshotSeq<Element> children){
             int currentDepth = depth;
             for(int i = from; i < to; i++){
                 SugarStatementElem elem = (SugarStatementElem)children.get(i);
                 Pair pair = pairAt(i);
 
                 if(switchBody && elem.st instanceof CaseStatement){
+                    elem.applyStructure(depth, false, compilerInvalid[i]);
+                    currentDepth = depth + 1;
+                    continue;
+                }
+
+                if(ifBody && (elem.st instanceof ElseIfStatement || elem.st instanceof ElseStatement)){
                     elem.applyStructure(depth, false, compilerInvalid[i]);
                     currentDepth = depth + 1;
                     continue;
@@ -582,7 +591,7 @@ public class SugarCanvas extends LCanvas{
                             ((SugarStatementElem)children.get(at)).applyStructure(currentDepth + 1, true, false);
                         }
                     }else{
-                        assignRange(i + 1, pair.endIndex, currentDepth + 1, pair.begin instanceof SwitchBeginStatement, children);
+                        assignRange(i + 1, pair.endIndex, currentDepth + 1, pair.begin instanceof SwitchBeginStatement, pair.begin instanceof IfBeginStatement, children);
                     }
                     end.applyStructure(currentDepth, false, compilerInvalid[pair.endIndex]);
                     i = pair.endIndex;

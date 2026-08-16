@@ -9,9 +9,12 @@ import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.BreakStatement;
 import mindustry.logic.SugarStatements.ContinueStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
+import mindustry.logic.SugarStatements.ElseIfStatement;
+import mindustry.logic.SugarStatements.ElseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
 import mindustry.logic.SugarStatements.FuncDefStatement;
+import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
 
@@ -332,6 +335,7 @@ public final class SugarCompiler{
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
         int[] continueOwner = continueOwners(statements);
+        int[] ifOwner = ifOwners(statements);
         for(int i = 0; i < statements.size; i++){
             if(statements.get(i) instanceof CaseStatement && switchOwner[i] < 0){
                 invalid[i] = true;
@@ -341,6 +345,28 @@ public final class SugarCompiler{
             }
             if(statements.get(i) instanceof ContinueStatement && continueOwner[i] < 0){
                 invalid[i] = true;
+            }
+            if(statements.get(i) instanceof ElseIfStatement && ifOwner[i] < 0){
+                invalid[i] = true;
+            }
+            if(statements.get(i) instanceof ElseStatement && ifOwner[i] < 0){
+                invalid[i] = true;
+            }
+        }
+
+        // an if chain may have at most one else, and no elif may follow it
+        for(int i = 0; i < statements.size; i++){
+            if(!(statements.get(i) instanceof IfBeginStatement begin)) continue;
+            boolean seenElse = false;
+            for(int at = i + 1; at < begin.destIndex; at++){
+                LStatement statement = statements.get(at);
+                if(ifOwner[at] != i) continue;
+                if(statement instanceof ElseIfStatement){
+                    if(seenElse) invalid[at] = true;
+                }else if(statement instanceof ElseStatement){
+                    if(seenElse) invalid[at] = true;
+                    seenElse = true;
+                }
             }
         }
 
@@ -417,6 +443,19 @@ public final class SugarCompiler{
             while(!stack.isEmpty() && ((SwitchBeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
             if(statements.get(i) instanceof SwitchBeginStatement) stack.push(i);
+        }
+        return result;
+    }
+
+    /** Returns the innermost enclosing if block index for each statement. */
+    private static int[] ifOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        java.util.Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((IfBeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof IfBeginStatement) stack.push(i);
         }
         return result;
     }

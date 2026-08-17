@@ -85,6 +85,11 @@ Neon/
 - 预发行版 Release 使用 `B<稳定版本号>.<递增构建号>`，例如 `B11.20`。
 - `N11` 在 `mod.json`、`mod.hjson` 和 `build.gradle` 中统一写为 `110000`；`B11.20` 写为 `110020`。
 - 发布 tag 只使用 `N*` 或 `B*`；CI 通过 `tools/neon_version.py` 计算版本号并同步描述文件。
+- **每次发布前必须在本地完成以下步骤（不依赖 CI 改版本或构建）**：
+  1. 更新本地版本号：`python tools/neon_version.py --set-files <版本码>`（例如 N12 → `120000`），同步 `mod.json` / `mod.hjson` / `build.gradle`；
+  2. 本地构建：`gradlew clean deploy`（`ANDROID_SDK_ROOT` 指向完整 SDK 并取消 `D8_PATH`）；
+  3. 将 `dist/Neon.jar` 与 `dist/Neon.zip` 复制为 `构建/Neon/Neon-v<标签>.jar` 与 `构建/Neon/Neon-v<标签>.zip`，并核实两个文件。
+  CI 只负责在 tag 推送后生成 GitHub Release，不得作为版本号更新或本地构建的替代。
 - 更新器必须同时兼容新格式、数字版本码和历史 `vX.Y.Z` 版本。
 
 ## 设置接入规范（Neon 风格）

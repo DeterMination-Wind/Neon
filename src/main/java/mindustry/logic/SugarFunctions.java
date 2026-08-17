@@ -14,10 +14,14 @@ import mindustry.logic.SugarCompiler.FuncMode;
 import mindustry.logic.SugarStatements.BeginStatement;
 import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.BreakStatement;
+import mindustry.logic.SugarStatements.ContinueStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
+import mindustry.logic.SugarStatements.ElseIfStatement;
+import mindustry.logic.SugarStatements.ElseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
 import mindustry.logic.SugarStatements.FuncDefStatement;
+import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.ReturnStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
@@ -25,6 +29,7 @@ import mindustry.logic.SugarStatements.WhileBeginStatement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -132,6 +137,11 @@ public final class SugarFunctions{
     /** Parsed and validated global function library. */
     public static final class LibraryIndex{
         public final Map<String, Function> functions = new LinkedHashMap<>();
+        /** True when the index was salvaged from a damaged library file and may be missing
+         *  definitions that could not be recovered. */
+        public boolean damaged;
+        /** Problems that were repaired while loading a damaged library file. */
+        public List<String> warnings = new ArrayList<>();
     }
 
     /** Local functions plus the resolved main statement list. */
@@ -404,6 +414,8 @@ public final class SugarFunctions{
         for(Function function : index.functions.values()){
             int[] switchOwner = switchOwners(function.body);
             int[] breakOwner = breakOwners(function.body);
+            int[] ifOwner = ifOwners(function.body);
+            boolean[] ifBad = ifChainViolations(function.body, ifOwner);
             for(int i = 0; i < function.body.size; i++){
                 LStatement statement = function.body.get(i);
                 if(statement instanceof CaseStatement && switchOwner[i] < 0){
@@ -411,6 +423,16 @@ public final class SugarFunctions{
                 }
                 if(statement instanceof BreakStatement && breakOwner[i] < 0){
                     throw error("break", i, "in library function '" + function.name + "' is outside a loop or switch");
+                }
+                if(statement instanceof ElseIfStatement && ifOwner[i] < 0){
+                    throw error("elif", i, "in library function '" + function.name + "' is outside an if");
+                }
+                if(statement instanceof ElseStatement && ifOwner[i] < 0){
+                    throw error("else", i, "in library function '" + function.name + "' is outside an if");
+                }
+                if(ifBad[i]){
+                    throw error(statement instanceof ElseStatement ? "else" : "elif", i,
+                        "in library function '" + function.name + "' appears after else (or is a duplicate else) in the same if chain");
                 }
                 if(statement instanceof FuncCallStatement call){
                     Function target = index.functions.get(call.name);
@@ -471,33 +493,280 @@ public final class SugarFunctions{
         for(int i = 0; i < n; i++){
             int e = endOf[i];
             if(e < 0) continue;
-            // consecutive slices are concatenated, so targets shift by the slice start
-            // relative to the full text AND by the statements already appended
-            int base = appended;
-            for(int k = i; k <= e; k++){
-                LStatement statement = statements.get(k);
-                // BeginStatement.copy() resets destIndex, so capture the original first.
-                int dest = -1;
-                if(statement instanceof BeginStatement begin){
-                    dest = begin.destIndex;
-                }else if(statement instanceof JumpStatement jump){
-                    dest = jump.destIndex;
-                }
-                LStatement copy = statement.copy();
-                if(copy == null){
-                    throw new IllegalArgumentException("internal error: failed to copy a library statement");
-                }
-                if(copy instanceof BeginStatement begin){
-                    begin.destIndex = dest - i + base;
-                }else if(copy instanceof JumpStatement jump){
-                    jump.destIndex = dest - i + base;
-                }
-                copy.write(out);
-                out.append('\n');
-                appended++;
-            }
+            appended += copySlice(statements, i, e, out, appended);
         }
         return out.toString();
+    }
+
+    /**
+     * Copies statements [i..e] into the output, remapping begin/jump targets from the
+     * full-text coordinate space into the output space: every target shifts by (base - i)
+     * (base = statements already appended), so a funcdef keeps pointing at its own blockend
+     * when consecutive slices are concatenated. Returns the number of statements appended.
+     */
+    private static int copySlice(Seq<LStatement> statements, int i, int e, StringBuilder out, int base){
+        int appended = 0;
+        for(int k = i; k <= e; k++){
+            LStatement statement = statements.get(k);
+            // BeginStatement.copy() resets destIndex, so capture the original first.
+            int dest = -1;
+            if(statement instanceof BeginStatement begin){
+                dest = begin.destIndex;
+            }else if(statement instanceof JumpStatement jump){
+                dest = jump.destIndex;
+            }
+            LStatement copy = statement.copy();
+            if(copy == null){
+                throw new IllegalArgumentException("internal error: failed to copy a library statement");
+            }
+            if(copy instanceof BeginStatement begin){
+                begin.destIndex = dest - i + base;
+            }else if(copy instanceof JumpStatement jump){
+                jump.destIndex = dest - i + base;
+            }
+            copy.write(out);
+            out.append('\n');
+            appended++;
+        }
+        return appended;
+    }
+
+    /** Result of salvaging a (possibly damaged) library text. */
+    public static final class SanitizedLibrary{
+        /** Sanitized library text (byte-identical to the input when the library was valid). */
+        public final String text;
+        /** Partial index built from the functions that could be recovered. */
+        public final LibraryIndex index;
+        /** Problems that were repaired; empty when the library was valid. */
+        public final List<String> warnings;
+        /** True when anything had to be repaired. */
+        public final boolean damaged;
+
+        public SanitizedLibrary(String text, LibraryIndex index, List<String> warnings, boolean damaged){
+            this.text = text;
+            this.index = index;
+            this.warnings = warnings;
+            this.damaged = damaged;
+        }
+    }
+
+    /** The splice points (statement index pairs) around top-level function definitions.
+     *  Structurally broken funcdefs (no valid block end) are recorded as warnings. */
+    private static List<int[]> topLevelFuncdefSlices(Seq<LStatement> statements, List<String> warnings){
+        List<int[]> slices = new ArrayList<>();
+        int n = statements.size;
+        for(int i = 0; i < n; ){
+            if(statements.get(i) instanceof FuncDefStatement){
+                int dest = ((BeginStatement)statements.get(i)).destIndex;
+                if(dest > i && dest < n && statements.get(dest) instanceof BlockEndStatement){
+                    slices.add(new int[]{i, dest});
+                    i = dest + 1; // body + end belong to this slice (nested funcdefs damage it)
+                }else{
+                    warnings.add("funcdef at statement " + i + " is damaged and was skipped");
+                    i++;
+                }
+            }else{
+                i++;
+            }
+        }
+        return slices;
+    }
+
+    /**
+     * Salvages a library text function-by-function instead of rejecting the whole file when
+     * one definition is damaged: structurally broken or un-rewritable funcdefs are skipped,
+     * duplicate names keep the last definition, top-level stray statements are discarded, and
+     * survivors that call removed functions (or form call cycles) are removed too. The output
+     * is a sanitized text whose index is guaranteed to re-validate with {@link #buildLibrary};
+     * a fully valid input is returned byte-identical with no warnings.
+     */
+    public static SanitizedLibrary sanitizedLibrary(String text){
+        List<String> warnings = new ArrayList<>();
+        Seq<LStatement> statements;
+        try{
+            statements = LAssembler.read(text, true);
+        }catch(Throwable t){
+            String message = "the library text cannot be parsed: " + t.getMessage();
+            return new SanitizedLibrary("", new LibraryIndex(), List.of(message), true);
+        }
+
+        // Fast path: the whole library validates unchanged (output must equal the input).
+        try{
+            return new SanitizedLibrary(text, buildLibrary(statements), List.of(), false);
+        }catch(IllegalArgumentException ignored){
+            // buildLibrary remaps the bodies it processed before failing; parse again fresh
+            statements = LAssembler.read(text, true);
+        }
+
+        // identify top-level funcdef slices in source order
+        List<int[]> slices = topLevelFuncdefSlices(statements, warnings);
+
+        // top-level statements that belong to no funcdef slice are discarded as junk
+        boolean[] covered = new boolean[statements.size];
+        for(int[] slice : slices){
+            Arrays.fill(covered, slice[0], slice[1] + 1, true);
+        }
+        int strayCount = 0;
+        for(int i = 0; i < statements.size; i++){
+            if(!covered[i] && !(statements.get(i) instanceof FuncDefStatement)) strayCount++;
+        }
+        if(strayCount > 0){
+            warnings.add("top-level statement(s) outside any function were discarded");
+        }
+
+        // salvage each slice independently: build the function body without requiring its
+        // callees to exist yet (cross-function call validation happens below); duplicates
+        // keep the last definition
+        Map<String, Function> survivors = new LinkedHashMap<>();
+        Map<String, int[]> survivorSlices = new LinkedHashMap<>();
+        for(int[] slice : slices){
+            String name;
+            Function function;
+            try{
+                StringBuilder copyText = new StringBuilder();
+                copySlice(statements, slice[0], slice[1], copyText, 0);
+                Seq<LStatement> single = LAssembler.read(copyText.toString(), true);
+                if(single.size != slice[1] - slice[0] + 1){
+                    throw new IllegalArgumentException("slice round-trip changed the statement count");
+                }
+                function = buildFunction(single, 0, single.size - 1, true);
+                prepBody(function);
+                name = function.name;
+            }catch(RuntimeException e){
+                warnings.add("funcdef at statement " + slice[0] + " is damaged and was skipped (" + e.getMessage() + ")");
+                continue;
+            }
+            if(survivors.containsKey(name)){
+                warnings.add("duplicate function name '" + name + "'; keeping the last definition (statement " + slice[0] + ")");
+            }
+            survivors.put(name, function);
+            survivorSlices.put(name, slice);
+        }
+
+        // survivors whose in-library calls no longer resolve are removed (fixpoint)
+        removeInvalidCallers(survivors, survivorSlices, warnings);
+
+        // recursion among survivors would invalidate the whole library; drop the cycle members
+        Set<String> cycles = cycleMembers(survivors);
+        if(!cycles.isEmpty()){
+            warnings.add("library recursion was detected; the functions " + cycles + " were removed");
+            for(String name : cycles){
+                survivors.remove(name);
+                survivorSlices.remove(name);
+            }
+            removeInvalidCallers(survivors, survivorSlices, warnings);
+        }
+
+        // re-serialize the survivors and prove the result re-validates (safety net: the
+        // sanitizer must never hand back a text that buildLibrary would reject)
+        String output = serializeSlices(statements, survivorSlices.values());
+        LibraryIndex index = new LibraryIndex();
+        while(true){
+            try{
+                index = buildLibrary(LAssembler.read(output, true));
+                break;
+            }catch(IllegalArgumentException e){
+                if(survivorSlices.isEmpty()){
+                    warnings.add("the damaged library could not be salvaged; it was emptied (" + e.getMessage() + ")");
+                    break;
+                }
+                String last = null;
+                for(String name : survivorSlices.keySet()) last = name;
+                warnings.add("library function '" + last + "' was removed because the salvaged library still failed validation (" + e.getMessage() + ")");
+                survivors.remove(last);
+                survivorSlices.remove(last);
+                output = serializeSlices(statements, survivorSlices.values());
+            }
+        }
+        if(index.functions.isEmpty() && !warnings.isEmpty()){
+            warnings.add("no usable functions could be recovered from the damaged library");
+        }
+        index.damaged = true;
+        index.warnings = new ArrayList<>(warnings);
+        return new SanitizedLibrary(output, index, warnings, true);
+    }
+
+    /** Removes survivors whose body calls do not resolve within the survivor set. */
+    private static void removeInvalidCallers(Map<String, Function> survivors, Map<String, int[]> survivorSlices, List<String> warnings){
+        boolean changed;
+        do{
+            changed = false;
+            for(String name : new ArrayList<>(survivors.keySet())){
+                if(!libraryBodyValid(survivors.get(name), survivors)){
+                    warnings.add("library function '" + name
+                        + "' was removed because it calls an undefined or invalid library function");
+                    survivors.remove(name);
+                    survivorSlices.remove(name);
+                    changed = true;
+                }
+            }
+        }while(changed);
+    }
+
+    /** Whether a salvaged function's body is self-contained and its calls resolve within the
+     *  survivor set (mirrors buildLibrary's per-function call rules); also rebuilds the
+     *  function's resolved callee set so recursion detection sees real edges. */
+    private static boolean libraryBodyValid(Function function, Map<String, Function> survivors){
+        int[] switchOwner = switchOwners(function.body);
+        int[] breakOwner = breakOwners(function.body);
+        function.callees.clear();
+        for(int i = 0; i < function.body.size; i++){
+            LStatement statement = function.body.get(i);
+            if(statement instanceof CaseStatement && switchOwner[i] < 0) return false;
+            if(statement instanceof BreakStatement && breakOwner[i] < 0) return false;
+            if(statement instanceof FuncCallStatement call){
+                Function target = survivors.get(call.name);
+                if(target == null) return false;
+                if(splitArgs(call.args).size() != target.params.size()) return false;
+                if(!call.result.isEmpty() && !target.hasValueReturn) return false;
+                function.callees.add(call.name);
+            }
+        }
+        return true;
+    }
+
+    /** Serializes the given funcdef slices into one library text (source order, concatenated). */
+    private static String serializeSlices(Seq<LStatement> statements, Collection<int[]> slices){
+        StringBuilder out = new StringBuilder();
+        int appended = 0;
+        for(int[] slice : slices){
+            appended += copySlice(statements, slice[0], slice[1], out, appended);
+        }
+        return out.toString();
+    }
+
+    /** Names that take part in at least one call cycle. */
+    private static Set<String> cycleMembers(Map<String, Function> all){
+        Set<String> inCycle = new HashSet<>();
+        Map<String, Integer> state = new HashMap<>();
+        Deque<String> stack = new ArrayDeque<>();
+        for(String name : all.keySet()){
+            if(state.get(name) == null) visitCycle(name, all, state, stack, inCycle);
+        }
+        return inCycle;
+    }
+
+    private static void visitCycle(String name, Map<String, Function> all, Map<String, Integer> state,
+                                   Deque<String> stack, Set<String> inCycle){
+        state.put(name, 1);
+        stack.push(name);
+        Function function = all.get(name);
+        if(function != null){
+            for(String callee : function.callees){
+                if(!all.containsKey(callee)) continue;
+                Integer seen = state.get(callee);
+                if(seen == null){
+                    visitCycle(callee, all, state, stack, inCycle);
+                }else if(seen == 1){
+                    for(String node : stack){
+                        inCycle.add(node);
+                        if(node.equals(callee)) break;
+                    }
+                }
+            }
+        }
+        stack.pop();
+        state.put(name, 2);
     }
 
     /** Splits a comma-separated parameter declaration list; empty entries are dropped. */
@@ -573,11 +842,12 @@ public final class SugarFunctions{
     private static void resolveCall(FuncCallStatement call, Function owner, FunctionSet set, int index){
         Function target = set.resolve(call.name);
         if(target == null){
+            String hint = libraryProblemHint(set.library);
             if(owner != null && owner.library){
                 throw error("funccall", index, "in library function '" + owner.name
-                    + "' calls undefined library function '" + call.name + "' (library functions can only call other library functions)");
+                    + "' calls undefined library function '" + call.name + "' (library functions can only call other library functions)" + hint);
             }
-            throw error("funccall", index, "calls undefined function '" + call.name + "'");
+            throw error("funccall", index, "calls undefined function '" + call.name + "'" + hint);
         }
         if(owner != null && owner.library && !target.library){
             throw error("funccall", index, "in library function '" + owner.name
@@ -593,6 +863,20 @@ public final class SugarFunctions{
                 + "' but its body never returns a value");
         }
         (owner == null ? set.mainCalls : owner.callees).add(call.name);
+    }
+
+    /** Localizes an "undefined function" error when the library state explains the miss.
+     *  An otherwise-valid library keeps the plain message (a function really does not
+     *  exist); a missing or damaged library points the user at the repair path. */
+    private static String libraryProblemHint(LibraryIndex library){
+        if(library == null){
+            return ". The global function library is unavailable; check Settings -> Function Library";
+        }
+        if(library.damaged){
+            String first = library.warnings.isEmpty() ? "the file needs repair" : library.warnings.get(0);
+            return ". Note: the function library has errors (" + first + "); fix it in Settings -> Function Library";
+        }
+        return "";
     }
 
     private static void validateName(String name, String kind){
@@ -856,8 +1140,20 @@ public final class SugarFunctions{
                              StringBuilder out, CallIds ids, String funcName){
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
+        int[] continueOwner = continueOwners(statements);
+        int[] ifOwner = ifOwners(statements);
+        int[] nextBranch = nextBranch(statements, ifOwner);
         boolean[] statementLabels = statementLabels(statements, breakOwner);
         String[] optimizedOperations = optimizeOperations(statements, statementLabels);
+
+        boolean[] ifBad = ifChainViolations(statements, ifOwner);
+        for(int i = 0; i < statements.size; i++){
+            if(ifBad[i]){
+                LStatement statement = statements.get(i);
+                throw error(statement instanceof ElseStatement ? "else" : "elif", i,
+                    "appears after else (or is a duplicate else) in the same if chain");
+            }
+        }
 
         for(int i = 0; i < statements.size; i++){
             if(statementLabels[i]) out.append(label(prefix, "stmt_", i)).append(":\n");
@@ -868,17 +1164,15 @@ public final class SugarFunctions{
             LStatement statement = statements.get(i);
 
             if(statement instanceof ForBeginStatement begin){
-                out.append("jump ").append(label(prefix, "for_check_", i)).append(" notEqual ").append(label(prefix, "for_init_", i)).append(" 0\n");
                 if(!begin.initial.isEmpty()) out.append("set ").append(begin.variable).append(' ').append(begin.initial).append('\n');
-                out.append("set ").append(label(prefix, "for_init_", i)).append(" 1\n");
                 out.append(label(prefix, "for_check_", i)).append(":\n");
                 out.append("jump ").append(label(prefix, "for_body_", i)).append(' ').append(begin.op.name()).append(' ')
                     .append(begin.variable).append(' ').append(begin.compare).append('\n');
-                out.append("set ").append(label(prefix, "for_init_", i)).append(" 0\n");
                 out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
                 out.append(label(prefix, "for_body_", i)).append(":\n");
             }else if(statement instanceof WhileBeginStatement begin){
-                out.append("jump ").append(label(prefix, "while_body_", i)).append(" notEqual ").append(begin.condition).append(" false\n");
+                out.append("jump ").append(label(prefix, "while_body_", i)).append(' ').append(begin.op.name()).append(' ')
+                    .append(begin.value).append(' ').append(begin.compare).append('\n');
                 out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
                 out.append(label(prefix, "while_body_", i)).append(":\n");
             }else if(statement instanceof SwitchBeginStatement begin){
@@ -891,14 +1185,53 @@ public final class SugarFunctions{
             }else if(statement instanceof CaseStatement){
                 if(switchOwner[i] < 0) throw error("case", i, "is outside a switch");
                 out.append(label(prefix, "case_", i)).append(":\n");
+            }else if(statement instanceof IfBeginStatement begin){
+                String target = nextBranch[i] >= 0
+                    ? label(prefix, "if_branch_", nextBranch[i])
+                    : label(prefix, "stmt_", begin.destIndex + 1);
+                ConditionOp negated = negate(begin.op);
+                if(negated != null){
+                    out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
+                        .append(begin.value).append(' ').append(begin.compare).append('\n');
+                }
+            }else if(statement instanceof ElseIfStatement item){
+                int owner = ifOwner[i];
+                if(owner < 0) throw error("elif", i, "is outside an if");
+                int end = ((BeginStatement)statements.get(owner)).destIndex;
+                out.append("jump ").append(label(prefix, "stmt_", end + 1)).append(" always x false\n");
+                out.append(label(prefix, "if_branch_", i)).append(":\n");
+                String target = nextBranch[i] >= 0
+                    ? label(prefix, "if_branch_", nextBranch[i])
+                    : label(prefix, "stmt_", end + 1);
+                ConditionOp negated = negate(item.op);
+                if(negated != null){
+                    out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
+                        .append(item.value).append(' ').append(item.compare).append('\n');
+                }
+            }else if(statement instanceof ElseStatement){
+                int owner = ifOwner[i];
+                if(owner < 0) throw error("else", i, "is outside an if");
+                int end = ((BeginStatement)statements.get(owner)).destIndex;
+                out.append("jump ").append(label(prefix, "stmt_", end + 1)).append(" always x false\n");
+                out.append(label(prefix, "if_branch_", i)).append(":\n");
             }else if(statement instanceof BreakStatement){
                 if(breakOwner[i] < 0) throw error("break", i, "is outside a loop or switch");
                 BeginStatement owner = (BeginStatement)statements.get(breakOwner[i]);
                 out.append("jump ").append(label(prefix, "stmt_", owner.destIndex + 1)).append(" always x false\n");
+            }else if(statement instanceof ContinueStatement){
+                int owner = continueOwner[i];
+                if(owner < 0) throw error("continue", i, "is outside a loop");
+                LStatement ownerStmt = statements.get(owner);
+                if(ownerStmt instanceof ForBeginStatement){
+                    out.append("jump ").append(label(prefix, "for_continue_", owner)).append(" always x false\n");
+                }else if(ownerStmt instanceof WhileBeginStatement){
+                    out.append("jump ").append(label(prefix, "stmt_", owner)).append(" always x false\n");
+                }
             }else if(statement instanceof BlockEndStatement){
                 int beginIndex = findOwner(statements, i);
                 LStatement owner = statements.get(beginIndex);
                 if(owner instanceof ForBeginStatement begin){
+                    out.append(label(prefix, "for_continue_", beginIndex)).append(":\n");
                     if(!begin.step.isEmpty()) out.append("op add ").append(begin.variable).append(' ').append(begin.variable).append(' ').append(begin.step).append('\n');
                     out.append("jump ").append(label(prefix, "for_check_", beginIndex)).append(" always x false\n");
                 }else if(owner instanceof WhileBeginStatement){
@@ -1014,6 +1347,83 @@ public final class SugarFunctions{
         return result;
     }
 
+    /** Returns the innermost enclosing if block index for each statement. */
+    private static int[] ifOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((IfBeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof IfBeginStatement) stack.push(i);
+        }
+        return result;
+    }
+
+    /** Marks each elif/else that violates the chain rule: an if chain may have at most one
+     *  {@code else}, and no {@code elif} may follow it (it would be silently dead code).
+     *  This is the single source of truth for the rule, shared by canvas highlighting
+     *  (SugarCompiler.invalidStatements), the compile path ({@link #lower}) and the library
+     *  builder ({@link #buildLibrary}), so text-sourced and library programs are rejected the
+     *  same way as the canvas. */
+    static boolean[] ifChainViolations(Seq<LStatement> statements, int[] ifOwner){
+        boolean[] bad = new boolean[statements.size];
+        for(int i = 0; i < statements.size; i++){
+            if(!(statements.get(i) instanceof IfBeginStatement begin)) continue;
+            boolean seenElse = false;
+            for(int at = i + 1; at < begin.destIndex; at++){
+                if(ifOwner[at] != i) continue;
+                LStatement statement = statements.get(at);
+                if(statement instanceof ElseIfStatement){
+                    if(seenElse) bad[at] = true;
+                }else if(statement instanceof ElseStatement){
+                    if(seenElse) bad[at] = true;
+                    seenElse = true;
+                }
+            }
+        }
+        return bad;
+    }
+
+    /** For each if-begin and elif, the index of the next elif/else in the same chain, or -1. */
+    private static int[] nextBranch(Seq<LStatement> statements, int[] ifOwner){
+        int[] next = new int[statements.size];
+        Arrays.fill(next, -1);
+        for(int i = 0; i < statements.size; i++){
+            if(!(statements.get(i) instanceof IfBeginStatement begin)) continue;
+            int prev = i;
+            for(int at = i + 1; at < begin.destIndex; at++){
+                LStatement statement = statements.get(at);
+                if(ifOwner[at] == i && (statement instanceof ElseIfStatement || statement instanceof ElseStatement)){
+                    next[prev] = at;
+                    prev = at;
+                }
+            }
+        }
+        return next;
+    }
+
+    /** Returns the op whose truth is the negation of {@code op}, or null for {@code always}
+     *  (a condition that is always true never needs its false branch taken). */
+    private static ConditionOp negate(ConditionOp op){
+        switch(op){
+            case equal: return ConditionOp.notEqual;
+            case notEqual: return ConditionOp.equal;
+            case lessThan: return ConditionOp.greaterThanEq;
+            case lessThanEq: return ConditionOp.greaterThan;
+            case greaterThan: return ConditionOp.lessThanEq;
+            case greaterThanEq: return ConditionOp.lessThan;
+            case strictEqual:
+                // Mindustry has no strict-not-equal op, so negating strictEqual falls back to
+                // notEqual. This is exact for same-typed operands but only approximate for
+                // cross-type comparisons (e.g. "a" strictEqual 1 is false, so its negation should
+                // be true, whereas "a" notEqual 1 is also true in mlog — coincidentally matching;
+                // the divergence is confined to values that coercion makes equal, such as 1 vs "1").
+                return ConditionOp.notEqual;
+            default: return null; // always
+        }
+    }
+
     /** Returns the innermost enclosing structure that accepts a break statement. */
     private static int[] breakOwners(Seq<LStatement> statements){
         int[] result = new int[statements.size];
@@ -1023,6 +1433,19 @@ public final class SugarFunctions{
             while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
             if(isBreakable(statements.get(i))) stack.push(i);
+        }
+        return result;
+    }
+
+    /** Returns the innermost enclosing loop that accepts a continue statement. */
+    private static int[] continueOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof ForBeginStatement || statements.get(i) instanceof WhileBeginStatement) stack.push(i);
         }
         return result;
     }

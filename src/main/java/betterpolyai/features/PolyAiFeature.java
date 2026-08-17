@@ -124,7 +124,10 @@ public class PolyAiFeature {
         boolean yieldToX = mutexWithXEnabled && xBuilderAiProbe.isBuilderAiSelected();
         setYieldToX(yieldToX);
 
-        if (runtimeState != RuntimeState.yieldToX) {
+        // AIController.updateUnit() also updates visual flight behavior. Do not run it
+        // while the game is paused, but keep the builder's queue and manual-pause
+        // state intact so normal processing resumes with the game.
+        if (!state.isPaused() && runtimeState != RuntimeState.yieldToX) {
             builderAI.updateUnit();
         }
         player.boosting = unit.isShooting;

@@ -7,10 +7,14 @@ import mindustry.logic.LExecutor;
 import mindustry.logic.SugarStatements.BeginStatement;
 import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.BreakStatement;
+import mindustry.logic.SugarStatements.ContinueStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
+import mindustry.logic.SugarStatements.ElseIfStatement;
+import mindustry.logic.SugarStatements.ElseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
 import mindustry.logic.SugarStatements.FuncDefStatement;
+import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
 
@@ -121,11 +125,12 @@ public final class SugarCompiler{
         if(!containsCarrier(code, carrierSugarPrefix)) return true;
         String libText = libraryFromCode(code);
         SugarFunctions.LibraryIndex embedded = null;
+        String embeddedSource = null;
         if(libText != null && !libText.trim().isEmpty()){
-            try{
-                embedded = SugarFunctions.buildLibrary(LAssembler.read(libText, true));
-            }catch(RuntimeException e){
-                return false;
+            SugarFunctions.SanitizedLibrary sanitized = SugarFunctions.sanitizedLibrary(libText);
+            if(!sanitized.index.functions.isEmpty()){
+                embedded = sanitized.index;
+                embeddedSource = sanitized.text;
             }
         }
         String storedNormalized;
@@ -136,7 +141,7 @@ public final class SugarCompiler{
         }
         for(FuncMode mode : FuncMode.values()){
             try{
-                String recompiled = compile(restored, mode, embedded, libText);
+                String recompiled = compile(restored, mode, embedded, embeddedSource);
                 if(LAssembler.write(LAssembler.read(recompiled, true)).equals(storedNormalized)) return true;
             }catch(RuntimeException ignored){
                 // one mode may legitimately fail (e.g. inline blowup); the other may match
@@ -220,44 +225,58 @@ public final class SugarCompiler{
     }
 
     /** The merged library for editing a stored program: embedded functions first, then
-     *  local functions the embedded ones do not shadow. The text mirrors the index, so the
-     *  compiler can re-extract the used subset from it when saving (self-correcting). */
+     *  local functions the embedded ones do not shadow. Both sources are salvaged through
+     *  {@link SugarFunctions#sanitizedLibrary} before merging, so a damaged local file yields
+     *  an index with the recoverable functions instead of silently null. The text mirrors the
+     *  index, so the compiler can re-extract the used subset from it when saving
+     *  (self-correcting). */
     public static EffectiveLibrary effectiveLibrary(String code, SugarFunctions.LibraryIndex local, String localText){
+        // the caller-provided local index is advisory; the sanitized local text is authoritative
         String embeddedText = libraryFromCode(code);
         String embedded = embeddedText == null ? "" : embeddedText.trim();
         Set<String> embeddedNames = new HashSet<>();
+        String embeddedSource = "";
+        SugarFunctions.SanitizedLibrary sanitizedEmbedded = null;
         if(!embedded.isEmpty()){
-            try{
-                for(String name : SugarFunctions.buildLibrary(LAssembler.read(embedded, true)).functions.keySet()){
-                    embeddedNames.add(name);
-                }
-            }catch(RuntimeException ignored){
-                embedded = "";
-            }
+            sanitizedEmbedded = SugarFunctions.sanitizedLibrary(embedded);
+            embeddedSource = sanitizedEmbedded.text;
+            for(String name : sanitizedEmbedded.index.functions.keySet()) embeddedNames.add(name);
         }
-        StringBuilder text = new StringBuilder(embedded);
-        if(local != null && localText != null && !localText.trim().isEmpty()){
-            Set<String> extras = new HashSet<>(local.functions.keySet());
+        StringBuilder text = new StringBuilder(embeddedSource);
+        SugarFunctions.SanitizedLibrary sanitizedLocal = null;
+        if(localText != null && !localText.trim().isEmpty()){
+            sanitizedLocal = SugarFunctions.sanitizedLibrary(localText);
+            Set<String> extras = new HashSet<>(sanitizedLocal.index.functions.keySet());
             extras.removeAll(embeddedNames);
             if(!extras.isEmpty()){
-                try{
-                    String extracted = SugarFunctions.extractLibrarySource(localText, extras);
-                    if(!extracted.isEmpty()){
-                        if(text.length() > 0) text.append('\n');
-                        text.append(extracted);
-                    }
-                }catch(RuntimeException ignored){
-                    // damaged local library: embedded functions still work
+                // extract from the sanitized text: raw slices could copy damaged duplicates
+                String extracted = SugarFunctions.extractLibrarySource(sanitizedLocal.text, extras);
+                if(!extracted.isEmpty()){
+                    if(text.length() > 0) text.append('\n');
+                    text.append(extracted);
                 }
             }
         }
         String effectiveText = text.toString();
+        // nothing to merge (no embedded carrier and no local file) behaves like an unavailable
+        // library; otherwise the sanitized merge is always valid, but keeps the sources' damage
+        // state so unresolved calls can point the user at the repair path
         SugarFunctions.LibraryIndex effective = null;
         if(!effectiveText.trim().isEmpty()){
-            try{
-                effective = SugarFunctions.buildLibrary(LAssembler.read(effectiveText, true));
-            }catch(RuntimeException ignored){
-                // both sources unusable: behaves like an empty library
+            effective = SugarFunctions.sanitizedLibrary(effectiveText).index;
+            boolean damaged = (sanitizedEmbedded != null && sanitizedEmbedded.damaged)
+                || (sanitizedLocal != null && sanitizedLocal.damaged);
+            if(damaged){
+                effective.damaged = true;
+                if(effective.warnings.isEmpty()){
+                    effective.warnings = new java.util.ArrayList<>();
+                    if(sanitizedEmbedded != null && !sanitizedEmbedded.warnings.isEmpty()){
+                        effective.warnings.addAll(sanitizedEmbedded.warnings);
+                    }
+                    if(sanitizedLocal != null && !sanitizedLocal.warnings.isEmpty()){
+                        effective.warnings.addAll(sanitizedLocal.warnings);
+                    }
+                }
             }
         }
         return new EffectiveLibrary(effective, effectiveText);
@@ -330,6 +349,8 @@ public final class SugarCompiler{
 
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
+        int[] continueOwner = continueOwners(statements);
+        int[] ifOwner = ifOwners(statements);
         for(int i = 0; i < statements.size; i++){
             if(statements.get(i) instanceof CaseStatement && switchOwner[i] < 0){
                 invalid[i] = true;
@@ -337,6 +358,22 @@ public final class SugarCompiler{
             if(statements.get(i) instanceof BreakStatement && breakOwner[i] < 0){
                 invalid[i] = true;
             }
+            if(statements.get(i) instanceof ContinueStatement && continueOwner[i] < 0){
+                invalid[i] = true;
+            }
+            if(statements.get(i) instanceof ElseIfStatement && ifOwner[i] < 0){
+                invalid[i] = true;
+            }
+            if(statements.get(i) instanceof ElseStatement && ifOwner[i] < 0){
+                invalid[i] = true;
+            }
+        }
+
+        // an if chain may have at most one else, and no elif may follow it (shared rule,
+        // also enforced by the compile path and the library builder)
+        boolean[] ifBad = SugarFunctions.ifChainViolations(statements, ifOwner);
+        for(int i = 0; i < statements.size; i++){
+            if(ifBad[i]) invalid[i] = true;
         }
 
         // function calls whose name resolves nowhere are marked invalid (library is loaded lazily)
@@ -416,6 +453,19 @@ public final class SugarCompiler{
         return result;
     }
 
+    /** Returns the innermost enclosing if block index for each statement. */
+    private static int[] ifOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        java.util.Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((IfBeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof IfBeginStatement) stack.push(i);
+        }
+        return result;
+    }
+
     /** Returns the innermost enclosing structure that accepts a break statement. */
     private static int[] breakOwners(Seq<LStatement> statements){
         int[] result = new int[statements.size];
@@ -426,6 +476,19 @@ public final class SugarCompiler{
             if(!stack.isEmpty()) result[i] = stack.peek();
             if(statements.get(i) instanceof WhileBeginStatement || statements.get(i) instanceof SwitchBeginStatement
                 || statements.get(i) instanceof ForBeginStatement) stack.push(i);
+        }
+        return result;
+    }
+    
+    /** Returns the innermost enclosing loop that accepts a continue statement. */
+    private static int[] continueOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        java.util.Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof WhileBeginStatement || statements.get(i) instanceof ForBeginStatement) stack.push(i);
         }
         return result;
     }

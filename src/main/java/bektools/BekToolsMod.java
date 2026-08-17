@@ -216,7 +216,6 @@ public class BekToolsMod extends Mod{
             return mod;
         });
         betterLogisticsSpeed = initializeModule(moduleBetterLogisticsSpeed, () -> {
-            BetterLogisticsSpeedMod.configureOverlayUi(overlayUi);
             BetterLogisticsSpeedMod mod = new BetterLogisticsSpeedMod();
             mod.init();
             return mod;

@@ -5,13 +5,11 @@ import java.net.InetAddress;
 import java.net.URI;
 
 /**
- * Runtime resolver for mirror URLs.
- * The mirror service is about to migrate: the A record of play.mindustry.men will
- * point to the new server. The mirror only accepts requests with the IP as the
- * authority (requests carrying the domain Host header are blocked by an
- * interception page), so clients must resolve the domain to an IPv4 address and
- * fill the IP into the URL before requesting. Falls back to the original URL
- * (domain as-is) when resolution fails.
+ * 镜像地址运行时解析工具。
+ * 镜像服务即将迁移,play.mindustry.men 的 A 记录届时指向新服务器;
+ * 镜像服务器只接受以 IP 作为 authority 的 HTTP 请求(不接受域名 Host 头,会被拦截页拒绝),
+ * 所以客户端必须自己解析域名取 IPv4、把 IP 填充进 URL 后再请求。
+ * 解析失败时回退用域名原样(由调用方直接使用返回值)。
  */
 public final class PlayMirrorResolver{
     private static final String mirrorHost = "play.mindustry.men";
@@ -19,7 +17,7 @@ public final class PlayMirrorResolver{
     private PlayMirrorResolver(){
     }
 
-    /** Replaces the play.mindustry.men host in the URL with the first IPv4 resolved at runtime, keeping port/path; returns the original URL if resolution fails. */
+    /** 把 URL 中 play.mindustry.men 的 host 替换为运行时解析出的第一个 IPv4,保留端口/路径;解析失败返回原 URL。 */
     public static String resolveHost(String url){
         String ip = resolveIpv4();
         if(ip == null) return url;
@@ -33,7 +31,7 @@ public final class PlayMirrorResolver{
         }
     }
 
-    /** System DNS has its own cache, so resolving on every call is cheap; returns the first IPv4, or null if none is available. */
+    /** 系统 DNS 自带缓存,每次调用解析的开销可忽略;取第一个 IPv4,拿不到返回 null。 */
     private static String resolveIpv4(){
         try{
             for(InetAddress address : InetAddress.getAllByName(mirrorHost)){

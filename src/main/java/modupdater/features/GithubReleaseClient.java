@@ -10,11 +10,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 public final class GithubReleaseClient{
-    private static final String neonRepo = "DeterMination-Wind/Neon";
-    // mirror URLs keep the domain; the host is resolved to an IPv4 right before each request (see PlayMirrorResolver), falling back to the domain when resolution fails
-    private static final String neonReleaseBackupUrl = "http://play.mindustry.men/github/mod-assets/DeterMination-Wind/Neon/release-backup.json";
-    private static final String githubDownloadPrefix = "https://github.com/";
-    private static final String mirrorDownloadPrefix = "http://play.mindustry.men/github/mod-assets/";
 
     public static final class AssetInfo{
         public final String name;
@@ -58,65 +53,63 @@ public final class GithubReleaseClient{
     }
 
     public static void fetchReleases(String repo, Cons<ArrayList<ReleaseInfo>> onSuccess, Cons<Throwable> onError){
-        String apiUrl = "https://api.github.com/repos/" + repo + "/releases?per_page=100";
-        fetchReleasesUrl(repo, apiUrl, releases -> {
-            if(isNeonRepo(repo) && releases.isEmpty()){
-                fetchNeonBackup(repo, onSuccess, onError);
-            }else{
-                onSuccess.get(releases);
-            }
-        }, error -> {
-            if(isNeonRepo(repo)){
-                fetchNeonBackup(repo, onSuccess, onError);
-            }else{
-                onError.get(error);
-            }
-        });
-    }
-
-    private static void fetchReleasesUrl(String repo, String url, Cons<ArrayList<ReleaseInfo>> onSuccess, Cons<Throwable> onError){
-        // resolve the mirror host to an IPv4 right before the request; a no-op for non-mirror hosts
-        Http.get(PlayMirrorResolver.resolveHost(url))
+        String apiUrl = "https://api.github.com/repos/" + repo + "/releases?per_page=30";
+        Http.get(apiUrl)
         .timeout(30000)
         .header("User-Agent", "Mindustry")
         .error(onError::get)
         .submit(res -> {
             try{
                 Jval json = Jval.read(res.getResultAsString());
-                onSuccess.get(parseReleasesPayload(repo, json));
+                onSuccess.get(parseReleasesList(repo, json));
             }catch(Throwable t){
                 onError.get(t);
             }
         });
     }
 
-    private static void fetchNeonBackup(String repo, Cons<ArrayList<ReleaseInfo>> onSuccess, Cons<Throwable> onError){
-        fetchReleasesUrl(repo, neonReleaseBackupUrl, releases -> {
-            if(releases.isEmpty()){
-                onError.get(new RuntimeException("Neon release backup is empty"));
-            }else{
-                onSuccess.get(releases);
-            }
-        }, onError);
+    public static void fetchLatestFromRaw(String repo, Cons<ReleaseInfo> onSuccess, Cons<Throwable> onError){
+        fetchLatestFromRaw(repo, "main", onSuccess, e -> fetchLatestFromRaw(repo, "master", onSuccess, onError));
     }
 
-    public static ArrayList<ReleaseInfo> parseReleasesPayload(String repo, Jval json){
+    private static void fetchLatestFromRaw(String repo, String branch, Cons<ReleaseInfo> onSuccess, Cons<Throwable> onError){
+        String url = "https://raw.githubusercontent.com/" + repo + "/" + branch + "/mod.json";
+        Http.get(url)
+        .timeout(30000)
+        .header("User-Agent", "Mindustry")
+        .error(onError::get)
+        .submit(res -> {
+            try{
+                Jval json = Jval.read(res.getResultAsString());
+                String latest = VersionUtil.normalizeVersion(Strings.stripColors(json.getString("version", "")));
+                if(latest.isEmpty()){
+                    onError.get(new RuntimeException("Version missing in raw mod.json"));
+                    return;
+                }
+
+                String releasesUrl = "https://github.com/" + repo + "/releases/latest";
+                ReleaseInfo rel = new ReleaseInfo(latest, "", "", "", releasesUrl, "", false, "", new ArrayList<AssetInfo>());
+                onSuccess.get(rel);
+            }catch(Throwable t){
+                onError.get(t);
+            }
+        });
+    }
+
+    public static ArrayList<ReleaseInfo> parseReleasesList(String repo, Jval json){
         ArrayList<ReleaseInfo> out = new ArrayList<ReleaseInfo>();
-        if(json == null) return out;
+        if(json == null || !json.isArray()) return out;
 
         String fallbackHtmlUrl = "https://github.com/" + repo + "/releases";
-        if(json.isArray()){
-            for(Jval r : json.asArray()){
-                addRelease(out, r, fallbackHtmlUrl);
-            }
-        }else if(json.isObject()){
-            Jval nested = json.get("releases");
-            if(nested != null && nested.isArray()){
-                for(Jval r : nested.asArray()){
-                    addRelease(out, r, fallbackHtmlUrl);
+        for(Jval r : json.asArray()){
+            if(r == null || !r.isObject()) continue;
+            if(r.getBool("draft", false)) continue;
+            try{
+                ReleaseInfo rel = parseRelease(r, fallbackHtmlUrl);
+                if(rel != null && !rel.version.isEmpty()){
+                    out.add(rel);
                 }
-            }else{
-                addRelease(out, json, fallbackHtmlUrl);
+            }catch(Throwable ignored){
             }
         }
 
@@ -128,18 +121,6 @@ public final class GithubReleaseClient{
         });
 
         return out;
-    }
-
-    private static void addRelease(ArrayList<ReleaseInfo> out, Jval json, String fallbackHtmlUrl){
-        if(json == null || !json.isObject()) return;
-        if(json.getBool("draft", false)) return;
-        try{
-            ReleaseInfo rel = parseRelease(json, fallbackHtmlUrl);
-            if(rel != null && !rel.version.isEmpty()){
-                out.add(rel);
-            }
-        }catch(Throwable ignored){
-        }
     }
 
     public static ReleaseInfo pickLatestRelease(ArrayList<ReleaseInfo> releases){
@@ -192,9 +173,8 @@ public final class GithubReleaseClient{
         String publishedAt = Strings.stripColors(json.getString("published_at", ""));
         boolean pre = json.getBool("prerelease", false);
 
-        String version = VersionUtil.normalizeReleaseVersion(tag, name);
-        if(version.isEmpty()) version = VersionUtil.normalizeVersion(json.getString("version", ""));
-        if(VersionUtil.normalizeVersion(version).regionMatches(true, 0, "B", 0, 1)) pre = true;
+        String version = VersionUtil.normalizeVersion(tag);
+        if(version.isEmpty()) version = VersionUtil.normalizeVersion(name);
 
         ArrayList<AssetInfo> assets = new ArrayList<AssetInfo>();
         try{
@@ -223,37 +203,5 @@ public final class GithubReleaseClient{
         if(text == null || suffix == null) return false;
         int offset = text.length() - suffix.length();
         return offset >= 0 && text.regionMatches(true, offset, suffix, 0, suffix.length());
-    }
-
-    public static String buildDownloadUrl(String original, boolean useMirror){
-        String url = original == null ? "" : original.trim();
-        if(url.isEmpty()) return url;
-
-        if(useMirror){
-            if(url.startsWith(mirrorDownloadPrefix)) return url;
-
-            int marker = url.indexOf("/releases/download/");
-            if(url.startsWith(githubDownloadPrefix) && marker > githubDownloadPrefix.length()){
-                String repo = url.substring(githubDownloadPrefix.length(), marker);
-                String asset = url.substring(marker + "/releases/download/".length());
-                if(!repo.isEmpty() && !asset.isEmpty()){
-                    return mirrorDownloadPrefix + repo + "/" + asset;
-                }
-            }
-            return url;
-        }
-
-        if(url.startsWith(mirrorDownloadPrefix)){
-            String path = url.substring(mirrorDownloadPrefix.length());
-            String[] parts = path.split("/", 4);
-            if(parts.length == 4){
-                return githubDownloadPrefix + parts[0] + "/" + parts[1] + "/releases/download/" + parts[2] + "/" + parts[3];
-            }
-        }
-        return url;
-    }
-
-    private static boolean isNeonRepo(String repo){
-        return neonRepo.equalsIgnoreCase(repo == null ? "" : repo.trim());
     }
 }

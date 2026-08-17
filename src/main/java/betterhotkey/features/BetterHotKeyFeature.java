@@ -96,7 +96,7 @@ public class BetterHotKeyFeature {
     private static Category lastKeepOrderCategory;
     private static int lastKeepOrderSettingsFingerprint;
 
-    private static KeyCode pendingFirst;
+    private static final Seq<KeyCode> pendingKeys = new Seq<>();
     private static long pendingAt;
 
     private static boolean reflectReady;
@@ -156,7 +156,7 @@ public class BetterHotKeyFeature {
         });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
-            pendingFirst = null;
+            clearPendingSequence();
             deferredRemapBlock = null;
             lastHandledBlockSelectSeqMillis = 0L;
             lastHandledBlockSelectSeq = -1;
@@ -197,7 +197,7 @@ public class BetterHotKeyFeature {
             Events.run(EventType.Trigger.update, () -> {
                 refreshSettings();
                 if (!enabled) {
-                    pendingFirst = null;
+                    clearPendingSequence();
                     deferredRemapBlock = null;
                     return;
                 }
@@ -221,7 +221,7 @@ public class BetterHotKeyFeature {
                 if (customEnabled) {
                     updateCustomHotkeys();
                 } else {
-                    pendingFirst = null;
+                    clearPendingSequence();
                 }
             });
         });
@@ -345,13 +345,9 @@ public class BetterHotKeyFeature {
                 groups.add(g);
                 current = g;
             } else if ("B".equals(parts[0])) {
-                if (parts.length < 5 || current == null) continue;
-                BindingConfig b = new BindingConfig();
-                b.blockName = unescape(parts[1]);
-                b.firstKey = unescape(parts[2]);
-                b.secondKey = unescape(parts[3]);
-                b.note = unescape(parts[4]);
-                current.bindings.add(b);
+                if (current == null) continue;
+                BindingConfig b = parseBinding(parts);
+                if (b != null) current.bindings.add(b);
             }
         }
 
@@ -369,7 +365,7 @@ public class BetterHotKeyFeature {
         for (GroupConfig g : groups) {
             lines.add("G|" + escape(g.name) + "|" + (g.enabled ? "1" : "0"));
             for (BindingConfig b : g.bindings) {
-                lines.add("B|" + escape(b.blockName) + "|" + escape(b.firstKey) + "|" + escape(b.secondKey) + "|" + escape(b.note));
+                lines.add("B|" + escape(b.blockName) + "|" + escape(b.firstKey) + "|" + escape(b.secondKey) + "|" + escape(b.thirdKey) + "|" + escape(b.note));
             }
         }
 
@@ -401,35 +397,54 @@ public class BetterHotKeyFeature {
                 Block block = findBlockByName(b.blockName);
                 KeyCode first = parseKeyCode(b.firstKey);
                 KeyCode second = parseKeyCode(b.secondKey);
+                KeyCode third = parseKeyCode(b.thirdKey);
 
                 if (block == null || first == null || second == null) continue;
                 if (!isCaptureKeyCandidate(first) || !isCaptureKeyCandidate(second)) continue;
+                if (!isEmptyKey(b.thirdKey) && !isCaptureKeyCandidate(third)) continue;
 
                 CompiledBinding out = new CompiledBinding();
                 out.groupName = g.name;
                 out.block = block;
                 out.first = first;
                 out.second = second;
+                out.third = third;
                 compiledBindings.add(out);
 
                 if (unique.add(first)) watchedKeys.add(first);
                 if (unique.add(second)) watchedKeys.add(second);
+                if (third != null && unique.add(third)) watchedKeys.add(third);
             }
         }
     }
 
     private static void updateCustomHotkeys() {
         if (state == null || !state.isGame() || player == null || control == null || control.input == null) {
-            pendingFirst = null;
+            clearPendingSequence();
             return;
         }
-        if (ui == null || ui.hudfrag == null || !ui.hudfrag.shown) return;
-        if (ui.chatfrag != null && ui.chatfrag.shown()) return;
-        if (ui.consolefrag != null && ui.consolefrag.shown()) return;
-        if (Core.scene != null && (Core.scene.hasDialog() || Core.scene.hasField())) return;
+        if (ui == null || ui.hudfrag == null || !ui.hudfrag.shown) {
+            clearPendingSequence();
+            return;
+        }
+        if (ui.chatfrag != null && ui.chatfrag.shown()) {
+            clearPendingSequence();
+            return;
+        }
+        if (ui.consolefrag != null && ui.consolefrag.shown()) {
+            clearPendingSequence();
+            return;
+        }
+        if (Core.scene != null && (Core.scene.hasDialog() || Core.scene.hasField())) {
+            clearPendingSequence();
+            return;
+        }
 
         rebuildCompiledBindings();
-        if (compiledBindings.isEmpty()) return;
+        if (compiledBindings.isEmpty()) {
+            clearPendingSequence();
+            return;
+        }
 
         tappedKeys.clear();
         for (KeyCode key : watchedKeys) {
@@ -437,34 +452,87 @@ public class BetterHotKeyFeature {
             if (Core.input.keyTap(key)) tappedKeys.add(key);
         }
 
-        if (pendingFirst != null && Time.timeSinceMillis(pendingAt) > comboTimeoutMs) {
-            pendingFirst = null;
+        if (pendingKeys.size > 0 && Time.timeSinceMillis(pendingAt) > comboTimeoutMs) {
+            clearPendingSequence();
         }
 
         if (tappedKeys.isEmpty()) return;
 
-        if (pendingFirst != null) {
-            for (CompiledBinding b : compiledBindings) {
-                if (b.first != pendingFirst) continue;
-                if (!tappedKeys.contains(b.second, true)) continue;
-
-                queueSelectBlock(b.block);
-                suppressSkipTerrainThisFrame = true;
-                pendingFirst = null;
-                return;
-            }
+        for (KeyCode key : tappedKeys) {
+            handleCustomHotkeyKey(key);
         }
+    }
 
-        for (CompiledBinding b : compiledBindings) {
-            if (!tappedKeys.contains(b.first, true)) continue;
-            pendingFirst = b.first;
+    private static void handleCustomHotkeyKey(KeyCode key) {
+        if (key == null || key == KeyCode.unset) return;
+
+        // Prefer continuing the current prefix. This makes shared prefixes deterministic:
+        // an exact two-key match can fire immediately while its three-key extension remains possible.
+        if (pendingKeys.size > 0 && hasContinuation(pendingKeys, key)) {
+            pendingKeys.add(key);
             pendingAt = Time.millis();
+            markCustomHotkeyKey(key);
 
-            if (isNumberKeyCode(pendingFirst)) {
-                suppressSkipTerrainThisFrame = true;
+            CompiledBinding exact = findExactBinding(pendingKeys);
+            if (exact != null) {
+                queueSelectBlock(exact.block);
+                if (pendingKeys.size >= 3) {
+                    clearPendingSequence();
+                }
             }
             return;
         }
+
+        // An unrelated key does not cancel the current prefix. A key that starts another
+        // binding, however, starts that binding afresh.
+        if (isFirstKey(key)) {
+            pendingKeys.clear();
+            pendingKeys.add(key);
+            pendingAt = Time.millis();
+            markCustomHotkeyKey(key);
+        }
+    }
+
+    private static void clearPendingSequence() {
+        pendingKeys.clear();
+        pendingAt = 0L;
+    }
+
+    private static void markCustomHotkeyKey(KeyCode key) {
+        if (isNumberKeyCode(key)) {
+            suppressSkipTerrainThisFrame = true;
+        }
+    }
+
+    private static boolean hasContinuation(Seq<KeyCode> prefix, KeyCode next) {
+        for (CompiledBinding binding : compiledBindings) {
+            if (binding == null || binding.length() <= prefix.size || !matchesPrefix(binding, prefix)) continue;
+            if (binding.keyAt(prefix.size) == next) return true;
+        }
+        return false;
+    }
+
+    private static boolean isFirstKey(KeyCode key) {
+        for (CompiledBinding binding : compiledBindings) {
+            if (binding != null && binding.first == key) return true;
+        }
+        return false;
+    }
+
+    private static boolean matchesPrefix(CompiledBinding binding, Seq<KeyCode> prefix) {
+        if (binding == null || prefix == null || prefix.size > binding.length()) return false;
+        for (int i = 0; i < prefix.size; i++) {
+            if (binding.keyAt(i) != prefix.get(i)) return false;
+        }
+        return true;
+    }
+
+    private static CompiledBinding findExactBinding(Seq<KeyCode> sequence) {
+        for (CompiledBinding binding : compiledBindings) {
+            if (binding == null || binding.length() != sequence.size) continue;
+            if (matchesPrefix(binding, sequence)) return binding;
+        }
+        return null;
     }
 
     private static void queueSelectBlock(Block block) {
@@ -519,19 +587,23 @@ public class BetterHotKeyFeature {
             Category cat = (Category) fieldCurrentCategory.get(pf);
             if (cat == null) return;
 
+            Seq<Block> blocks = getByCategorySkipTerrain(cat);
+            if (blocks.isEmpty()) return;
+
             int index;
             if (!end) {
                 // 2-digit selection: the last digit is stored in seq (1..10).
                 index = seq - 1;
             } else {
-                // 3-digit selection: infer the final index by locating vanilla-selected block in vanilla's list.
+                // Vanilla resolves the third digit against its unfiltered list. Map the
+                // selected block itself back into our filtered list; its original index
+                // is not meaningful once terrain entries have been removed.
                 Block vanillaSelected = control.input.block;
                 if (vanillaSelected == null) return;
-                index = indexOf(getByCategoryWithTerrain(cat), vanillaSelected);
+                index = indexOf(blocks, vanillaSelected);
                 if (index < 0) return;
             }
 
-            Seq<Block> blocks = getByCategorySkipTerrain(cat);
             if (index < 0 || index >= blocks.size) return;
 
             Block remapped = blocks.get(index);
@@ -1437,16 +1509,26 @@ public class BetterHotKeyFeature {
 
         String cleaned = vanillaCombo.replace("[", "").replace("]", "").trim();
         String[] parts = cleaned.split(",");
-        if (parts.length != 2) return false;
+        if (parts.length != 2 && parts.length != 3) return false;
 
-        KeyCode first = parseDigitKey(parts[0]);
-        KeyCode second = parseDigitKey(parts[1]);
-        if (first == null || second == null) return false;
+        KeyCode[] keys = new KeyCode[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            keys[i] = parseDigitKey(parts[i]);
+            if (keys[i] == null) return false;
+        }
 
-        for (CompiledBinding b : compiledBindings) {
-            if (b == null || b.block == null) continue;
-            if (b.block == display) continue;
-            if (b.first == first && b.second == second) return true;
+        for (CompiledBinding binding : compiledBindings) {
+            if (binding == null || binding.block == null || binding.block == display) continue;
+            if (binding.length() != keys.length) continue;
+
+            boolean same = true;
+            for (int i = 0; i < keys.length; i++) {
+                if (binding.keyAt(i) != keys[i]) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same) return true;
         }
         return false;
     }
@@ -1480,7 +1562,7 @@ public class BetterHotKeyFeature {
         for (CompiledBinding b : compiledBindings) {
             if (b == null || b.block != block) continue;
             if (count++ > 0) sb.append("  ");
-            sb.append("[").append(shortKeyName(b.first)).append(",").append(shortKeyName(b.second)).append("]");
+            sb.append(formatCustomCombo(b));
             if (count >= 3) break;
         }
         return sb.toString();
@@ -1491,9 +1573,20 @@ public class BetterHotKeyFeature {
 
         for (CompiledBinding b : compiledBindings) {
             if (b == null || b.block != block) continue;
-            return "[" + shortKeyName(b.first) + "," + shortKeyName(b.second) + "]";
+            return formatCustomCombo(b);
         }
         return "";
+    }
+
+    private static String formatCustomCombo(CompiledBinding binding) {
+        if (binding == null) return "";
+
+        StringBuilder sb = new StringBuilder("[");
+        sb.append(shortKeyName(binding.first)).append(",").append(shortKeyName(binding.second));
+        if (binding.third != null) {
+            sb.append(",").append(shortKeyName(binding.third));
+        }
+        return sb.append("]").toString();
     }
 
     private static String shortKeyName(KeyCode code) {
@@ -1853,6 +1946,7 @@ public class BetterHotKeyFeature {
                             nb.blockName = b.blockName;
                             nb.firstKey = b.firstKey;
                             nb.secondKey = b.secondKey;
+                            nb.thirdKey = b.thirdKey;
                             nb.note = b.note;
                             copy.bindings.add(nb);
                         }
@@ -1924,25 +2018,44 @@ public class BetterHotKeyFeature {
 
                     row.button(bindingDisplay(binding), Icon.edit, Styles.flatBordert, () -> {
                         showBlockSelectDialog(binding, rebuildBindings[0]);
-                    }).left().width(220f).height(52f);
+                    }).left().width(190f).height(52f);
 
                     Table keyTable = new Table();
-                    
+                    keyTable.defaults().height(44f);
+
                     TextButton firstBtn = keyTable.button("[accent]" + displayKeyName(binding.firstKey), Styles.defaultt, () -> {
-                        captureKey(binding, true, rebuildBindings[0]);
-                    }).width(160f).height(44f).get();
+                        captureKey(binding, 0, rebuildBindings[0]);
+                    }).width(100f).get();
                     firstBtn.getLabel().setWrap(false);
                     firstBtn.getLabel().setAlignment(Align.center);
                     firstBtn.getLabelCell().growX().align(Align.center);
                     
-                    keyTable.add("+").pad(4f);
+                    keyTable.add("+").width(12f).pad(2f);
                     
                     TextButton secondBtn = keyTable.button("[accent]" + displayKeyName(binding.secondKey), Styles.defaultt, () -> {
-                        captureKey(binding, false, rebuildBindings[0]);
-                    }).width(160f).height(44f).get();
+                        captureKey(binding, 1, rebuildBindings[0]);
+                    }).width(100f).get();
                     secondBtn.getLabel().setWrap(false);
                     secondBtn.getLabel().setAlignment(Align.center);
                     secondBtn.getLabelCell().growX().align(Align.center);
+
+                    keyTable.add("+").width(12f).pad(2f);
+
+                    Cell<TextButton> thirdCell = keyTable.button("[accent]" + displayKeyName(binding.thirdKey), Styles.defaultt, () -> {
+                        captureKey(binding, 2, rebuildBindings[0]);
+                    }).width(100f);
+                    TextButton thirdBtn = thirdCell.get();
+                    thirdBtn.getLabel().setWrap(false);
+                    thirdBtn.getLabel().setAlignment(Align.center);
+                    thirdBtn.getLabelCell().growX().align(Align.center);
+                    thirdCell.tooltip(Core.bundle.get("bhk.key.third"));
+
+                    keyTable.button(Icon.cancel, Styles.cleari, () -> {
+                        if (isEmptyKey(binding.thirdKey)) return;
+                        binding.thirdKey = "";
+                        saveGroups();
+                        rebuildBindings[0].run();
+                    }).size(34f).tooltip(Core.bundle.get("bhk.key.clear"));
                     
                     row.add(keyTable).padLeft(8f).center();
 
@@ -1968,6 +2081,7 @@ public class BetterHotKeyFeature {
             b.blockName = "";
             b.firstKey = "a";
             b.secondKey = "a";
+            b.thirdKey = "";
             b.note = "";
             group.bindings.add(b);
             saveGroups();
@@ -1980,7 +2094,7 @@ public class BetterHotKeyFeature {
         dialog.show();
     }
 
-    private static void captureKey(BindingConfig binding, boolean isFirst, Runnable onCapture) {
+    private static void captureKey(BindingConfig binding, int keyIndex, Runnable onCapture) {
         BaseDialog dialog = new BaseDialog(Core.bundle.get("bhk.key.capture"));
         dialog.setFillParent(true);
         dialog.cont.add(Core.bundle.get("bhk.key.press")).pad(20f).center().row();
@@ -1991,6 +2105,15 @@ public class BetterHotKeyFeature {
         dialog.cont.add(keyDisplay).size(140f, 100f).row();
         
         dialog.addCloseButton();
+
+        if (keyIndex == 2) {
+            dialog.buttons.button(Core.bundle.get("bhk.key.clear"), Icon.cancel, () -> {
+                binding.thirdKey = "";
+                saveGroups();
+                onCapture.run();
+                dialog.hide();
+            });
+        }
         
         dialog.update(() -> {
             for (KeyCode code : KeyCode.all) {
@@ -1999,10 +2122,12 @@ public class BetterHotKeyFeature {
                     shown.setText(code.toString());
 
                     String keyName = normalizeStoredKeyName(code);
-                    if (isFirst) {
+                    if (keyIndex == 0) {
                         binding.firstKey = keyName;
-                    } else {
+                    } else if (keyIndex == 1) {
                         binding.secondKey = keyName;
+                    } else {
+                        binding.thirdKey = keyName;
                     }
                     saveGroups();
                     onCapture.run();
@@ -2029,7 +2154,7 @@ public class BetterHotKeyFeature {
     }
 
     private static String displayKeyName(String stored) {
-        if (stored == null || stored.isEmpty()) return "?";
+        if (stored == null || stored.isEmpty()) return Core.bundle.get("bhk.key.none");
         String s = stored.trim().toLowerCase(Locale.ROOT);
 
         if (s.startsWith("num") && s.length() == 4 && Character.isDigit(s.charAt(3))) {
@@ -2126,6 +2251,7 @@ public class BetterHotKeyFeature {
                 sb.append("B|").append(escape(b.blockName)).append("|")
                   .append(escape(b.firstKey)).append("|")
                   .append(escape(b.secondKey)).append("|")
+                  .append(escape(b.thirdKey)).append("|")
                   .append(escape(b.note)).append("\n");
             }
         }
@@ -2156,13 +2282,9 @@ public class BetterHotKeyFeature {
                         current.enabled = "1".equals(parts[2]);
                         groups.add(current);
                     }
-                } else if ("B".equals(parts[0]) && current != null && parts.length >= 5) {
-                    BindingConfig b = new BindingConfig();
-                    b.blockName = unescape(parts[1]);
-                    b.firstKey = unescape(parts[2]);
-                    b.secondKey = unescape(parts[3]);
-                    b.note = unescape(parts[4]);
-                    current.bindings.add(b);
+                } else if ("B".equals(parts[0]) && current != null) {
+                    BindingConfig b = parseBinding(parts);
+                    if (b != null) current.bindings.add(b);
                 }
             }
             
@@ -2207,6 +2329,29 @@ public class BetterHotKeyFeature {
         return value.replace("\\", "\\\\").replace("|", "\\p").replace("\n", "\\n").replace("\r", "");
     }
 
+    private static BindingConfig parseBinding(String[] parts) {
+        if (parts == null || parts.length < 5) return null;
+
+        BindingConfig binding = new BindingConfig();
+        binding.blockName = unescape(parts[1]);
+        binding.firstKey = unescape(parts[2]);
+        binding.secondKey = unescape(parts[3]);
+
+        // Five fields are the original format. Six fields add the optional third key.
+        if (parts.length >= 6) {
+            binding.thirdKey = unescape(parts[4]);
+            binding.note = unescape(parts[5]);
+        } else {
+            binding.thirdKey = "";
+            binding.note = unescape(parts[4]);
+        }
+        return binding;
+    }
+
+    private static boolean isEmptyKey(String key) {
+        return key == null || key.trim().isEmpty();
+    }
+
     private static String unescape(String value) {
         if (value == null || value.isEmpty()) return "";
         String out = value.replace("\\n", "\n").replace("\\p", "|").replace("\\\\", "\\");
@@ -2223,6 +2368,7 @@ public class BetterHotKeyFeature {
         String blockName = "";
         String firstKey = "";
         String secondKey = "";
+        String thirdKey = "";
         String note = "";
     }
 
@@ -2231,5 +2377,17 @@ public class BetterHotKeyFeature {
         Block block;
         KeyCode first;
         KeyCode second;
+        KeyCode third;
+
+        int length() {
+            return third == null ? 2 : 3;
+        }
+
+        KeyCode keyAt(int index) {
+            if (index == 0) return first;
+            if (index == 1) return second;
+            if (index == 2) return third;
+            return null;
+        }
     }
 }

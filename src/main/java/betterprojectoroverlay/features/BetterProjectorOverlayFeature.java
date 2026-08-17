@@ -22,6 +22,7 @@ import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterprojectoroverlay.GithubUpdateCheck;
 import mdtxcompat.MarkerBridge;
 import mindustry.content.Blocks;
+import mindustry.core.World;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
 import mindustry.gen.Call;
@@ -34,6 +35,7 @@ import mindustry.ui.Fonts;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
 import mindustry.world.blocks.defense.OverdriveProjector;
+import mindustry.world.consumers.ConsumePower;
 import mindustry.world.blocks.power.PowerGraph;
 
 import java.lang.reflect.Method;
@@ -220,8 +222,11 @@ public class BetterProjectorOverlayFeature {
             return;
         }
 
-        int tx = Mathf.clamp((int) (Core.input.mouseWorldX() / tilesize), 0, world.width() - 1);
-        int ty = Mathf.clamp((int) (Core.input.mouseWorldY() / tilesize), 0, world.height() - 1);
+        // Match InputHandler.tileX/tileY: placement coordinates are calculated from
+        // the block center, so an even-sized block's offset is removed before it is
+        // converted to a tile coordinate.
+        int tx = placementTile(Core.input.mouseWorldX(), block.offset, world.width());
+        int ty = placementTile(Core.input.mouseWorldY(), block.offset, world.height());
         int packed = tx + ty * world.width();
 
         if (packed == lastPreviewTile && block == lastPreviewBlock && Time.time < nextPreviewComputeAt) {
@@ -295,8 +300,10 @@ public class BetterProjectorOverlayFeature {
 
         if (world == null || world.width() <= 0 || world.height() <= 0) return preview;
 
-        float placeX = tx * tilesize + projector.offset;
-        float placeY = ty * tilesize + projector.offset;
+        // InputHandler uses the same anchor tile plus the block offset when drawing
+        // placement overlays. Keep the predicted range centered on that point.
+        float placeX = placementWorldCoordinate(tx, projector.offset);
+        float placeY = placementWorldCoordinate(ty, projector.offset);
         float range = Math.max(1f, projector.range);
         float boost = Math.max(1f, projector.speedBoost);
 
@@ -334,6 +341,9 @@ public class BetterProjectorOverlayFeature {
                 float predicted = current + delta;
                 preview.balance += predicted;
             });
+            // The candidate is not yet in a graph, so its static demand belongs to
+            // the aggregate exactly once whenever there is a graph to evaluate.
+            preview.balance -= staticPowerDemandPerSecond(projector);
         } else {
             preview.balance = 0f;
         }
@@ -353,6 +363,22 @@ public class BetterProjectorOverlayFeature {
         lastPreviewTile = Integer.MIN_VALUE;
         lastPreviewBlock = null;
         nextPreviewComputeAt = 0f;
+    }
+
+    static int placementTile(float cursorWorld, float offset, int worldSize) {
+        return Mathf.clamp(World.toTile(cursorWorld - offset), 0, worldSize - 1);
+    }
+
+    static float placementWorldCoordinate(int tile, float offset) {
+        return tile * tilesize + offset;
+    }
+
+    private static float staticPowerDemandPerSecond(OverdriveProjector projector) {
+        return staticPowerDemandPerSecond(projector == null ? null : projector.consPower);
+    }
+
+    static float staticPowerDemandPerSecond(ConsumePower consPower) {
+        return consPower == null ? 0f : consPower.usage * 60f;
     }
 
     private static float estimatePowerDeltaPerSecond(Building b, float newBoost) {

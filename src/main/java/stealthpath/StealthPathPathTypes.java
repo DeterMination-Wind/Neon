@@ -103,8 +103,6 @@ final class ThreatMap{
     final int width, height, size;
     final boolean[] passable;
     final float[] risk;
-    final float[] displayRisk;
-    final float[] controlRisk;
     final float[] floorRisk;
     final float[] drownRate;
     short[] safeDist;
@@ -116,8 +114,6 @@ final class ThreatMap{
         this.size = width * height;
         this.passable = new boolean[size];
         this.risk = new float[size];
-        this.displayRisk = new float[size];
-        this.controlRisk = new float[size];
         this.floorRisk = new float[size];
         this.drownRate = new float[size];
     }
@@ -167,17 +163,15 @@ final class ShiftedPath{
     final float dx, dy;
     final float dmgGround, dmgAir;
     final float maxDmg;
-    final float routeScore;
     final short minSafeDist;
 
-    ShiftedPath(IntSeq path, float dx, float dy, float dmgGround, float dmgAir, float maxDmg, float routeScore, short minSafeDist){
+    ShiftedPath(IntSeq path, float dx, float dy, float dmgGround, float dmgAir, float maxDmg, short minSafeDist){
         this.path = path;
         this.dx = dx;
         this.dy = dy;
         this.dmgGround = dmgGround;
         this.dmgAir = dmgAir;
         this.maxDmg = maxDmg;
-        this.routeScore = routeScore;
         this.minSafeDist = minSafeDist;
     }
 }

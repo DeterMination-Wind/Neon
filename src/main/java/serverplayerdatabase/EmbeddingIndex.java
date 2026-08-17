@@ -4,7 +4,6 @@ import arc.Core;
 import arc.struct.IntMap;
 import arc.struct.Seq;
 import arc.util.Log;
-import arc.util.Strings;
 import arc.util.Time;
 
 import java.nio.ByteBuffer;
@@ -17,9 +16,7 @@ import java.util.Comparator;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -41,10 +38,7 @@ public final class EmbeddingIndex implements AutoCloseable{
     private volatile boolean ready;
     private volatile boolean rebuilding;
     private volatile boolean dirty;
-    private volatile boolean closed;
-    private static final String initialStatus = "Not initialized";
-
-    private volatile String status = initialStatus;
+    private volatile String status = "未初始化";
     private volatile String failureReason;
     private volatile int indexedEntries;
     private volatile int totalEntries;
@@ -64,22 +58,21 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void initialize(){
-        if(closed) return;
         if(!chatDb.usesSqlite()){
             available = false;
-            failureReason = bundle("spdb.semantic.index.backend-unavailable", "Semantic search is unavailable because the chat backend is not SQLite.");
+            failureReason = "当前聊天后端不是 SQLite，语义搜索不可用。";
             status = failureReason;
             return;
         }
 
-        execute(() -> {
+        executor.execute(() -> {
             try{
                 loadOrRebuild();
             }catch(Throwable t){
                 available = false;
                 ready = false;
                 rebuilding = false;
-                failureReason = bundleFormat("spdb.semantic.index.init-failed", "Semantic index initialization failed: @", safeMessage(t));
+                failureReason = "语义索引初始化失败: " + safeMessage(t);
                 status = failureReason;
                 Log.err("SPDB: failed to initialize embedding index.", t);
             }
@@ -103,11 +96,7 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public String status(){
-        return initialStatus.equals(status) ? bundle("spdb.semantic.index.not-initialized", initialStatus) : status;
-    }
-
-    public boolean isInitialStatus(){
-        return initialStatus.equals(status);
+        return status;
     }
 
     public String failureReason(){
@@ -127,14 +116,14 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void rebuildAsync(){
-        if(closed || !available) return;
-        execute(() -> {
+        if(!available) return;
+        executor.execute(() -> {
             try{
                 rebuildAll();
             }catch(Throwable t){
                 ready = false;
                 rebuilding = false;
-                failureReason = bundleFormat("spdb.semantic.index.rebuild-failed", "Semantic index rebuild failed: @", safeMessage(t));
+                failureReason = "重建语义索引失败: " + safeMessage(t);
                 status = failureReason;
                 Log.err("SPDB: failed rebuilding embedding index.", t);
             }
@@ -142,13 +131,11 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void addEntryAsync(int entryId, ServerPlayerDataBaseMod.ChatEntry entry){
-        if(closed || !available || entryId <= 0 || entry == null || entry.message == null || entry.message.trim().isEmpty()) return;
+        if(!available || entryId <= 0 || entry == null || entry.message == null || entry.message.trim().isEmpty()) return;
 
-        execute(() -> {
+        executor.execute(() -> {
             try{
-                if(closed) return;
                 float[] vector = engine.embed(entry.message);
-                if(closed) return;
                 synchronized(vectors){
                     boolean existed = vectors.get(entryId) != null;
                     vectors.put(entryId, new EntryVector(entryId, entry.copy(), vector));
@@ -167,7 +154,7 @@ public final class EmbeddingIndex implements AutoCloseable{
 
     public Seq<SearchResult> search(String query, int limit){
         Seq<SearchResult> out = new Seq<>();
-        if(closed || !available || !ready) return out;
+        if(!available || !ready) return out;
 
         String trimmed = query == null ? "" : query.trim();
         if(trimmed.isEmpty()) return out;
@@ -205,8 +192,8 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     public void flushIfDirty(){
-        if(closed || !available || !dirty) return;
-        execute(() -> {
+        if(!available || !dirty) return;
+        executor.execute(() -> {
             dirty = false;
             lastPersistAt = Time.millis();
         });
@@ -214,55 +201,22 @@ public final class EmbeddingIndex implements AutoCloseable{
 
     @Override
     public void close(){
-        close(3000L);
-    }
-
-    public void close(long timeoutMillis){
-        if(closed) return;
-        closed = true;
-        available = false;
-        ready = false;
-        rebuilding = false;
-        dirty = false;
-        status = bundle("spdb.semantic.index.closed", "Semantic index closed.");
         executor.shutdownNow();
-        if(timeoutMillis > 0L){
-            try{
-                executor.awaitTermination(timeoutMillis, TimeUnit.MILLISECONDS);
-            }catch(InterruptedException e){
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    private void execute(Runnable task){
-        if(closed) return;
-        try{
-            executor.execute(() -> {
-                if(closed) return;
-                task.run();
-            });
-        }catch(RejectedExecutionException ignored){
-        }
     }
 
     private void loadOrRebuild() throws Exception{
-        if(closed) return;
         ensureSchema();
-        if(closed) return;
         if(invalidateVectorsIfModelChanged()){
-            status = bundle("spdb.semantic.index.model-changed", "Semantic model changed; rebuilding search index 0/0.");
+            status = "检测到语义模型已切换，正在重建搜索索引 0/0";
         }
         totalEntries = countIndexableEntries();
-        if(closed) return;
         loadAllVectors();
-        if(closed) return;
         updateReadyStatus();
         if(ready){
             ready = true;
             rebuilding = false;
             dirty = false;
-            status = bundleFormat("spdb.semantic.index.ready", "Search index ready: @ entries.", indexedEntries);
+            status = "索引就绪，共 " + indexedEntries + " 条";
             return;
         }
 
@@ -270,11 +224,10 @@ public final class EmbeddingIndex implements AutoCloseable{
     }
 
     private void rebuildAll() throws Exception{
-        if(closed) return;
         rebuilding = true;
         ready = false;
         totalEntries = countIndexableEntries();
-        status = bundleFormat("spdb.semantic.index.building", "Building search index 0/@", totalEntries);
+        status = "正在建立搜索索引 0/" + totalEntries;
 
         synchronized(vectors){
             vectors.clear();
@@ -290,35 +243,32 @@ public final class EmbeddingIndex implements AutoCloseable{
             conn.commit();
         }
 
-        if(!closed) resumeBuild(new ResumeCheckpoint(0, indexedEntries));
+        resumeBuild(new ResumeCheckpoint(0, indexedEntries));
     }
 
     private void resumeBuild(ResumeCheckpoint checkpoint) throws Exception{
-        if(closed) return;
         rebuilding = true;
         ready = false;
         dirty = false;
         totalEntries = countIndexableEntries();
 
         if(indexedEntries > 0){
-            status = bundleFormat("spdb.semantic.index.resume", "Resuming unfinished index: @/@; completing missing entries.", indexedEntries, totalEntries);
+            status = "检测到未完成索引，已恢复 " + indexedEntries + "/" + totalEntries + "，继续补齐缺失部分";
         }else{
-            status = bundleFormat("spdb.semantic.index.building", "Building search index 0/@", totalEntries);
+            status = "正在建立搜索索引 0/" + totalEntries;
         }
 
         int lastId = Math.max(0, checkpoint.afterId);
-        while(!closed && !Thread.currentThread().isInterrupted()){
+        while(true){
             Seq<SqlChatRow> batch = loadBatch(lastId, rebuildBatchSize);
             if(batch.isEmpty()) break;
 
             for(SqlChatRow row : batch){
-                if(closed || Thread.currentThread().isInterrupted()) return;
                 lastId = row.id;
                 if(row.message == null || row.message.trim().isEmpty()) continue;
                 if(hasVector(row.id)) continue;
 
                 float[] vector = engine.embed(row.message);
-                if(closed || Thread.currentThread().isInterrupted()) return;
                 ServerPlayerDataBaseMod.ChatEntry chat = new ServerPlayerDataBaseMod.ChatEntry();
                 chat.uid = row.uid;
                 chat.senderName = row.senderName;
@@ -336,31 +286,18 @@ public final class EmbeddingIndex implements AutoCloseable{
                 totalEntries = Math.max(totalEntries, indexedEntries);
             }
 
-            status = bundleFormat("spdb.semantic.index.progress", "Building search index @/@", indexedEntries, totalEntries);
+            status = "正在建立搜索索引 " + indexedEntries + "/" + totalEntries;
         }
 
-        if(!closed){
-            rebuilding = false;
-            dirty = false;
-            lastPersistAt = Time.millis();
-            updateReadyStatus();
-            status = ready
-                ? bundleFormat("spdb.semantic.index.ready", "Search index ready: @ entries.", indexedEntries)
-                : bundle("spdb.semantic.index.incomplete", "Search index incomplete.");
-        }
-    }
-
-    private static String bundle(String key, String fallback){
-        return Core.bundle == null ? fallback : Core.bundle.get(key, fallback);
-    }
-
-    private static String bundleFormat(String key, String fallback, Object... args){
-        String template = Core.bundle != null && Core.bundle.has(key) ? Core.bundle.get(key) : fallback;
-        return Strings.format(template, args);
+        rebuilding = false;
+        dirty = false;
+        lastPersistAt = Time.millis();
+        updateReadyStatus();
+        status = ready ? "索引就绪，共 " + indexedEntries + " 条" : "索引未完成";
     }
 
     private void updateReadyStatus(){
-        ready = !closed && available && !rebuilding && indexedEntries == totalEntries;
+        ready = available && !rebuilding && indexedEntries == totalEntries;
     }
 
     private void ensureSchema() throws Exception{

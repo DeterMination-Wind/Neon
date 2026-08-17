@@ -13,7 +13,7 @@
 
 ### 简介
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 26 个模组合并为一个安装包：
+Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 29 个模组合并为一个安装包：
 
 - Power Grid Minimap（电网小地图）
 - Stealth Path（偷袭小道 / 安全路径）
@@ -41,10 +41,13 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 26 �
 - LogicSugar（逻辑辅助）
 - Random（随机化）
 - LockAttack（锁定攻击）
+- Smart Placement（智能放置）
+- Hide What Processors Show（隐藏处理器显示）
+- Patrol Cancel（取消巡逻）
 
-如果你只想安装一次、一次性获得这二十六类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助 + 随机化"功能，Neon 会更省事。
+如果你只想安装一次、一次性获得这二十九类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助 + 随机化"功能，Neon 会更省事。
 
-提示：Neon 已包含上述 26 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+提示：Neon 已包含上述 29 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
 
 ### 功能一览
 
@@ -202,6 +205,20 @@ Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 26 �
 - 在另一目标上按锁定键可切换；点空地或己方目标解锁；目标死亡自动解锁。
 - 锁定框、目标连线与可选目标血条（设置页可开关）；键位可在 `设置 → 控制` 中修改。
 
+#### 27) Smart Placement（智能放置）
+
+- 在混合科技地图上拖放交叉物品运输线时，自动选择未配置的反向分拣器，减少误用连接器。
+- 单科技星球、平行线路、端点和非物品障碍物保持原版放置行为。
+
+#### 28) Hide What Processors Show（隐藏处理器显示）
+
+- 用两个独立快捷键分别隐藏世界处理器特效和动态 Marker，不修改地图逻辑。
+
+#### 29) Patrol Cancel（取消巡逻）
+
+- 右键指挥选中单位时自动清除巡逻姿态，让单位立即服从移动或攻击命令。
+- 中键排队/设置巡逻路线不受影响。
+
 ### 快速上手
 
 1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
@@ -320,7 +337,7 @@ Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-six modul
 
 If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, terrain generation, RTS formation controls, randomized presentation, and lock-on focus fire, Neon is the all-in-one option.
 
-Note: Neon already contains these twenty-six modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
+Note: Neon already contains these twenty-nine modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
 
 ### Module Highlights
 
@@ -477,6 +494,20 @@ Note: Neon already contains these twenty-six modules. Do not enable standalone v
 - Tap on another target to switch; tap empty ground or a friendly target to unlock; auto-unlock when the target dies.
 - Rotating lock box, target line, and an optional target HP bar (toggle in settings); the key is rebindable in `Settings -> Controls`.
 
+#### 27) Smart Placement
+
+- On mixed-tech planets, crossing dragged item lines use an unconfigured inverted sorter instead of an accidental junction or bridge.
+- Single-tech planets, parallel lines, endpoints, and non-item obstacles retain vanilla placement.
+
+#### 28) Hide What Processors Show
+
+- Two independent keybinds hide world processor effects and dynamic markers without changing map logic.
+
+#### 29) Patrol Cancel
+
+- Right-click commands clear patrol stance on selected units so move and attack orders take effect immediately.
+- Middle-click queue commands remain available for building patrol routes.
+
 ### Quick Start
 
 1) Install `Neon.zip` to Mindustry `mods` folder and enable it in game.
@@ -489,7 +520,7 @@ Note: Neon already contains these twenty-six modules. Do not enable standalone v
 - Radial Build Menu hotkey (plus optional slot-group toggle)
 - LockAttack lock key (`L` by default)
 
-3) Configure all modules in `Settings -> Mods -> Neon`, including WhoUsesThisBuilding, PatchViewer, PinyinSearchSupport, ForeignServerTranslator, Tripwire, BetterPolyAi, AdvancedReplace, BetterRTSFormation, AutoPruner, Color-the-ducts, and LogicSugar groups.
+3) Configure all modules in `Settings -> Mods -> Neon`, including the grouped settings and the keybind-only Smart Placement, Hide What Processors Show, and Patrol Cancel modules.
 
 4) Overlay windows:
 

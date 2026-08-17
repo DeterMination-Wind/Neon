@@ -18,7 +18,6 @@ import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.pooling.Pools;
 import mindustry.game.EventType;
-import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.gen.Icon;
 import mindustry.gen.Unit;
@@ -37,11 +36,17 @@ public final class BetterRTSFormationFeature {
     private static final String keyEnabled = "brf-enabled";
     private static final String keyOutsideCommandMode = "brf-outside-command-mode";
     private static final String keyAddControlGroup = "brf-add-control-group";
+    private static final String keyCreateControlGroup = "brf-create-control-group";
+    private static final String keyExclusiveAddControlGroup = "brf-exclusive-add-control-group";
     private static final String keySelectControlGroup = "brf-select-control-group";
     private static final String keyDeleteControlGroup = "brf-delete-control-group";
     private static final String keybindCategory = "better-rts-formation";
 
     private static final int groupCount = 10;
+    private static final int groupEditNone = 0;
+    private static final int groupEditAdd = 1;
+    private static final int groupEditAddExclusive = 2;
+    private static final int groupEditRemoveAll = 3;
     private static final KeyBind[] groupBindings = {
         Binding.blockSelect01,
         Binding.blockSelect02,
@@ -69,12 +74,13 @@ public final class BetterRTSFormationFeature {
     };
 
     private static final IntSet[] groupMembership = new IntSet[groupCount];
-    private static final Seq<Unit> previousSelectedUnits = new Seq<>();
-    private static final Seq<Building> previousCommandBuildings = new Seq<>(false);
+    private static final IntSet consumedShortcutKeys = new IntSet();
     private static final Rect drawBounds = new Rect();
     private static final Rect formationBoxRect = new Rect();
 
     private static KeyBind addControlGroup;
+    private static KeyBind createControlGroup;
+    private static KeyBind exclusiveAddControlGroup;
     private static KeyBind selectControlGroup;
     private static KeyBind deleteControlGroup;
     private static InputProcessor boxInputProcessor;
@@ -85,17 +91,14 @@ public final class BetterRTSFormationFeature {
         BetterRTSFormationFeature::buildDefaultSettings;
     private static boolean enabled = true;
     private static boolean outsideCommandMode;
-    private static boolean previousSelectionReady;
-    private static boolean restoreSelectionBeforeDraw;
     private static boolean formationBoxActive;
     private static boolean formationBoxDeleteMode;
+    private static boolean formationBoxExclusiveMode;
     private static boolean formationBoxMouseCaptured;
     private static boolean formationBoxMouseReleased;
     private static float formationBoxStartX;
     private static float formationBoxStartY;
     private static int formationBoxGroup = -1;
-    private static IntSeq[] nativeCreateGroupSnapshot;
-    private static int nativeCreateGroupIndex = -1;
 
     static {
         for (int i = 0; i < groupMembership.length; i++) {
@@ -110,7 +113,7 @@ public final class BetterRTSFormationFeature {
         if (initialized) return;
         initialized = true;
 
-        Events.on(EventType.WorldLoadEvent.class, event -> resetPreviousSelection());
+        Events.on(EventType.WorldLoadEvent.class, event -> resetState());
         Events.run(EventType.Trigger.update, BetterRTSFormationFeature::updateInput);
         Events.run(EventType.Trigger.draw, () -> {
             Draw.draw(Layer.overlayUI - 0.1f, BetterRTSFormationFeature::drawFormationBox);
@@ -154,9 +157,11 @@ public final class BetterRTSFormationFeature {
     private static void registerKeybind() {
         if (keybindRegistered) return;
         keybindRegistered = true;
-        addControlGroup = KeyBind.add(keyAddControlGroup, KeyCode.unset, keybindCategory);
-        selectControlGroup = KeyBind.add(keySelectControlGroup, KeyCode.unset, keybindCategory);
-        deleteControlGroup = KeyBind.add(keyDeleteControlGroup, KeyCode.unset, keybindCategory);
+        addControlGroup = KeyBind.add(keyAddControlGroup, KeyCode.controlLeft, keybindCategory);
+        createControlGroup = KeyBind.add(keyCreateControlGroup, KeyCode.shiftLeft, keybindCategory);
+        exclusiveAddControlGroup = KeyBind.add(keyExclusiveAddControlGroup, KeyCode.unset, keybindCategory);
+        selectControlGroup = KeyBind.add(keySelectControlGroup, KeyCode.altLeft, keybindCategory);
+        deleteControlGroup = KeyBind.add(keyDeleteControlGroup, KeyCode.del, keybindCategory);
     }
 
     private static void registerBoxInputProcessor() {
@@ -171,6 +176,8 @@ public final class BetterRTSFormationFeature {
                     InputHandler input = control == null ? null : control.input;
                     if (canStartDeleteFormationBox(input)) {
                         beginDeleteFormationBox(input, screenX, screenY);
+                    } else if (canStartExclusiveFormationBox(input)) {
+                        beginExclusiveFormationBox(input, screenX, screenY);
                     } else if (canStartFormationBox(input)) {
                         beginFormationBox(input, screenX, screenY);
                     }
@@ -198,11 +205,19 @@ public final class BetterRTSFormationFeature {
 
             @Override
             public boolean keyDown(KeyCode keycode) {
-                return false;
+                if (consumedShortcutKeys.contains(keycode.ordinal())) return true;
+                if (!handleFormationShortcut(keycode)) return false;
+
+                consumedShortcutKeys.add(keycode.ordinal());
+                return true;
             }
 
             @Override
             public boolean keyUp(KeyCode keycode) {
+                if (consumedShortcutKeys.contains(keycode.ordinal())) {
+                    consumedShortcutKeys.remove(keycode.ordinal());
+                    return true;
+                }
                 return false;
             }
 
@@ -225,6 +240,94 @@ public final class BetterRTSFormationFeature {
         Core.input.getInputProcessors().insert(0, boxInputProcessor);
     }
 
+    private static boolean handleFormationShortcut(KeyCode keycode) {
+        InputHandler input = control == null ? null : control.input;
+        if (!canHandleFormationShortcut(input)) return false;
+
+        int groupIndex = shortcutGroupIndex(keycode);
+        if (groupIndex < 0) return false;
+
+        boolean commandMode = input.commandMode || isKeyDown(Binding.commandMode);
+        boolean nativeCreateChord = commandMode && isKeyDown(Binding.createControlGroup);
+
+        cancelFormationBox();
+        if (isKeyDown(exclusiveAddControlGroup)) {
+            applyGroupEdit(input, groupIndex, collectValidUnitIds(input.selectedUnits), groupEditAddExclusive);
+            return true;
+        }
+        if (isKeyDown(createControlGroup)) {
+            createGroup(input, groupIndex);
+            return true;
+        }
+        if (nativeCreateChord) {
+            return true;
+        }
+        if (isKeyDown(addControlGroup)) {
+            applyGroupEdit(input, groupIndex, collectValidUnitIds(input.selectedUnits), groupEditAdd);
+            return true;
+        }
+        if (isKeyDown(selectControlGroup)) {
+            selectGroup(input, groupIndex);
+            return true;
+        }
+
+        // When a select prefix is configured, bare native group selection is
+        // blocked in command mode so selection remains prefix-only.
+        return commandMode && hasKey(selectControlGroup);
+    }
+
+    private static boolean canHandleFormationShortcut(InputHandler input) {
+        return enabled && input != null && Core.input != null && state != null && state.isGame()
+            && Core.scene != null && !Core.scene.hasField() && !Core.scene.hasDialog() && !Core.scene.hasKeyboard();
+    }
+
+    private static int shortcutGroupIndex(KeyCode keycode) {
+        int groupIndex = defaultGroupIndex(keycode);
+        if (groupIndex >= 0) return groupIndex;
+
+        for (int i = 0; i < groupBindings.length; i++) {
+            if (isBoundTo(groupBindings[i], keycode)) return i;
+        }
+        return -1;
+    }
+
+    private static int defaultGroupIndex(KeyCode keycode) {
+        switch (keycode) {
+            case num1:
+            case numpad1:
+                return 0;
+            case num2:
+            case numpad2:
+                return 1;
+            case num3:
+            case numpad3:
+                return 2;
+            case num4:
+            case numpad4:
+                return 3;
+            case num5:
+            case numpad5:
+                return 4;
+            case num6:
+            case numpad6:
+                return 5;
+            case num7:
+            case numpad7:
+                return 6;
+            case num8:
+            case numpad8:
+                return 7;
+            case num9:
+            case numpad9:
+                return 8;
+            case num0:
+            case numpad0:
+                return 9;
+            default:
+                return -1;
+        }
+    }
+
     private static void refreshSettings() {
         if (Core.settings != null) {
             enabled = Core.settings.getBool(keyEnabled, true);
@@ -237,155 +340,129 @@ public final class BetterRTSFormationFeature {
         registerBoxInputProcessor();
 
         InputHandler input = control == null ? null : control.input;
-        if (input != null) {
-            restoreNativeCreateGroups(input);
-        }
-
         if (control == null || input == null || Core.input == null || state == null || !state.isGame()) {
-            previousSelectionReady = false;
-            restoreSelectionBeforeDraw = false;
             cancelFormationBox();
             return;
         }
 
         if (!enabled) {
-            restoreSelectionBeforeDraw = false;
             cancelFormationBox();
-            rememberSelection(input);
             return;
         }
 
-        if (Core.scene == null || Core.scene.hasField() || Core.scene.hasDialog()) {
+        if (Core.scene == null || Core.scene.hasField() || Core.scene.hasDialog() || Core.scene.hasKeyboard()) {
             cancelFormationBox();
-            rememberSelection(input);
             return;
         }
 
         boolean commandMode = input.commandMode || isKeyDown(Binding.commandMode);
         boolean outsideMode = !commandMode && outsideCommandMode;
         boolean addPrefix = isKeyDown(addControlGroup);
+        boolean exclusivePrefix = isKeyDown(exclusiveAddControlGroup);
+
+        if (!addPrefix && isKeyTap(deleteControlGroup)) {
+            applyGroupEdit(input, -1, collectValidUnitIds(input.selectedUnits), groupEditRemoveAll);
+        }
 
         if (outsideMode) {
-            updateFormationBox(input, addPrefix);
+            updateFormationBox(input, addPrefix, exclusivePrefix);
         } else {
             cancelFormationBox();
         }
-
-        if (commandMode || outsideMode || addPrefix) {
-            handleFormationShortcuts(input, commandMode, outsideMode, addPrefix);
-        }
-
-        rememberSelection(input);
     }
 
-    private static void handleFormationShortcuts(InputHandler input, boolean commandMode, boolean outsideMode, boolean addPrefix) {
-        int groupIndex = tappedGroupIndex();
-        if (groupIndex < 0) return;
+    private static void applyGroupEdit(InputHandler input, int groupIndex, IntSeq unitIds, int edit) {
+        if (input == null || input.controlGroups == null || edit == groupEditNone) return;
 
-        boolean nativeCreatePrefix = Core.input.keyDown(Binding.createControlGroup);
-        boolean customCreate = addPrefix;
-
-        if (commandMode && nativeCreatePrefix) {
-            snapshotNativeCreateGroups(input, groupIndex);
+        if (edit == groupEditRemoveAll || edit == groupEditAddExclusive) {
+            removeUnitIdsFromAllGroups(input, unitIds);
         }
 
-        // The native Ctrl+Shift path remains authoritative in command mode. The
-        // added prefix is independent and creates groups without requiring Shift.
-        if (customCreate || (outsideMode && nativeCreatePrefix)) {
-            cancelFormationBox();
-            if (previousSelectionReady) {
-                restorePreviousSelection(input);
-            }
-            createGroup(input, groupIndex);
-            return;
+        if (edit == groupEditRemoveAll || groupIndex < 0 || groupIndex >= input.controlGroups.length) return;
+
+        IntSeq group = input.controlGroups[groupIndex];
+        if (group == null) {
+            group = input.controlGroups[groupIndex] = new IntSeq();
         }
 
-        if (commandMode) {
-            if (nativeCreatePrefix) return;
-            if (!hasSelectKey()) return;
-
-            // Restore the previous frame before the native input handler processes
-            // the same digit, then apply the strict modifier when present.
-            if (previousSelectionReady) {
-                restorePreviousSelection(input);
+        // Remove all existing copies first so every edited unit occurs exactly once.
+        removeUnitIds(group, unitIds);
+        for (int i = 0; i < unitIds.size; i++) {
+            int unitId = unitIds.get(i);
+            if (isValidGroupUnit(Groups.unit.getByID(unitId))) {
+                group.add(unitId);
             }
-            if (isKeyDown(selectControlGroup)) {
-                selectGroup(input, groupIndex);
-            } else {
-                restoreSelectionBeforeDraw = true;
-            }
-        } else if (outsideMode && (!hasSelectKey() || isKeyDown(selectControlGroup))) {
-            selectGroup(input, groupIndex);
         }
     }
 
-    private static int tappedGroupIndex() {
-        for (int i = 0; i < groupBindings.length; i++) {
-            if (Core.input.keyTap(groupBindings[i])) return i;
+    private static IntSeq collectValidUnitIds(Seq<Unit> units) {
+        IntSeq unitIds = new IntSeq();
+        if (units == null) return unitIds;
+
+        for (int i = 0; i < units.size; i++) {
+            Unit unit = units.get(i);
+            if (isValidGroupUnit(unit)) {
+                unitIds.addUnique(unit.id);
+            }
         }
-        return -1;
+        return unitIds;
     }
 
-    private static void snapshotNativeCreateGroups(InputHandler input, int groupIndex) {
-        if (nativeCreateGroupSnapshot != null) return;
-
-        nativeCreateGroupIndex = groupIndex;
-        nativeCreateGroupSnapshot = new IntSeq[input.controlGroups.length];
+    private static void removeUnitIdsFromAllGroups(InputHandler input, IntSeq unitIds) {
         for (int i = 0; i < input.controlGroups.length; i++) {
             IntSeq group = input.controlGroups[i];
             if (group != null) {
-                nativeCreateGroupSnapshot[i] = new IntSeq(group);
+                removeUnitIds(group, unitIds);
             }
         }
     }
 
-    private static void restoreNativeCreateGroups(InputHandler input) {
-        if (nativeCreateGroupSnapshot == null) return;
-
-        int count = Math.min(nativeCreateGroupSnapshot.length, input.controlGroups.length);
-        for (int i = 0; i < count; i++) {
-            if (i == nativeCreateGroupIndex) continue;
-
-            IntSeq snapshot = nativeCreateGroupSnapshot[i];
-            if (snapshot == null) {
-                input.controlGroups[i] = null;
-            } else if (input.controlGroups[i] == null) {
-                input.controlGroups[i] = new IntSeq(snapshot);
-            } else {
-                input.controlGroups[i].clear();
-                input.controlGroups[i].addAll(snapshot);
+    private static void removeUnitIds(IntSeq group, IntSeq unitIds) {
+        for (int i = 0; i < unitIds.size; i++) {
+            while (group.removeValue(unitIds.get(i))) {
+                // Existing saves may already contain duplicates; remove every copy.
             }
         }
-
-        nativeCreateGroupSnapshot = null;
-        nativeCreateGroupIndex = -1;
     }
 
-    private static void updateFormationBox(InputHandler input, boolean addPrefix) {
-        boolean deletePrefix = hasDeleteKey() && isKeyDown(deleteControlGroup);
+    private static void updateFormationBox(InputHandler input, boolean addPrefix, boolean exclusivePrefix) {
+        boolean deletePrefix = isKeyDown(deleteControlGroup);
         if (!formationBoxActive) {
             if (addPrefix && deletePrefix && !Core.scene.hasMouse()
-                && (Core.input.keyTap(addControlGroup) || Core.input.keyTap(deleteControlGroup))) {
+                && (isKeyTap(addControlGroup) || isKeyTap(deleteControlGroup))) {
                 beginDeleteFormationBox(input);
-            } else if (addPrefix && !deletePrefix && Core.input.keyTap(addControlGroup) && !Core.scene.hasMouse()) {
+            } else if (exclusivePrefix && isKeyTap(exclusiveAddControlGroup) && !Core.scene.hasMouse()) {
+                beginExclusiveFormationBox(input);
+            } else if (addPrefix && !exclusivePrefix && !deletePrefix
+                && isKeyTap(addControlGroup) && !Core.scene.hasMouse()) {
                 beginFormationBox(input);
             }
             return;
         }
 
-        if (formationBoxMouseReleased || !addPrefix || (formationBoxDeleteMode && !deletePrefix)) {
+        boolean prefixReleased = formationBoxDeleteMode ? !addPrefix || !deletePrefix
+            : formationBoxExclusiveMode ? !exclusivePrefix : !addPrefix;
+        if (formationBoxMouseReleased || prefixReleased) {
             finishFormationBox(input);
         }
     }
 
     private static boolean canStartFormationBox(InputHandler input) {
+        return canStartAnyFormationBox(input) && isKeyDown(addControlGroup);
+    }
+
+    private static boolean canStartExclusiveFormationBox(InputHandler input) {
+        return canStartAnyFormationBox(input) && isKeyDown(exclusiveAddControlGroup);
+    }
+
+    private static boolean canStartAnyFormationBox(InputHandler input) {
         return enabled && outsideCommandMode && input != null && Core.input != null && state != null && state.isGame()
             && Core.scene != null && !Core.scene.hasField() && !Core.scene.hasDialog() && !Core.scene.hasMouse()
-            && !input.commandMode && !isKeyDown(Binding.commandMode) && isKeyDown(addControlGroup);
+            && !Core.scene.hasKeyboard() && !input.commandMode && !isKeyDown(Binding.commandMode);
     }
 
     private static boolean canStartDeleteFormationBox(InputHandler input) {
-        return hasDeleteKey() && isKeyDown(deleteControlGroup) && canStartFormationBox(input);
+        return isKeyDown(deleteControlGroup) && canStartFormationBox(input);
     }
 
     private static void beginFormationBox(InputHandler input) {
@@ -394,6 +471,23 @@ public final class BetterRTSFormationFeature {
         int emptyGroup = firstEmptyGroup(input);
         if (emptyGroup < 0) return;
 
+        formationBoxDeleteMode = false;
+        formationBoxExclusiveMode = false;
+        formationBoxGroup = emptyGroup;
+        formationBoxStartX = Core.input.mouseWorldX();
+        formationBoxStartY = Core.input.mouseWorldY();
+        formationBoxMouseReleased = false;
+        formationBoxActive = true;
+    }
+
+    private static void beginExclusiveFormationBox(InputHandler input) {
+        if (input == null || formationBoxActive) return;
+
+        int emptyGroup = firstEmptyGroup(input);
+        if (emptyGroup < 0) return;
+
+        formationBoxDeleteMode = false;
+        formationBoxExclusiveMode = true;
         formationBoxGroup = emptyGroup;
         formationBoxStartX = Core.input.mouseWorldX();
         formationBoxStartY = Core.input.mouseWorldY();
@@ -405,6 +499,7 @@ public final class BetterRTSFormationFeature {
         if (input == null || formationBoxActive) return;
 
         formationBoxDeleteMode = true;
+        formationBoxExclusiveMode = false;
         formationBoxGroup = -1;
         formationBoxStartX = Core.input.mouseWorldX();
         formationBoxStartY = Core.input.mouseWorldY();
@@ -418,6 +513,22 @@ public final class BetterRTSFormationFeature {
         int emptyGroup = firstEmptyGroup(input);
         if (emptyGroup < 0) return;
 
+        formationBoxDeleteMode = false;
+        formationBoxExclusiveMode = false;
+        formationBoxGroup = emptyGroup;
+        formationBoxMouseReleased = false;
+        formationBoxActive = true;
+        setFormationBoxStart(screenX, screenY);
+    }
+
+    private static void beginExclusiveFormationBox(InputHandler input, int screenX, int screenY) {
+        if (input == null || formationBoxActive) return;
+
+        int emptyGroup = firstEmptyGroup(input);
+        if (emptyGroup < 0) return;
+
+        formationBoxDeleteMode = false;
+        formationBoxExclusiveMode = true;
         formationBoxGroup = emptyGroup;
         formationBoxMouseReleased = false;
         formationBoxActive = true;
@@ -428,6 +539,7 @@ public final class BetterRTSFormationFeature {
         if (input == null || formationBoxActive) return;
 
         formationBoxDeleteMode = true;
+        formationBoxExclusiveMode = false;
         formationBoxGroup = -1;
         formationBoxMouseReleased = false;
         formationBoxActive = true;
@@ -457,33 +569,29 @@ public final class BetterRTSFormationFeature {
         if (formationBoxDeleteMode) {
             deleteFormations(input, units);
         } else if (formationBoxGroup >= 0 && formationBoxGroup < input.controlGroups.length) {
-            createGroup(input, formationBoxGroup, units);
+            if (formationBoxExclusiveMode) {
+                applyGroupEdit(input, formationBoxGroup, collectValidUnitIds(units), groupEditAddExclusive);
+            } else {
+                createGroup(input, formationBoxGroup, units);
+            }
         }
 
         formationBoxActive = false;
         formationBoxDeleteMode = false;
+        formationBoxExclusiveMode = false;
         formationBoxGroup = -1;
         formationBoxMouseReleased = false;
     }
 
     private static void deleteFormations(InputHandler input, Seq<Unit> units) {
         if (input == null || units == null || units.isEmpty() || input.controlGroups == null) return;
-
-        for (int i = 0; i < units.size; i++) {
-            Unit unit = units.get(i);
-            if (!isValidGroupUnit(unit)) continue;
-
-            for (int g = 0; g < input.controlGroups.length; g++) {
-                IntSeq group = input.controlGroups[g];
-                if (group == null) continue;
-                group.removeValue(unit.id);
-            }
-        }
+        removeUnitIdsFromAllGroups(input, collectValidUnitIds(units));
     }
 
     private static void cancelFormationBox() {
         formationBoxActive = false;
         formationBoxDeleteMode = false;
+        formationBoxExclusiveMode = false;
         formationBoxGroup = -1;
         formationBoxMouseReleased = false;
     }
@@ -505,18 +613,20 @@ public final class BetterRTSFormationFeature {
     }
 
     private static boolean isKeyDown(KeyBind keybind) {
+        return hasKey(keybind) && Core.input.keyDown(keybind);
+    }
+
+    private static boolean isKeyTap(KeyBind keybind) {
+        return hasKey(keybind) && Core.input.keyTap(keybind);
+    }
+
+    private static boolean hasKey(KeyBind keybind) {
         return keybind != null && keybind.value != null && keybind.value.key != null
-            && keybind.value.key != KeyCode.unset && Core.input.keyDown(keybind);
+            && keybind.value.key != KeyCode.unset;
     }
 
-    private static boolean hasSelectKey() {
-        return selectControlGroup != null && selectControlGroup.value != null
-            && selectControlGroup.value.key != null && selectControlGroup.value.key != KeyCode.unset;
-    }
-
-    private static boolean hasDeleteKey() {
-        return deleteControlGroup != null && deleteControlGroup.value != null
-            && deleteControlGroup.value.key != null && deleteControlGroup.value.key != KeyCode.unset;
+    private static boolean isBoundTo(KeyBind keybind, KeyCode keycode) {
+        return hasKey(keybind) && keybind.value.key == keycode;
     }
 
     private static void createGroup(InputHandler input, int groupIndex) {
@@ -532,8 +642,7 @@ public final class BetterRTSFormationFeature {
         }
 
         group.clear();
-        IntSeq selectedUnitIds = units.mapInt(unit -> unit.id);
-        group.addAll(selectedUnitIds);
+        group.addAll(collectValidUnitIds(units));
     }
 
     private static void selectGroup(InputHandler input, int groupIndex) {
@@ -561,44 +670,9 @@ public final class BetterRTSFormationFeature {
         }
     }
 
-    private static void restorePreviousSelection(InputHandler input) {
-        input.selectedUnits.clear();
-        for (int i = 0; i < previousSelectedUnits.size; i++) {
-            Unit unit = previousSelectedUnits.get(i);
-            if (isValidSelectedUnit(unit)) {
-                input.selectedUnits.add(unit);
-            }
-        }
-
-        input.commandBuildings.clear();
-        for (int i = 0; i < previousCommandBuildings.size; i++) {
-            Building building = previousCommandBuildings.get(i);
-            if (building != null && building.isValid() && building.isCommandable() && player != null && building.team == player.team()) {
-                input.commandBuildings.add(building);
-            }
-        }
-    }
-
-    private static void rememberSelection(InputHandler input) {
-        previousSelectedUnits.clear();
-        previousSelectedUnits.addAll(input.selectedUnits);
-        previousCommandBuildings.clear();
-        previousCommandBuildings.addAll(input.commandBuildings);
-        previousSelectionReady = true;
-    }
-
-    private static void resetPreviousSelection() {
-        previousSelectedUnits.clear();
-        previousCommandBuildings.clear();
-        previousSelectionReady = true;
-        restoreSelectionBeforeDraw = false;
+    private static void resetState() {
         cancelFormationBox();
-        nativeCreateGroupSnapshot = null;
-        nativeCreateGroupIndex = -1;
-    }
-
-    private static boolean isValidSelectedUnit(Unit unit) {
-        return unit != null && unit.allowCommand() && unit.isValid() && player != null && unit.team == player.team();
+        consumedShortcutKeys.clear();
     }
 
     private static boolean isValidGroupUnit(Unit unit) {
@@ -624,26 +698,16 @@ public final class BetterRTSFormationFeature {
 
     private static void drawBadges() {
         InputHandler input = control == null ? null : control.input;
-        if (input != null) {
-            restoreNativeCreateGroups(input);
-        }
-        if (restoreSelectionBeforeDraw && input != null) {
-            restorePreviousSelection(input);
-            restoreSelectionBeforeDraw = false;
-        }
-
         if (input == null || state == null || !state.isGame()) {
             return;
         }
 
         if (!enabled || player == null || Core.camera == null) {
-            rememberSelection(input);
             return;
         }
 
         IntSeq[] groups = input.controlGroups;
         if (groups == null || groups.length == 0 || Fonts.outline == null) {
-            rememberSelection(input);
             return;
         }
 
@@ -677,7 +741,6 @@ public final class BetterRTSFormationFeature {
         font.setColor(Color.white);
         font.setUseIntegerPositions(integerPositions);
         Draw.reset();
-        rememberSelection(input);
     }
 
     private static void rebuildMembership(IntSeq[] groups, int availableGroups) {

@@ -582,7 +582,10 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
             )
 
     # 2) Add static bekBundled flag after class declaration.
-    class_decl = re.search(r"(public\s+class\s+\w+\s+extends\s+(?:mindustry\.mod\.)?Mod\s*\{)", java_src)
+    class_decl = re.search(
+        r"(public\s+(?:final\s+)?class\s+\w+\s+extends\s+(?:mindustry\.mod\.)?Mod(?:\s+implements\s+[\w., <>]+)?\s*\{)",
+        java_src,
+    )
     if not class_decl:
         raise ValueError(f"[{mod_id}] Could not find class declaration.")
     insert_at = class_decl.end(1)
@@ -684,6 +687,19 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
         if "this::buildSettings" in java_src:
             java_src = java_src.replace("this::buildSettings", "this::bekBuildSettings")
         java_src = ensure_bek_build_settings_wrapper(java_src)
+
+    # Some bundled modules deliberately have no standalone settings. They still expose
+    # the common method so BekToolsMod can render a stable explanatory section.
+    if "public void bekBuildSettings(SettingsMenuDialog.SettingsTable table)" not in java_src:
+        class_close = java_src.rfind("}")
+        if class_close == -1:
+            raise ValueError(f"[{mod_id}] Could not find class closing brace.")
+        method = (
+            "\n    /** This bundled module has no configurable settings. */\n"
+            "    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){\n"
+            "    }\n"
+        )
+        java_src = java_src[:class_close] + method + java_src[class_close:]
 
     java_src = ensure_bundled_return(java_src)
     java_src = guard_add_category_calls(java_src)

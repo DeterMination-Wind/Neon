@@ -17,6 +17,7 @@ import arc.util.Scaling;
 import bektools.profiler.NeonProfilerFeature;
 import bektools.ui.VscodeSettingsStyle;
 import betterrtsformation.BetterRTSFormationMod;
+import hidewhatprocessorsshow.HideWhatProcessorsShowMod;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -48,7 +49,9 @@ import powergridminimap.PowerGridMinimapMod;
 import radialbuildmenu.RadialBuildMenuMod;
 import random.RandomMod;
 import serverplayerdatabase.ServerPlayerDataBaseMod;
+import smartplacement.SmartPlacementMod;
 import stealthpath.StealthPathMod;
+import patrolcancel.PatrolCancelMod;
 import tripwire.TripwireMod;
 import tripwire.TripwireInput;
 import whousesthisbuilding.WhoUsesThisBuildingMod;
@@ -70,6 +73,9 @@ public class BekToolsMod extends Mod{
     private static final String moduleScreenshot = "bss";
     private static final String moduleRadialBuildMenu = "rbm";
     private static final String moduleBetterRtsFormation = "brf";
+    private static final String moduleSmartPlacement = "smp";
+    private static final String moduleHideWhatProcessorsShow = "hwps";
+    private static final String modulePatrolCancel = "pc";
     private static final String moduleBetterTerrainGen = "btg";
     private static final String moduleAutoPruner = "ap";
     private static final String moduleColorTheDucts = "ctd";
@@ -99,6 +105,9 @@ public class BekToolsMod extends Mod{
     private final StealthPathMod stealthPath;
     private final RadialBuildMenuMod radialBuildMenu;
     private final BetterRTSFormationMod betterRtsFormation;
+    private final SmartPlacementMod smartPlacement;
+    private final HideWhatProcessorsShowMod hideWhatProcessorsShow;
+    private final PatrolCancelMod patrolCancel;
     private final BetterTerrainGenV2Mod betterTerrainGen;
     private final AutoPrunerMod autoPruner;
     private final ColorTheDuctsMod colorTheDucts;
@@ -154,6 +163,9 @@ public class BekToolsMod extends Mod{
             BetterRTSFormationMod.bekBundled = true;
             BetterRTSFormationSettings.configure();
         });
+        markBundled(moduleSmartPlacement, () -> SmartPlacementMod.bekBundled = true);
+        markBundled(moduleHideWhatProcessorsShow, () -> HideWhatProcessorsShowMod.bekBundled = true);
+        markBundled(modulePatrolCancel, () -> PatrolCancelMod.bekBundled = true);
         markBundled(moduleBetterTerrainGen, () -> BetterTerrainGenV2Mod.bekBundled = true);
         markBundled(moduleAutoPruner, () -> AutoPrunerMod.bekBundled = true);
         markBundled(moduleColorTheDucts, () -> ColorTheDuctsMod.bekBundled = true);
@@ -180,6 +192,21 @@ public class BekToolsMod extends Mod{
         radialBuildMenu = initializeModule(moduleRadialBuildMenu, radialBuildMenuSupplier);
         betterRtsFormation = initializeModule(moduleBetterRtsFormation, () -> {
             BetterRTSFormationMod mod = new BetterRTSFormationMod();
+            mod.init();
+            return mod;
+        });
+        smartPlacement = initializeModule(moduleSmartPlacement, () -> {
+            SmartPlacementMod mod = new SmartPlacementMod();
+            mod.init();
+            return mod;
+        });
+        hideWhatProcessorsShow = initializeModule(moduleHideWhatProcessorsShow, () -> {
+            HideWhatProcessorsShowMod mod = new HideWhatProcessorsShowMod();
+            mod.init();
+            return mod;
+        });
+        patrolCancel = initializeModule(modulePatrolCancel, () -> {
+            PatrolCancelMod mod = new PatrolCancelMod();
             mod.init();
             return mod;
         });
@@ -432,6 +459,9 @@ public class BekToolsMod extends Mod{
         entries.add(new ModuleEntry(moduleScreenshot, !isModuleFailed(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, "bss-enabled", true, BetterScreenShotFeature::buildSettings));
         entries.add(new ModuleEntry(moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, "rbm-enabled", true, st -> radialBuildMenu.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleBetterRtsFormation, betterRtsFormation != null, Core.bundle.get("bektools.section.brf", "Better RTS Formation"), Icon.commandRally, "brf-enabled", true, st -> betterRtsFormation.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleSmartPlacement, smartPlacement != null, Core.bundle.get("bektools.section.smp", "Smart Placement"), Icon.rightOpen, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
+        entries.add(new ModuleEntry(moduleHideWhatProcessorsShow, hideWhatProcessorsShow != null, Core.bundle.get("bektools.section.hwps", "Hide What Processors Show"), Icon.logic, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hwps.none"))));
+        entries.add(new ModuleEntry(modulePatrolCancel, patrolCancel != null, Core.bundle.get("bektools.section.pc", "Patrol Cancel"), Icon.commandRally, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.pc.none"))));
         entries.add(new ModuleEntry(moduleBetterTerrainGen, betterTerrainGen != null, Core.bundle.get("bektools.section.btg", "Better Terrain Gen V2"), Icon.map, null, false, st -> {
             betterTerrainGen.bekBuildSettings(st);
             st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.btg.none"));

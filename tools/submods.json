@@ -38,6 +38,34 @@
       "injectBekHooks": false
     },
     {
+      "id": "smp",
+      "name": "Smart Placement",
+      "localPath": "../LineOverwrite",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/smartplacement",
+      "mainClassFile": "SmartPlacementMod.java",
+      "bundlesDir": "src/main/resources/bundles"
+    },
+    {
+      "id": "hwps",
+      "name": "Hide What Processors Show",
+      "localPath": "../HideWhatProcessorsShow",
+      "trackUpstream": true,
+      "javaPackageDir": "src/main/java/hidewhatprocessorsshow",
+      "mainClassFile": "HideWhatProcessorsShowMod.java",
+      "bundlesDir": "src/main/resources/bundles"
+    },
+    {
+      "id": "pc",
+      "name": "Patrol Cancel",
+      "localPath": "../PatrolCancel",
+      "trackUpstream": true,
+      "sourceJavaDir": "src/patrolcancel",
+      "javaPackageDir": "src/main/java/patrolcancel",
+      "mainClassFile": "PatrolCancelMod.java",
+      "bundlesDir": "src/main/resources/bundles"
+    },
+    {
       "id": "btg",
       "name": "BetterTerrainGen-V2",
       "localPath": "../BetterTerrainGen-V2",

@@ -11,286 +11,55 @@
 
 ## 中文
 
-### 简介
+> 看得更清楚，操作更顺手，问题更容易查清。
 
-Neon 是一个 Mindustry 纯客户端工具集（Java 模组），将以下 29 个模组合并为一个安装包：
+### Neon 是什么
 
-- Power Grid Minimap（电网小地图）
-- Stealth Path（偷袭小道 / 安全路径）
-- customMarker（自定义标记）
-- BetterScreenShot（更好的截图，BSS 核心代码来自 Miner）
-- Radial Build Menu（圆盘快捷建造）
-- betterMiniMap（增强小地图单位/建筑显示）
-- ServerPlayerDataBase（玩家数据库 / 聊天记录查询）
-- betterMapEditor（地图编辑增强）
-- Better Projector Overlay（超速投影叠加）
-- betterLogisticsSpeed（物流速率增强）
-- betterHotKey（快捷键增强）
-- modUpdater（模组更新中心）
-- WhoUsesThisBuilding（谁在用这个建筑）
-- PatchViewer（补丁查看器）
-- PinyinSearchSupport（拼音搜索支持）
-- ForeignServerTranslator（外语服务器翻译）
-- Tripwire（地理围栏报警）
-- BetterPolyAi（Poly 建造辅助）
-- AdvancedReplace（地图编辑高级替换）
-- BetterRTSFormation（更好的 RTS 编队）
-- BetterTerrainGen-V2（更自然的地形生成）
-- AutoPruner（智能拆除）
-- Color-the-ducts（导管染色）
-- LogicSugar（逻辑辅助）
-- Random（随机化）
-- LockAttack（锁定攻击）
-- Smart Placement（智能放置）
-- Hide What Processors Show（隐藏处理器显示）
-- Patrol Cancel（取消巡逻）
+Neon 是 Mindustry 的客户端辅助工作台。
 
-如果你只想安装一次、一次性获得这二十九类常用"信息叠加 + 操作效率 + 数据查询 + 自动更新 + 反向逻辑排查 + 数据补丁对比 + 拼音搜索 + 翻译 + 地图编辑辅助 + 地形生成 + 逻辑辅助 + 随机化"功能，Neon 会更省事。
+它把日常游玩、建造、联机、制图和逻辑制作中常用的工具集中到一个模组里：让重要信息更容易看见，让重复操作更顺手，让复杂问题更容易定位。
 
-提示：Neon 已包含上述 29 个模块的功能，建议不要与它们的独立版本同时启用，避免重复功能或 UI 冲突。
+Neon 的价值不在于堆叠功能，而在于把原本分散的辅助工具用一个安装包、一个设置入口和统一的悬浮界面管理起来。你可以按自己的玩法启用观察、建造、单位控制、地图编辑、逻辑排错、信息查询和交流辅助，而不必单独安装和维护一长串模组。
 
-### 功能一览
+Neon 是纯客户端模组，不需要服务器安装，适合单机和多人游戏。它不增加新的方块、单位或资源，主要帮助你减少界面切换、重复操作、误判和信息盲区。
 
-#### 1) 电网小地图（Power Grid Minimap）
+### 为什么使用 Neon
 
-- 小地图/全屏大地图电网着色：每个独立电网用不同颜色标识，快速定位断网与“跨网误接”。
-- 电力盈亏标记：在电网中心显示净盈亏数值（支持字号/颜色/透明度等调整）。
-- 断网告警与建议连接点：大电网分裂且出现负电时，提示并标记建议重连位置。
-- 缺电救援建议（Beta）：缺电持续时可显示“正电岛”隔离建议、以及可能的冲击反应堆禁用提示。
-- 电力表：以列表汇总大电网的概览信息（当前盈亏/近期最低等），便于快速找出最糟糕的电网。
+- **看清局面**：把电网、物流、单位、投影和威胁等重要信息直接放在游戏画面里。
+- **减少操作**：让建造、编队、单位控制、地图编辑和截图更符合自己的工作流。
+- **查明原因**：帮助定位逻辑引用、数据补丁、玩家信息和聊天内容中的问题。
+- **一次安装，统一管理**：大多数功能可以按需启用，设置、悬浮窗口和更新入口集中在 Neon 中。
 
-#### 2) 偷袭小道（Stealth Path）
+### 快速开始
 
-- 默认关闭：该功能目前有部分缺陷，正在修复；需要时可在 Neon 设置中手动开启。
-- 路线叠加预览：在地图上绘制更安全/受伤更少的路线；线宽/透明度/显示时长可调。
-- 多模式与过滤：可切换显示模式与威胁过滤（陆军/空军/全部），更贴合不同单位。
-- 自动模式（单位集群）：自动规划单位集群到鼠标/聊天坐标，并可使用“自动移动”热键下达沿路线前进的移动指令（可在设置中开关）。
-- 可选信息窗：在安装 MindustryX 时，可通过 OverlayUI 显示模式/伤害/控制等窗口；窗口开关已回归 OverlayUI 原生界面管理。
+1. 从 [Releases](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip`，放入 Mindustry 的 `mods` 目录并在游戏内启用。
+2. 在 `设置 → 控制` 中按照需要调整 Neon 提供的快捷键。
+3. 在 `设置 → 模组 → Neon` 中按分组启用和配置功能。
+4. 支持悬浮窗口的功能会出现在统一的 Overlay 管理器中，可使用屏幕左侧的齿轮按钮或默认快捷键 `Z` 打开。
 
-#### 3) 自定义标记（customMarker）
+Neon 已经包含相关独立模组的功能。请不要同时启用对应的独立版本，否则可能出现重复功能或界面冲突。
 
-- 模仿 MindustryX 标记面板工作流，支持“按钮 → 全屏点位 → 面板确认”流程。
-- 支持 5 组标记模板编辑，消息格式固定为 `<内容><内容>(x,y)`。
-- 集成聊天坐标捕获窗口，可快速定位并聚焦聊天中的坐标点。
+### 兼容性
 
-#### 4) BetterScreenShot（更好的截图）
+- 需要 Mindustry v159 或更高版本。
+- Neon 为纯客户端模组，服务器不需要安装。
+- 原版客户端可以使用核心功能；安装 MindustryX 或提供兼容接口的环境后，支持的功能可以接入相应的 OverlayUI 和标记能力。
+- 安卓端请使用 Release 中包含 `classes.dex` 的 `Neon.jar`，不要使用桌面构建的中间文件。
 
-- 一键生成高分辨率世界截图，支持 OverlayUI 按钮和快捷键触发。
-- 大地图自动分块渲染，规避纹理尺寸限制并提供尺寸预估与进度状态。
-- BSS 核心代码来自 Miner，并在 Neon 内完成整合与设置统一。
+### 功能详情
 
-#### 5) 圆盘快捷建造（Radial Build Menu）
-
-- 长按热键弹出圆盘 HUD：松开即可切换建造方块。
-- 16 槽位（内圈 8 + 外圈 8）：可按需要配置/清空；外圈在配置后自动显示。
-- 多套槽位配置与切换：支持按时长/星球/条件切换；也支持槽位组 A/B 通过热键即时切换。
-- 外观与交互可调：缩放、透明度、半径、图标大小、方向选择等；支持 JSON 导入/导出。
-
-#### 6) betterMiniMap
-
-- 在小地图叠加单位与建筑图标，支持朝向、透明度、缩放、聚合间距等参数。
-- 支持敌我单位/建筑独立开关与筛选，快速定制战场信息密度。
-- 提供单位/建筑筛选对话框，可按名称搜索、全选、清空、反选。
-
-#### 7) 玩家数据库（ServerPlayerDataBase）
-
-- 本地采集在线玩家信息（名称、UID、服务器、IP 追踪结果）并可持续更新。
-- 可选记录聊天日志，支持导入/导出、完整性校验与异常提示。
-- 在支持 MindustryX OverlayUI 时提供查询/调试窗口；无 OverlayUI 时回退到普通对话框。
-
-#### 8) 地图编辑增强（betterMapEditor）
-
-- 在地图生成器预览里直接拖动镜像轴，快速微调对称地图。
-- 同步替换镜像滤镜为可拖动实现，不改变你已有的生成器流程。
-
-#### 9) 投影叠加（Better Projector Overlay）
-
-- 手持超速投影时显示“放下后电网正/负”预判圈与实时数值提示。
-- 自动扫描并标记被高布/穹顶覆盖的普通超速，支持可选聊天提醒。
-
-#### 10) 物流速率增强（betterLogisticsSpeed）
-
-- 为建筑物流信息增加更长时间窗的移动平均吞吐显示。
-- 支持总吞吐行显示、窗口时长与小数位调整，减少短时抖动造成的误判。
-
-#### 11) 快捷键增强（betterHotKey）
-
-- 支持双键组合热键与分组配置，适配更复杂的建造习惯。
-- 可配置忽略地形编号冲突、保留被 ban 建筑槽位，并提供可视化配置面板。
-
-#### 12) 模组更新中心（modUpdater）
-
-- 启动自动检查 GitHub Release，集中展示可更新/已最新/黑名单/无仓库状态。
-- 支持单个或批量更新、仓库覆盖、黑名单管理与镜像下载切换。
-
-#### 13) WhoUsesThisBuilding（谁在用这个建筑）
-
-- 按住触发热键并悬停任意建筑时，反向高亮所有引用该建筑的逻辑处理器。
-- 标签显示 `Lxx(opcode)`，可直接定位逻辑代码行号与引用类型。
-- 支持显式链接和 `getblock(x,y)` 间接引用，适合大型逻辑图快速排查依赖。
-
-#### 14) PatchViewer（补丁查看器）
-
-- 在数据库界面直接内联显示 datapatch 前后差异（before/after）。
-- 对属性中的修改、删除、新增项做可视化高亮，便于快速审查补丁影响。
-- 提供颜色设置与预览项，并已纳入 Neon 聚合设置页统一管理。
-
-#### 15) PinyinSearchSupport（拼音搜索支持）
-
-- 在搜索框输入拼音来匹配中文条目。
-- 支持模糊拼音、首字母、多音字读音与搜索延迟设置。
-- 已纳入 Neon 聚合设置页统一管理，不再单独执行独立更新检查。
-
-#### 16) ForeignServerTranslator（外语服务器翻译）
-
-- 可标记外语服务器，并对收发聊天与服务器文本做翻译辅助。
-- 支持 Microsoft Translator 与 OpenAI 兼容接口，并可使用 Mindustry bundle 术语提示。
-- 设置项已纳入 Neon 聚合设置页统一管理。
-
-#### 17) Tripwire（地理围栏报警）
-
-- 在世界中创建地理围栏，检测指定单位穿越并发送 Toast、聊天或 marker 提醒。
-- 支持检测间隔、聊天合并窗口、围栏显示、小地图显示与颜色覆盖设置。
-- 设置项已纳入 Neon 聚合设置页统一管理。
-
-#### 18) BetterPolyAi
-
-- 从 MindustryX 提取的 Poly 建造辅助，可按快捷键启停。
-- 支持配置建造目标间隔，仅执行玩家自己的建造/拆除规划。
-- 已纳入 Neon 聚合设置页统一管理，不再单独执行独立更新检查。
-
-#### 19) AdvancedReplace（高级替换）
-
-- 为地图编辑器补充同色染色墙填充、染色地板填充、染色墙画笔等工具模式。
-- 支持 CIEDE2000 色差宽容度设置，便于处理近似颜色的染色地形。
-- 设置项已纳入 Neon 聚合设置页统一管理。
-
-#### 20) BetterRTSFormation（更好的 RTS 编队）
-
-- 让 RTS 编队更容易创建、选择和识别，并保留原有快捷键行为。
-- 支持编队角标、严格编队选择，以及非指挥模式下的编队操作。
-- 设置项已纳入 Neon 聚合设置页统一管理。
-
-#### 21) BetterTerrainGen-V2（更自然的地形生成）
-
-- 为地图编辑器地形生成器提供 Natural Water 自然水体滤镜。
-- 本模块没有独立设置项，Neon 设置页仅保留模块说明占位。
-
-#### 22) AutoPruner（智能拆除）
-
-- 使用独立热键拆除多余电力节点，或按建筑放置时间窗口拆除建筑。
-- Neon 聚合版首次使用时默认关闭，手动开启后保留原有设置行为。
-
-#### 23) Color-the-ducts（导管染色）
-
-- 按液体颜色在液体导管中心绘制方块，支持悬停模式、整条导管和透明度调整。
-- Neon 聚合版首次使用时默认关闭，手动开启后可在统一设置页调整。
-
-#### 24) LogicSugar（逻辑辅助）
-
-- 提供结构化逻辑语句、编辑器替换和编译辅助功能。
-- 保留跳转线着色与积木颜色两个逻辑辅助设置，并纳入 Neon 聚合设置页。
-- `call` 实参为空时显示被调函数的参数列表占位提示，实时跟随函数名/参数变化。
-
-#### 25) Random（随机化）
-
-- 在下一次进入世界时，随机打乱数据库文本、战役与液体描述，以及游戏内说明提示。
-- 同时随机打乱方块、物品、单位和战役区块图标，不改变逻辑行为。
-- Neon 聚合版不添加独立设置组；在主菜单点击“千万别点”后，下一局世界启用文本与贴图随机化。
-
-#### 26) LockAttack（锁定攻击）
-
-- 按锁定键（默认 `L`）锁定鼠标指向的敌方单位或建筑，直接控制的单位会持续瞄准并集火该目标。
-- 选中的指挥单位会通过原版网络命令路径收到一次性集火命令（单机与多人均有效）。
-- 在另一目标上按锁定键可切换；点空地或己方目标解锁；目标死亡自动解锁。
-- 锁定框、目标连线与可选目标血条（设置页可开关）；键位可在 `设置 → 控制` 中修改。
-
-#### 27) Smart Placement（智能放置）
-
-- 在混合科技地图上拖放交叉物品运输线时，自动选择未配置的反向分拣器，减少误用连接器。
-- 单科技星球、平行线路、端点和非物品障碍物保持原版放置行为。
-
-#### 28) Hide What Processors Show（隐藏处理器显示）
-
-- 用两个独立快捷键分别隐藏世界处理器特效和动态 Marker，不修改地图逻辑。
-
-#### 29) Patrol Cancel（取消巡逻）
-
-- 右键指挥选中单位时自动清除巡逻姿态，让单位立即服从移动或攻击命令。
-- 中键排队/设置巡逻路线不受影响。
-
-### 快速上手
-
-1) 安装：将 `Neon.zip` 放入 Mindustry 的 `mods` 目录并在游戏内启用。
-
-2) 改键：在 `设置 → 控制` 中找到对应条目并改成你习惯的按键：
-
-- 偷袭小道：`X/Y/N/M/K/L` 等（条目名以游戏语言显示为准）
-- 快捷键增强（betterHotKey）：组合键/数字键相关条目
-- BetterScreenShot：世界截图快捷键（默认 `F8`）
-- 圆盘快捷建造：打开圆盘 HUD 的热键（以及可选的“切换槽位组”热键）
-- 锁定攻击（LockAttack）：锁定键（默认 `L`）
-
-3) 设置：在 `设置 → 模组 → Neon` 下按分组统一调整：
-
-- 电网小地图（Power Grid Minimap）
-- 偷袭小道（Stealth Path）
-- 自定义标记（customMarker）
-- BetterScreenShot
-- 圆盘快捷建造（Radial Build Menu）
-- BetterRTSFormation（更好的 RTS 编队）
-- BetterTerrainGen-V2（更自然的地形生成）
-- AutoPruner（智能拆除）
-- Color-the-ducts（导管染色）
-- LogicSugar（逻辑辅助）
-- betterMiniMap
-- 玩家数据库（ServerPlayerDataBase）
-- 地图编辑增强（betterMapEditor）
-- 投影叠加（Better Projector Overlay）
-- 物流速率增强（betterLogisticsSpeed）
-- 快捷键增强（betterHotKey）
-- 模组更新中心（modUpdater）
-- 谁在用这个建筑（WhoUsesThisBuilding）
-- 补丁查看器（PatchViewer）
-- 拼音搜索支持（PinyinSearchSupport）
-- 外语服务器翻译（ForeignServerTranslator）
-- 地理围栏报警（Tripwire）
-- BetterPolyAi
-- 高级替换（AdvancedReplace）
-- LockAttack（锁定攻击）
-
-4) Overlay 窗口：
-
-- 支持 Overlay 的模块会自动出现在统一的 OverlayUI 管理器中。
-- 屏幕左侧中部的齿轮按钮用于打开或关闭管理器。
-- 也可以直接按默认快捷键 `Z`。
-
-5) 随机化（Random）：Neon 聚合版不添加独立设置组；在主菜单点击“千万别点”后，下一局世界启用随机文本与贴图。
-
-### 多人游戏
-
-Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适合多人游戏环境。
-
-### 安卓
-
-安卓端需要包含 `classes.dex` 的 mod 包。请下载 Release 中的 `Neon.jar` 并放入 Mindustry 的 `mods` 目录。
-
-### 版本号
-
-- 稳定版使用 `N<版本号>`，例如 `N11`。
-- 预发行版使用 `B<版本号>.<递增构建号>`，例如 `B11.20`。
-- 模组内部版本码对应为 `N11 -> 110000`、`B11.20 -> 110020`。
+完整功能说明、使用场景和术语解释请查看 [FEATURES.md](FEATURES.md)。
 
 ### 反馈
 
-【BEK辅助mod反馈群】：https://qm.qq.com/q/cZWzPa4cTu
+- [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu)
 
-### 构建（可选，开发者）
+### 开发者构建
 
-一键构建桌面+安卓通用包（含 `classes.dex`）：
+在项目目录执行：
 
-```bash
-./gradlew deploy
+```powershell
+.\gradlew.bat clean deploy
 ```
 
 主要输出：
@@ -300,269 +69,62 @@ Neon 为客户端侧叠加显示与操作辅助，不需要服务器安装；适
 - `../构建/Neon/Neon-<version>.zip`
 - `../构建/Neon/Neon-<version>.jar`
 
----
-
 ## English
 
-### Overview
+> See more clearly. Build with less friction. Troubleshoot with less guesswork.
 
-Neon is a client-side Mindustry toolkit (Java mod) that bundles twenty-six modules into one package:
+### What is Neon?
 
-- Power Grid Minimap
-- Stealth Path
-- customMarker
-- BetterScreenShot
-- Radial Build Menu
-- betterMiniMap
-- Server Player DataBase
-- betterMapEditor
-- Better Projector Overlay
-- betterLogisticsSpeed
-- betterHotKey
-- modUpdater
-- WhoUsesThisBuilding
-- PatchViewer
-- PinyinSearchSupport
-- ForeignServerTranslator
-- Tripwire
-- BetterPolyAi
-- AdvancedReplace
-- BetterRTSFormation
-- BetterTerrainGen-V2
-- AutoPruner
-- Color-the-ducts
-- LogicSugar
-- Random
-- LockAttack
+Neon is a client-side companion toolkit for Mindustry.
 
-If you want one install that covers overlays, workflow tools, utility features, logic debugging, datapatch diffs, pinyin search, translation, map-editor helpers, terrain generation, RTS formation controls, randomized presentation, and lock-on focus fire, Neon is the all-in-one option.
+It brings together the tools commonly needed for playing, building, multiplayer, map making, and logic work. Important information becomes easier to see, repetitive actions become easier to perform, and complicated problems become easier to trace.
 
-Note: Neon already contains these twenty-nine modules. Do not enable standalone versions at the same time, or you may get duplicate UI and feature conflicts.
+Neon is not just a pile of features. It gives a set of focused client-side tools one package, one settings entry, and one shared overlay workflow. Enable the parts that fit your play style without installing and maintaining a long chain of separate mods.
 
-### Module Highlights
+Neon does not require server installation and works well in both singleplayer and multiplayer. It does not add new blocks, units, or resources; it improves the information and workflows around the game.
 
-#### 1) Power Grid Minimap
+### Why use Neon?
 
-- Colors independent power grids on minimap and full map.
-- Shows per-grid net power balance with configurable visual style.
-- Marks reconnect hints when large grids split and go negative.
-- Includes rescue hints for sustained deficit scenarios.
+- **See the situation**: surface useful power, logistics, unit, projector, and threat information in-game.
+- **Work with less friction**: streamline building, formations, unit control, map editing, and screenshots.
+- **Find the cause**: trace logic references, datapatch changes, player records, and chat-related problems.
+- **Install once, manage centrally**: most features can be enabled as needed, with shared settings, overlays, and update entry points.
 
-#### 2) Stealth Path
+### Quick start
 
-- Disabled by default (feature has known defects and is being fixed).
-- Draws lower-risk path previews with mode and threat filters.
-- Supports auto routing for unit clusters to mouse or chat coordinates.
-- Overlay windows are managed in native OverlayUI when MindustryX is installed.
+1. Download `Neon.zip` from [Releases](https://github.com/DeterMination-Wind/Neon/releases), put it in Mindustry's `mods` folder, and enable it in-game.
+2. Rebind the Neon keybinds you need in `Settings -> Controls`.
+3. Configure features in `Settings -> Mods -> Neon`.
+4. Overlay-capable features appear in the shared Overlay manager. Open it with the gear button on the left side of the screen or the default `Z` hotkey.
 
-#### 3) customMarker
+Neon already contains the functionality of the related standalone mods. Do not enable their standalone versions at the same time, or duplicate features and UI conflicts may occur.
 
-- Marker workflow: button -> fullscreen pick -> radial confirm.
-- Editable template messages in `<text><text>(x,y)` format.
-- Chat coordinate capture list for quick camera focus jumps.
+### Compatibility
 
-#### 4) BetterScreenShot
+- Requires Mindustry v159 or later.
+- Neon is fully client-side; servers do not need to install it.
+- Core features work on vanilla clients. With MindustryX or a compatible bridge available, supported features can use the corresponding OverlayUI and marker integrations.
+- On Android, use the release `Neon.jar` that contains `classes.dex`, not a desktop-only or intermediate build.
 
-- One-click high-resolution world screenshot capture.
-- Trigger by hotkey (`F8`) or OverlayUI button.
-- Uses chunked rendering for large maps to avoid texture-size limits.
-- Includes size estimation and optional progress status.
-- BSS core code is from Miner, integrated into Neon.
+### Feature details
 
-#### 5) Radial Build Menu
-
-- Hold a hotkey to open radial build HUD; release to select.
-- Up to 16 configurable slots (inner + outer ring).
-- Rule-based profile switching (time/planet/condition).
-- JSON import/export for quick config sharing.
-
-#### 6) betterMiniMap
-
-- Enhanced minimap icons for units/buildings with scale/alpha/spacing controls.
-- Independent friendly/enemy filters.
-- Searchable selection dialogs with select-all/clear/invert.
-
-#### 7) Server Player DataBase
-
-- Local player and chat history collection.
-- Import/export and integrity checks.
-- OverlayUI query/debug windows with fallback dialogs on vanilla clients.
-
-#### 8) betterMapEditor
-
-- Draggable mirror axis directly in generator preview.
-- Keeps existing map generation workflow while improving control.
-
-#### 9) Better Projector Overlay
-
-- Placement-time power impact preview for overdrive projectors.
-- Scans and marks risky projector placements with optional alerts.
-
-#### 10) betterLogisticsSpeed
-
-- Adds long-window moving-average throughput rows to logistics stats.
-- Adjustable window length, decimal precision, and total-throughput row.
-
-#### 11) betterHotKey
-
-- Supports combo hotkeys and grouped binding configuration.
-- Provides terrain-number conflict handling and ignored-block controls.
-
-#### 12) modUpdater
-
-- Startup GitHub release checks with a centralized update center UI.
-- Supports single/batch update, blacklist, repo override, and mirror switch.
-
-#### 13) WhoUsesThisBuilding
-
-- Hold the trigger hotkey while hovering a building to reverse-highlight all processors that reference it.
-- Labels display `Lxx(opcode)` for quick line-level tracing.
-- Supports both explicit processor links and `getblock(x,y)` indirect references.
-
-#### 14) PatchViewer
-
-- Shows inline before/after diffs for datapatch-modified database entries.
-- Highlights modified/removed/added stat rows directly in content panels.
-- Color settings are included in Neon grouped settings with live preview.
-
-#### 15) PinyinSearchSupport
-
-- Lets search fields match Chinese entries from typed pinyin.
-- Supports fuzzy pinyin, initials, heteronyms, and delay settings.
-- Integrated into Neon grouped settings without its standalone update checker.
-
-#### 16) ForeignServerTranslator
-
-- Marks foreign-language servers and helps translate incoming, outgoing, and server chat text.
-- Supports Microsoft Translator and OpenAI-compatible endpoints with optional Mindustry bundle terminology hints.
-- Integrated into Neon grouped settings.
-
-#### 17) Tripwire
-
-- Creates geofence lines in-world and alerts when selected unit types cross them.
-- Supports toast/chat/marker alerts, minimap display, detection timing, and color override settings.
-- Integrated into Neon grouped settings.
-
-#### 18) BetterPolyAi
-
-- Extracted Poly build assist from MindustryX, toggleable by keybind.
-- Executes only your own build/deconstruct plans and supports build target gap configuration.
-- Integrated into Neon grouped settings without its standalone update checker.
-
-#### 19) AdvancedReplace
-
-- Adds same-color colored-wall fill, color-aware colored-floor fill, and colored-wall brush modes to the map editor.
-- Includes CIEDE2000 tolerance settings for near-color matching.
-- Integrated into Neon grouped settings.
-
-#### 20) BetterRTSFormation
-
-- Makes RTS control groups easier to create, select, and recognize while preserving the original hotkey behavior.
-- Supports formation badges, strict group selection, and formation controls outside command mode.
-- Integrated into Neon grouped settings.
-
-#### 21) BetterTerrainGen-V2
-
-- Adds the Natural Water filter to the map editor terrain generator.
-- Has no standalone settings; Neon keeps a grouped module note as a placeholder.
-
-#### 22) AutoPruner
-
-- Removes redundant power nodes or buildings by placement-time windows through separate hotkeys.
-- Disabled by default on first use in the Neon aggregate; existing user settings are preserved.
-
-#### 23) Color-the-ducts
-
-- Draws liquid-colored center squares on liquid ducts with hover, connected-line, scale, and opacity controls.
-- Disabled by default on first use in the Neon aggregate; existing user settings are preserved.
-
-#### 24) LogicSugar
-
-- Provides structured logic statements, editor replacement, and compilation helpers.
-- Keeps the existing jump-line coloring and block-color settings in Neon grouped settings.
-
-#### 25) Random
-
-- Randomizes database text, campaign and liquid descriptions, plus in-game instructional tooltips for the next world.
-- Randomizes block, item, unit, and campaign sector icons without changing logic behavior.
-- The bundled version has no separate settings group; click `Do Not Click` in the main menu to enable randomized text and textures for the next world.
-
-#### 26) LockAttack
-
-- Tap the lock key (default `L`) to lock on to the enemy unit or building under the cursor; the directly controlled unit keeps aiming at and firing on the target.
-- Selected command units receive a one-shot attack order through the vanilla network command path (singleplayer and multiplayer).
-- Tap on another target to switch; tap empty ground or a friendly target to unlock; auto-unlock when the target dies.
-- Rotating lock box, target line, and an optional target HP bar (toggle in settings); the key is rebindable in `Settings -> Controls`.
-
-#### 27) Smart Placement
-
-- On mixed-tech planets, crossing dragged item lines use an unconfigured inverted sorter instead of an accidental junction or bridge.
-- Single-tech planets, parallel lines, endpoints, and non-item obstacles retain vanilla placement.
-
-#### 28) Hide What Processors Show
-
-- Two independent keybinds hide world processor effects and dynamic markers without changing map logic.
-
-#### 29) Patrol Cancel
-
-- Right-click commands clear patrol stance on selected units so move and attack orders take effect immediately.
-- Middle-click queue commands remain available for building patrol routes.
-
-### Quick Start
-
-1) Install `Neon.zip` to Mindustry `mods` folder and enable it in game.
-
-2) Rebind keys in `Settings -> Controls`:
-
-- Stealth Path hotkeys
-- betterHotKey combo/number hotkeys
-- BetterScreenShot capture hotkey (`F8` by default)
-- Radial Build Menu hotkey (plus optional slot-group toggle)
-- LockAttack lock key (`L` by default)
-
-3) Configure all modules in `Settings -> Mods -> Neon`, including the grouped settings and the keybind-only Smart Placement, Hide What Processors Show, and Patrol Cancel modules.
-
-4) Overlay windows:
-
-- Overlay-capable modules appear in the shared OverlayUI manager automatically.
-- Use the gear button at the left-middle side of the screen to open or close the manager.
-- You can also use the default `Z` hotkey.
-
-5) Random: The bundled version has no separate settings group; click `Do Not Click` in the main menu to enable randomized text and textures for the next world.
-
-### Multiplayer
-
-Neon is fully client-side; server installation is not required.
-
-### Android
-
-Android requires a mod package that includes `classes.dex`.
-Use `Neon.jar` from Releases and place it in the Mindustry `mods` folder.
-
-### Versioning
-
-- Stable releases use `N<version>`, for example `N11`.
-- Pre-releases use `B<version>.<incrementing build>`, for example `B11.20`.
-- Internal mod codes are `N11 -> 110000` and `B11.20 -> 110020`.
+See [FEATURES.md](FEATURES.md) for the complete feature guide, use cases, and terminology.
 
 ### Feedback
 
-Discord: https://discord.com/channels/391020510269669376/1467903894716940522
+- [Discord feedback channel](https://discord.com/channels/391020510269669376/1467903894716940522)
 
-### Build (Optional)
+### Development
 
-Build merged desktop+android artifacts (with `classes.dex`):
+From the project directory:
 
-```bash
-./gradlew deploy
+```powershell
+.\gradlew.bat clean deploy
 ```
 
-Outputs:
+Main outputs:
 
 - `dist/Neon.zip`
 - `dist/Neon.jar`
 - `../构建/Neon/Neon-<version>.zip`
 - `../构建/Neon/Neon-<version>.jar`
-
-Release history: [RELEASE_NOTES.md](RELEASE_NOTES.md)
-

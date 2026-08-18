@@ -1,15 +1,13 @@
-# B12.3
+# B12.4
 
 ## 中文
 
-- 修复仅启用 Neon 时 Stealth Path 窗口未注册为 OverlayUI 窗口的问题；现在会通过兼容桥接注册模式、伤害、控制和悬停 DPS 四个窗口，不支持 OverlayUI 时仍保留 HUD 回退。
-- 合并 LogicSugar v2.1.6：新增在 MindustryX 变量浏览器中隐藏 `__ls_*` 内部变量和 `_0`、`_1` 等表达式临时变量的设置（仅影响显示，不影响逻辑执行、存档或网络同步）。
-- 优化 Logic Sugar `for` 语句编辑器的字段布局与文案，并增加 `SugarCompiler.isSugarProgram(String)` 程序识别辅助 API。
-- 补全菲律宾语、印尼语、日语、巴西葡萄牙语、欧洲葡萄牙语和俄语资源，并同步新增 Logic Sugar 文案的中英文及简繁中文翻译。
+- 合并 LogicSugar v2.1.7，修复点击语句本体时语句被立即移动到顶部的问题。
+- Logic Sugar 普通单语句、已选语句和批量拖动现在需要移动到语句宽度的 40% 才会开始；轻微移动后松手会保持原位置。
+- 保留中键复制行为，并将该修复包含在 Neon 聚合包中。
 
 ## English
 
-- Fixed Stealth Path windows not being registered as OverlayUI windows when only Neon is enabled. The mode, damage, controls, and hover-DPS windows now use the compatibility bridge, while the HUD fallback remains available when OverlayUI is unsupported.
-- Bundled LogicSugar v2.1.6, adding a setting to hide `__ls_*` internal variables and `_0`, `_1`, and other expression temporaries from MindustryX's variable browser. This only changes display and does not affect execution, saves, or network sync.
-- Improved the Logic Sugar `for` statement editor layout and labels, and added the `SugarCompiler.isSugarProgram(String)` helper for identifying Logic Sugar programs.
-- Completed Filipino, Indonesian, Japanese, Brazilian Portuguese, European Portuguese, and Russian resources, including the new Logic Sugar strings in English and Simplified/Traditional Chinese.
+- Bundled LogicSugar v2.1.7, fixing statement blocks jumping to the top after an accidental tap on the statement body.
+- Logic Sugar single-statement, selected, and multi-statement drags now require movement across 40% of the statement width; slight movement keeps the original order.
+- Middle-click copying remains unchanged, and the fix is included in the Neon aggregate package.

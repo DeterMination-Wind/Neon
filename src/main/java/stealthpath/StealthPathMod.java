@@ -3,7 +3,6 @@ package stealthpath;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
-import arc.func.Prov;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.g2d.Fill;
@@ -32,6 +31,8 @@ import arc.util.Align;
 import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
+import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.*;
 import mindustry.game.Team;
 import mindustry.ai.UnitCommand;
@@ -69,7 +70,6 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.PriorityQueue;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -89,6 +89,10 @@ public class StealthPathMod extends mindustry.mod.Mod{
     /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
 
+    private static final String overlayWindowModeName = "stealthpath-mode";
+    private static final String overlayWindowDamageName = "stealthpath-damage";
+    private static final String overlayWindowControlsName = "stealthpath-controls";
+    private static final String overlayWindowHoverDpsName = "stealthpath-hoverdps";
 
     private static final String keyEnabled = "sp-enabled";
     private static final String keyProMode = "sp-pro-mode";
@@ -266,12 +270,13 @@ public class StealthPathMod extends mindustry.mod.Mod{
     private final Color debugRiskColor = new Color();
     private final Seq<String> debugHoverTurretLines = new Seq<>();
 
-    // Optional MindustryX OverlayUI integration (reflection; no hard dependency).
-    private final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();
-    private Object xModeWindow;
-    private Object xDamageWindow;
-    private Object xControlsWindow;
-    private Object xHoverDpsWindow;
+    // Optional OverlayUI integration; the bridge selects MindustryX, OverlayCompatBridge,
+    // or Neon's embedded overlay and leaves the HUD fallback available when unsupported.
+    private final OverlayUiBridge xOverlayUi;
+    private OverlayUiBridge.OverlayWindowHandle xModeWindow;
+    private OverlayUiBridge.OverlayWindowHandle xDamageWindow;
+    private OverlayUiBridge.OverlayWindowHandle xControlsWindow;
+    private OverlayUiBridge.OverlayWindowHandle xHoverDpsWindow;
     private Table overlayModeContent;
     private Table overlayDamageContent;
     private Table overlayControlsContent;
@@ -337,6 +342,11 @@ public class StealthPathMod extends mindustry.mod.Mod{
     }
 
     public StealthPathMod(){
+        this(vanillaOverlayUi());
+    }
+
+    protected StealthPathMod(OverlayUiBridge overlayUi){
+        xOverlayUi = overlayUi == null ? OverlayUiBridge.UNSUPPORTED : overlayUi;
         Events.on(ClientLoadEvent.class, e -> {
             ensureDefaults();
             registerKeybinds();
@@ -375,6 +385,11 @@ public class StealthPathMod extends mindustry.mod.Mod{
 
         Events.on(BlockBuildEndEvent.class, e -> invalidatePassableCache());
         Events.on(BlockDestroyEvent.class, e -> invalidatePassableCache());
+    }
+
+    private static OverlayUiBridge vanillaOverlayUi(){
+        LegacyMindustryXGuard.rejectLegacyMindustryX("StealthPath");
+        return OverlayUiBridge.autoDetect();
     }
 
     private static float previewRefreshInterval(){
@@ -5265,48 +5280,44 @@ public class StealthPathMod extends mindustry.mod.Mod{
         boolean showControls = Core.settings.getBool(keyOverlayWindowControls, true);
         boolean showHoverDps = Core.settings.getBool(keyDebugHoverTurretDps, false);
 
-        if(xOverlayUi.isInstalled()){
+        if(xOverlayUi.isSupported()){
             try{
                 // When hosted by OverlayUI, do not manage position/size ourselves.
                 if(xModeWindow == null){
                     try{ overlayModeContent.remove(); }catch(Throwable ignored){}
                     xModeWindow = xOverlayUi.registerWindow(
-                        "stealthpath-mode",
+                        overlayWindowModeName,
                         overlayModeContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowMode, true)
                     );
-                    xOverlayUi.tryConfigureWindow(xModeWindow, false, true);
-                    if(enabled && showMode) xOverlayUi.setEnabledAndPinned(xModeWindow, true, false);
+                    configureOverlayWindow(xModeWindow, enabled && showMode);
                 }
                 if(xDamageWindow == null){
                     try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
                     xDamageWindow = xOverlayUi.registerWindow(
-                        "stealthpath-damage",
+                        overlayWindowDamageName,
                         overlayDamageContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowDamage, true)
                     );
-                    xOverlayUi.tryConfigureWindow(xDamageWindow, false, true);
-                    if(enabled && showDamage) xOverlayUi.setEnabledAndPinned(xDamageWindow, true, false);
+                    configureOverlayWindow(xDamageWindow, enabled && showDamage);
                 }
                 if(xControlsWindow == null){
                     try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
                     xControlsWindow = xOverlayUi.registerWindow(
-                        "stealthpath-controls",
+                        overlayWindowControlsName,
                         overlayControlsContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowControls, true)
                     );
-                    xOverlayUi.tryConfigureWindow(xControlsWindow, false, true);
-                    if(enabled && showControls) xOverlayUi.setEnabledAndPinned(xControlsWindow, true, false);
+                    configureOverlayWindow(xControlsWindow, enabled && showControls);
                 }
                 if(xHoverDpsWindow == null){
                     try{ overlayHoverDpsContent.remove(); }catch(Throwable ignored){}
                     xHoverDpsWindow = xOverlayUi.registerWindow(
-                        "stealthpath-hoverdps",
+                        overlayWindowHoverDpsName,
                         overlayHoverDpsContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyDebugHoverTurretDps, false)
                     );
-                    xOverlayUi.tryConfigureWindow(xHoverDpsWindow, false, true);
-                    if(enabled && showHoverDps) xOverlayUi.setEnabledAndPinned(xHoverDpsWindow, true, false);
+                    configureOverlayWindow(xHoverDpsWindow, enabled && showHoverDps);
                 }
                 return;
             }catch(Throwable ignored){
@@ -5322,6 +5333,14 @@ public class StealthPathMod extends mindustry.mod.Mod{
         syncFallbackHud(overlayDamageContent, "sp-ov-dmg", 8f, -84f, enabled && showDamage);
         syncFallbackHud(overlayControlsContent, "sp-ov-ctl", 8f, -152f, enabled && showControls);
         syncFallbackHudRight(overlayHoverDpsContent, "sp-ov-hover", -8f, -8f, enabled && showHoverDps);
+    }
+
+    private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window, boolean enabled){
+        if(window == null || window.asElement() == null){
+            throw new IllegalStateException("OverlayUI returned no window handle");
+        }
+        window.configure(false, true);
+        if(enabled) window.setEnabledAndPinned(true, false);
     }
 
     private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){
@@ -5640,120 +5659,6 @@ public class StealthPathMod extends mindustry.mod.Mod{
         if(autoMode == autoModeMouse) return "N / 自动 → 鼠标";
         if(autoMode == autoModeAttack) return "M / 自动 → 攻击";
         return lastIncludeUnits ? "Y / 路径（炮塔+单位）" : "X / 路径（仅炮塔）";
-    }
-
-    /** Optional integration with MindustryX OverlayUI. Uses reflection so vanilla builds won't crash. */
-    private static class MindustryXOverlayUI{
-        private boolean initialized = false;
-        private boolean installed = false;
-        private Object instance;
-        private Method registerWindow;
-        private Method setAvailability;
-        private Method setResizable;
-        private Method setAutoHeight;
-        private Method getData;
-        private Method setEnabled;
-        private Method setPinned;
-        private boolean accessorsInitialized = false;
-
-        boolean isInstalled(){
-            if(initialized) return installed;
-            initialized = true;
-            try{
-                installed = mindustry.Vars.mods != null && mindustry.Vars.mods.locateMod("mindustryx") != null;
-            }catch(Throwable ignored){
-                installed = false;
-            }
-            if(!installed) return false;
-
-            try{
-                Class<?> c = Class.forName("mindustryX.features.ui.OverlayUI");
-                instance = c.getField("INSTANCE").get(null);
-                registerWindow = c.getMethod("registerWindow", String.class, Table.class);
-            }catch(Throwable t){
-                installed = false;
-                return false;
-            }
-            return true;
-        }
-
-        Object registerWindow(String name, Table table, Prov<Boolean> availability){
-            if(!isInstalled()) return null;
-            try{
-                Object window = registerWindow.invoke(instance, name, table);
-                tryInitWindowAccessors(window);
-                if(window != null && availability != null && setAvailability != null){
-                    setAvailability.invoke(window, availability);
-                }
-                return window;
-            }catch(Throwable t){
-                return null;
-            }
-        }
-
-        void setEnabledAndPinned(Object window, boolean enabled, boolean pinned){
-            if(window == null) return;
-            try{
-                tryInitWindowAccessors(window);
-                if(getData == null) return;
-                Object data = getData.invoke(window);
-                if(data == null) return;
-                if(setEnabled != null) setEnabled.invoke(data, enabled);
-                if(setPinned != null) setPinned.invoke(data, pinned);
-            }catch(Throwable ignored){
-            }
-        }
-
-        void tryConfigureWindow(Object window, boolean autoHeight, boolean resizable){
-            if(window == null) return;
-            try{
-                tryInitWindowAccessors(window);
-                if(setAutoHeight != null) setAutoHeight.invoke(window, autoHeight);
-                if(setResizable != null) setResizable.invoke(window, resizable);
-            }catch(Throwable ignored){
-            }
-        }
-
-        private void tryInitWindowAccessors(Object window){
-            if(window == null) return;
-            if(accessorsInitialized && (getData != null || setAvailability != null || setResizable != null || setAutoHeight != null)) return;
-            try{
-                Class<?> wc = window.getClass();
-                try{
-                    setAvailability = wc.getMethod("setAvailability", Prov.class);
-                }catch(Throwable ignored){
-                    setAvailability = null;
-                }
-                try{
-                    setResizable = wc.getMethod("setResizable", boolean.class);
-                }catch(Throwable ignored){
-                    setResizable = null;
-                }
-                try{
-                    setAutoHeight = wc.getMethod("setAutoHeight", boolean.class);
-                }catch(Throwable ignored){
-                    setAutoHeight = null;
-                }
-                getData = wc.getMethod("getData");
-
-                Object data = getData.invoke(window);
-                if(data != null){
-                    Class<?> dc = data.getClass();
-                    try{
-                        setEnabled = dc.getMethod("setEnabled", boolean.class);
-                    }catch(Throwable ignored){
-                        setEnabled = null;
-                    }
-                    try{
-                        setPinned = dc.getMethod("setPinned", boolean.class);
-                    }catch(Throwable ignored){
-                        setPinned = null;
-                    }
-                }
-                accessorsInitialized = true;
-            }catch(Throwable ignored){
-            }
-        }
     }
 
     // Settings widgets extracted into `StealthPathSettingsWidgets` (same behavior; smaller main file).

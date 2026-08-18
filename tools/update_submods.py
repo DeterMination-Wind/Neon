@@ -707,7 +707,161 @@ def inject_bek_hooks(mod_id: str, java_src: str) -> str:
     return java_src
 
 
-def inject_overlay_compat_hooks(mod_id: str, java_src: str) -> str:
+def inject_stealthpath_overlay_hooks(java_src: str) -> str:
+    """Normalize StealthPath's upstream OverlayUI adapter to Neon's bridge API."""
+    if "private final OverlayUiBridge xOverlayUi;" in java_src:
+        return java_src
+
+    if "private final MindustryXOverlayUI xOverlayUi = new MindustryXOverlayUI();" not in java_src:
+        raise ValueError(
+            "[sp] StealthPath OverlayUI adapter shape is unknown; update "
+            "inject_stealthpath_overlay_hooks()."
+        )
+
+    java_src = java_src.replace("import arc.func.Prov;\n", "")
+    java_src = java_src.replace("import java.lang.reflect.Method;\n", "")
+    java_src = java_src.replace(
+        "import arc.util.Time;\n",
+        "import arc.util.Time;\n"
+        "import mdtxcompat.LegacyMindustryXGuard;\n"
+        "import mdtxcompat.OverlayUiBridge;\n",
+        1,
+    )
+
+    marker = "    public static boolean bekBundled = false;\n"
+    if "overlayWindowModeName" not in java_src:
+        if marker not in java_src:
+            raise ValueError("[sp] Could not find StealthPath class field insertion point.")
+        java_src = java_src.replace(
+            marker,
+            marker
+            + "\n    private static final String overlayWindowModeName = \"stealthpath-mode\";\n"
+            + "    private static final String overlayWindowDamageName = \"stealthpath-damage\";\n"
+            + "    private static final String overlayWindowControlsName = \"stealthpath-controls\";\n"
+            + "    private static final String overlayWindowHoverDpsName = \"stealthpath-hoverdps\";\n",
+            1,
+        )
+
+    field_start = java_src.find(
+        "    // Optional MindustryX OverlayUI integration (reflection; no hard dependency)."
+    )
+    field_end_marker = "    private Table overlayModeContent;"
+    field_end = java_src.find(field_end_marker, field_start)
+    if field_start < 0 or field_end < 0:
+        raise ValueError("[sp] Could not find StealthPath OverlayUI fields.")
+    java_src = (
+        java_src[:field_start]
+        + "    // Optional OverlayUI integration; the bridge selects MindustryX, OverlayCompatBridge,\n"
+        + "    // or Neon's embedded overlay and leaves the HUD fallback available when unsupported.\n"
+        + "    private final OverlayUiBridge xOverlayUi;\n"
+        + "    private OverlayUiBridge.OverlayWindowHandle xModeWindow;\n"
+        + "    private OverlayUiBridge.OverlayWindowHandle xDamageWindow;\n"
+        + "    private OverlayUiBridge.OverlayWindowHandle xControlsWindow;\n"
+        + "    private OverlayUiBridge.OverlayWindowHandle xHoverDpsWindow;\n"
+        + java_src[field_end:]
+    )
+
+    constructor_marker = "    public StealthPathMod(){\n        Events.on(ClientLoadEvent.class, e -> {"
+    constructor_replacement = (
+        "    public StealthPathMod(){\n"
+        "        this(vanillaOverlayUi());\n"
+        "    }\n\n"
+        "    protected StealthPathMod(OverlayUiBridge overlayUi){\n"
+        "        xOverlayUi = overlayUi == null ? OverlayUiBridge.UNSUPPORTED : overlayUi;\n"
+        "        Events.on(ClientLoadEvent.class, e -> {"
+    )
+    if constructor_marker not in java_src:
+        raise ValueError("[sp] Could not find StealthPath constructor.")
+    java_src = java_src.replace(constructor_marker, constructor_replacement, 1)
+
+    settings_marker = "    private static float previewRefreshInterval(){"
+    if "private static OverlayUiBridge vanillaOverlayUi()" not in java_src:
+        if settings_marker not in java_src:
+            raise ValueError("[sp] Could not find StealthPath helper insertion point.")
+        java_src = java_src.replace(
+            settings_marker,
+            "    private static OverlayUiBridge vanillaOverlayUi(){\n"
+            "        LegacyMindustryXGuard.rejectLegacyMindustryX(\"StealthPath\");\n"
+            "        return OverlayUiBridge.autoDetect();\n"
+            "    }\n\n"
+            + settings_marker,
+            1,
+        )
+
+    java_src = java_src.replace("if(xOverlayUi.isInstalled())", "if(xOverlayUi.isSupported())")
+    java_src = java_src.replace('"stealthpath-mode",', "overlayWindowModeName,")
+    java_src = java_src.replace('"stealthpath-damage",', "overlayWindowDamageName,")
+    java_src = java_src.replace('"stealthpath-controls",', "overlayWindowControlsName,")
+    java_src = java_src.replace('"stealthpath-hoverdps",', "overlayWindowHoverDpsName,")
+
+    for window, enabled in (
+        ("xModeWindow", "enabled && showMode"),
+        ("xDamageWindow", "enabled && showDamage"),
+        ("xControlsWindow", "enabled && showControls"),
+        ("xHoverDpsWindow", "enabled && showHoverDps"),
+    ):
+        java_src = java_src.replace(
+            f"xOverlayUi.tryConfigureWindow({window}, false, true);\n"
+            f"                    if({enabled}) xOverlayUi.setEnabledAndPinned({window}, true, false);",
+            f"configureOverlayWindow({window}, {enabled});",
+        )
+
+    fallback_marker = "    private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){"
+    if "private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window" not in java_src:
+        if fallback_marker not in java_src:
+            raise ValueError("[sp] Could not find StealthPath fallback insertion point.")
+        java_src = java_src.replace(
+            fallback_marker,
+            "    private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window, boolean enabled){\n"
+            "        if(window == null || window.asElement() == null){\n"
+            "            throw new IllegalStateException(\"OverlayUI returned no window handle\");\n"
+            "        }\n"
+            "        window.configure(false, true);\n"
+            "        if(enabled) window.setEnabledAndPinned(true, false);\n"
+            "    }\n\n"
+            + fallback_marker,
+            1,
+        )
+
+    adapter_start = java_src.find(
+        "    /** Optional integration with MindustryX OverlayUI. Uses reflection so vanilla builds won't crash. */"
+    )
+    adapter_end_marker = "    // Settings widgets extracted into `StealthPathSettingsWidgets`"
+    adapter_end = java_src.find(adapter_end_marker, adapter_start)
+    if adapter_start >= 0 and adapter_end >= 0:
+        java_src = java_src[:adapter_start] + java_src[adapter_end:]
+
+    if "MindustryXOverlayUI" in java_src or "xOverlayUi.isInstalled()" in java_src:
+        raise ValueError(
+            "[sp] StealthPath OverlayUI adapter normalization was incomplete; update "
+            "inject_stealthpath_overlay_hooks()."
+        )
+    return java_src
+
+
+def inject_stealthpath_x_hooks(java_src: str) -> str:
+    """Keep the dedicated MindustryX entry on the explicit external bridge."""
+    if "super(new MindustryXOverlayUiBridge());" in java_src:
+        return java_src
+    if "super();" not in java_src:
+        raise ValueError("[sp] StealthPathModX constructor shape is unknown.")
+    if "import mdtxcompat.MindustryXOverlayUiBridge;" not in java_src:
+        java_src = java_src.replace(
+            "package stealthpath;\n",
+            "package stealthpath;\n\nimport mdtxcompat.MindustryXOverlayUiBridge;\n",
+            1,
+        )
+    return java_src.replace("super();", "super(new MindustryXOverlayUiBridge());", 1)
+
+
+def inject_overlay_compat_hooks(mod_id: str, java_src: str, file_name: Optional[str] = None) -> str:
+    if mod_id == "sp":
+        if file_name == "StealthPathMod.java" or file_name is None:
+            return inject_stealthpath_overlay_hooks(java_src)
+        if file_name == "StealthPathModX.java":
+            return inject_stealthpath_x_hooks(java_src)
+        return java_src
+
     if mod_id == "pgmm":
         java_src = java_src.replace(
             "this(vanillaMarkers(), OverlayUiBridge.UNSUPPORTED);",
@@ -947,7 +1101,10 @@ def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
                 continue
             props = parse_properties(read_text(src_path))
             for key, value in props.items():
-                if key in merged and merged[key] != value:
+                child_owns_key = sm.id == "ls" and (
+                    key.startswith("logicsugar.") or key.startswith("setting.logicsugar.")
+                )
+                if key in merged and merged[key] != value and not child_owns_key:
                     collisions.append(f"{name}: key '{key}' differs between {origins[key]} and {sm.id}")
                 else:
                     merged[key] = value
@@ -1006,12 +1163,13 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
             rel = src_path.relative_to(upstream_pkg_dir)
             dst_path = target_pkg_dir / rel
             text = read_text(src_path)
-            if (
+            is_main_class = (
                 mod.main_class_file
                 and mod.java_package_dir is not None
                 and target_pkg_dir == mod.java_package_dir
                 and src_path.name == mod.main_class_file
-            ):
+            )
+            if is_main_class:
                 if mod.inject_bek_hooks:
                     text = inject_bek_hooks(mod.id, text)
                     problems = assert_injected_structure(mod.id, src_path.name, text)
@@ -1021,7 +1179,10 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
                             + "\n".join(f"  - {problem}" for problem in problems)
                             + "\nUpdate inject_bek_hooks() to recognize the new upstream shape."
                         )
-                text = inject_overlay_compat_hooks(mod.id, text)
+            if mod.id == "sp":
+                text = inject_overlay_compat_hooks(mod.id, text, src_path.name)
+            elif is_main_class:
+                text = inject_overlay_compat_hooks(mod.id, text, src_path.name)
             write_text(dst_path, text)
 
 

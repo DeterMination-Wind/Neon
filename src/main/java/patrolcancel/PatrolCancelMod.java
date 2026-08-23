@@ -52,6 +52,47 @@ public class PatrolCancelMod extends Mod implements InputProcessor{
         return false;
     }
 
+    // Every remaining InputProcessor method is implemented explicitly, even though they are
+    // default methods in arc's InputProcessor. On Android the mod is dexed by D8 with the arc
+    // interface treated as an external library, so without explicit implementations the interface
+    // methods stay abstract on-device and any call (e.g. touchDragged) crashes with
+    // AbstractMethodError. Returning false here simply means "not handled" (same as the default).
+
+    @Override
+    public boolean keyDown(KeyCode keycode){
+        return false;
+    }
+
+    @Override
+    public boolean keyUp(KeyCode keycode){
+        return false;
+    }
+
+    @Override
+    public boolean keyTyped(char character){
+        return false;
+    }
+
+    @Override
+    public boolean touchUp(int screenX, int screenY, int pointer, KeyCode button){
+        return false;
+    }
+
+    @Override
+    public boolean touchDragged(int screenX, int screenY, int pointer){
+        return false;
+    }
+
+    @Override
+    public boolean mouseMoved(int screenX, int screenY){
+        return false;
+    }
+
+    @Override
+    public boolean scrolled(float amountX, float amountY){
+        return false;
+    }
+
     /** Mirrors the conditions under which the vanilla desktop input issues a command on right-click. */
     private boolean isCommandClick(){
         if(!Vars.state.isGame()) return false;

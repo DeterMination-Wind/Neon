@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "120004"
+version = "120005"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -284,6 +284,18 @@ tasks.register("dexAndroid", Exec){
 
         commandLine d8.absolutePath
         args "--min-api", "14", "--release", "--output", androidDexOutDir.absolutePath
+
+        // Feed arc-core as a library classpath so D8 keeps the InputProcessor interface
+        // methods as default methods; without --lib the interface is dexed as external
+        // and on-device calls like touchDragged crash with AbstractMethodError.
+        def arcCoreLib = new File(rootDir, "tools/deps/arc-core.jar")
+        if(!arcCoreLib.exists()){
+            arcCoreLib = new File(rootDir.parentFile, "Arc/arc-core/build/libs/arc-core-1.0.jar")
+        }
+        if(arcCoreLib.exists()){
+            args "--lib", arcCoreLib.absolutePath
+        }
+
         args programZip.absolutePath
     }
 }

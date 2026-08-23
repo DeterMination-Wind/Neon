@@ -2,6 +2,7 @@ package mindustry.logic;
 
 import arc.Core;
 import arc.struct.Seq;
+import arc.util.Log;
 import arc.util.serialization.Base64Coder;
 import mindustry.logic.LExecutor;
 import mindustry.logic.SugarStatements.BeginStatement;
@@ -15,6 +16,7 @@ import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
 import mindustry.logic.SugarStatements.FuncDefStatement;
 import mindustry.logic.SugarStatements.IfBeginStatement;
+import mindustry.logic.SugarStatements.ReturnStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
 
@@ -297,6 +299,11 @@ public final class SugarCompiler{
         String encoded = encode(text);
         if(encoded.length() <= carrierMaxChars){
             out.append(prefix).append(encoded).append("\"\n");
+        }else{
+            // The carrier must not be dropped silently: without it the saved program still
+            // works, but the sugar source (and the library) can no longer be restored.
+            Log.warn("LogicSugar: sugar text too large for the carrier (@ chars, limit @); the source will not survive this save",
+                encoded.length(), carrierMaxChars);
         }
     }
 
@@ -356,6 +363,7 @@ public final class SugarCompiler{
         int[] breakOwner = breakOwners(statements);
         int[] continueOwner = continueOwners(statements);
         int[] ifOwner = ifOwners(statements);
+        int[] funcOwner = funcOwners(statements);
         for(int i = 0; i < statements.size; i++){
             if(statements.get(i) instanceof CaseStatement && switchOwner[i] < 0){
                 invalid[i] = true;
@@ -370,6 +378,11 @@ public final class SugarCompiler{
                 invalid[i] = true;
             }
             if(statements.get(i) instanceof ElseStatement && ifOwner[i] < 0){
+                invalid[i] = true;
+            }
+            // return is only legal inside a function body; mirror the compile-time
+            // "return ... is outside a function" error in the editor (red marking)
+            if(statements.get(i) instanceof ReturnStatement && funcOwner[i] < 0){
                 invalid[i] = true;
             }
         }
@@ -494,6 +507,21 @@ public final class SugarCompiler{
             while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
             if(statements.get(i) instanceof WhileBeginStatement || statements.get(i) instanceof ForBeginStatement) stack.push(i);
+        }
+        return result;
+    }
+
+    /** Returns the innermost enclosing function definition for each statement (-1 if none).
+     *  Mirrors the compile-time function scope: a statement is "inside a function" iff it
+     *  lies strictly between a FuncDefStatement and the block end it points to. */
+    private static int[] funcOwners(Seq<LStatement> statements){
+        int[] result = new int[statements.size];
+        java.util.Arrays.fill(result, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < statements.size; i++){
+            while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
+            if(!stack.isEmpty()) result[i] = stack.peek();
+            if(statements.get(i) instanceof FuncDefStatement) stack.push(i);
         }
         return result;
     }

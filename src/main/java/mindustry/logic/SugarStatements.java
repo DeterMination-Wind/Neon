@@ -1,9 +1,11 @@
 package mindustry.logic;
 
 import arc.Core;
+import arc.func.Cons;
 import arc.graphics.Color;
 import arc.scene.Element;
 import arc.scene.ui.TextField;
+import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import mindustry.graphics.Pal;
@@ -26,7 +28,7 @@ public final class SugarStatements{
     }
 
     private static String optionalValue(String value){
-        return value.equals("~") ? "" : value;
+        return value == null || value.equals("~") ? "" : value;
     }
 
     private static String text(String key, String fallback){
@@ -42,6 +44,17 @@ public final class SugarStatements{
         @Override
         public LCategory category(){
             return LCategory.control;
+        }
+
+        /** Attaches a vanilla-style hover hint to a parameter label (bundle key: logicsugar.hint.<key>). */
+        protected void hint(Cell<?> cell, String key){
+            LCanvas.tooltip(cell, "logicsugar.hint." + key);
+        }
+
+        /** Label + input row with a hover hint on the label, like vanilla fields(). */
+        protected Cell<TextField> fieldsHint(Table table, String desc, String hintKey, String value, Cons<String> setter){
+            table.add(desc).padLeft(10).left().self(c -> hint(c, hintKey));
+            return field(table, value, setter).width(85f).padRight(10).left();
         }
     }
 
@@ -137,14 +150,14 @@ public final class SugarStatements{
         public void build(Table table){
             // Vanilla-style "label + input": fields() adds the label and field as separate
             // left-aligned cells, so nothing gets centered.
-            fields(table, text("for.variable", "variable"), variable, value -> variable = value);
+            fieldsHint(table, text("for.variable", "variable"), "for.variable", variable, value -> variable = value);
             row(table);
-            fields(table, text("for.initial", "initial"), initial, value -> initial = value);
+            fieldsHint(table, text("for.initial", "initial"), "for.initial", initial, value -> initial = value);
             row(table);
-            fields(table, text("for.step", "step"), step, value -> step = value);
+            fieldsHint(table, text("for.step", "step"), "for.step", step, value -> step = value);
             row(table);
             // 终止条件：描述 + 三段式（value op compare）
-            table.add(text("for.condition", "until")).padLeft(10).left();
+            table.add(text("for.condition", "until")).padLeft(10).left().self(c -> hint(c, "for.condition"));
             table.table(this::rebuildCondition);
             foldControl(table);
         }
@@ -174,7 +187,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("condition", "condition"));
+            table.add(text("condition", "condition")).self(c -> hint(c, "while.condition"));
             table.table(this::rebuildCondition);
             foldControl(table);
         }
@@ -198,7 +211,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("switch.value", "switch"));
+            table.add(text("switch.value", "switch")).self(c -> hint(c, "switch.value"));
             field(table, value, result -> value = result);
             foldControl(table);
         }
@@ -210,7 +223,10 @@ public final class SugarStatements{
 
     public static class CaseStatement extends SugarStatement{
         public String value = "0";
-        @Override public void build(Table table){ table.add(text("case.value", "case")); field(table, value, result -> value = result); }
+        @Override public void build(Table table){
+            table.add(text("case.value", "case")).self(c -> hint(c, "case"));
+            field(table, value, result -> value = result);
+        }
         @Override public String name(){ return text("case", "Case"); }
         @Override public String typeName(){ return "Case"; }
         @Override public void write(StringBuilder out){ out.append("case ").append(value); }
@@ -222,7 +238,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("if.condition", "if"));
+            table.add(text("if.condition", "if")).self(c -> hint(c, "if.condition"));
             table.table(this::rebuildCondition);
             foldControl(table);
         }
@@ -247,7 +263,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("elif", "elif"));
+            table.add(text("elif", "elif")).self(c -> hint(c, "elif"));
             table.table(this::rebuildCondition);
         }
 
@@ -278,7 +294,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("func.def", "func"));
+            table.add(text("func.def", "func")).self(c -> hint(c, "func.def"));
             field(table, name, value -> name = value).width(90f);
             table.add("(");
             TextField paramsField = field(table, params, value -> params = value).width(130f).get();
@@ -305,7 +321,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("func.call", "call"));
+            table.add(text("func.call", "call")).self(c -> hint(c, "func.call"));
             field(table, name, value -> name = value).width(90f);
             table.add("(");
             // 实参：完整表达式，高亮显示，点击进入编辑；
@@ -337,7 +353,8 @@ public final class SugarStatements{
         public void write(StringBuilder out){
             // The result slot is always written ("~" when absent): LParser reuses a static
             // token array, so an omitted trailing token cannot be told apart from a stale one.
-            out.append("funccall ").append(name).append(" \"").append(args).append("\" ").append(optional(result));
+            // Quotes inside the args are escaped so they cannot cut the string token short.
+            out.append("funccall ").append(name).append(" \"").append(escapeQuoted(args)).append("\" ").append(optional(result));
         }
     }
 
@@ -347,7 +364,7 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("func.return", "return"));
+            table.add(text("func.return", "return")).self(c -> hint(c, "func.return"));
             // 返回值：完整表达式，高亮显示，点击进入编辑
             table.add(new ExpressionEditor(expr, text("func.return.hint", "value"), value -> expr = value))
                 .growX().padLeft(4f);
@@ -360,7 +377,8 @@ public final class SugarStatements{
         public void write(StringBuilder out){
             // Always quoted so the void form is unambiguous: LParser reuses a static token
             // array, so a bare "return" line cannot be told apart from a stale token.
-            out.append("return \"").append(expr).append('"');
+            // Quotes inside the expression are escaped so they cannot cut the string token short.
+            out.append("return \"").append(escapeQuoted(expr)).append('"');
         }
     }
 
@@ -392,11 +410,19 @@ public final class SugarStatements{
     public static LStatement parseForBegin(String[] tokens, boolean collapsed){
         ForBeginStatement result = new ForBeginStatement();
         result.variable = tokens[1];
+        if(result.variable == null || result.variable.isEmpty()){
+            throw new IllegalArgumentException("Invalid forbegin statement: missing variable");
+        }
         result.initial = optionalValue(tokens[2]);
         result.step = optionalValue(tokens[3]);
-        result.op = ConditionOp.valueOf(tokens[4]);
+        // Same guard as parseIfBegin: a null/garbage op must fail with a clean error instead
+        // of a raw valueOf NPE. LParser passes no token count, so a stale op name that is
+        // itself a valid ConditionOp is indistinguishable and parses as-is.
+        ConditionOp op = parseConditionOp(tokens[4]);
+        if(op == null) throw new IllegalArgumentException("Invalid forbegin condition operator: '" + tokens[4] + "'");
+        result.op = op;
         result.compare = tokens[5];
-        result.destIndex = Integer.parseInt(tokens[6]);
+        result.destIndex = parseDestIndex(tokens[6]);
         result.collapsed = collapsed;
         return result;
     }
@@ -431,7 +457,7 @@ public final class SugarStatements{
     public static LStatement parseSwitchBegin(String[] tokens, boolean collapsed){
         SwitchBeginStatement result = new SwitchBeginStatement();
         result.value = tokens[1];
-        result.destIndex = Integer.parseInt(tokens[2]);
+        result.destIndex = parseDestIndex(tokens[2]);
         result.collapsed = collapsed;
         return result;
     }
@@ -479,8 +505,11 @@ public final class SugarStatements{
     public static LStatement parseFuncDef(String[] tokens, boolean collapsed){
         FuncDefStatement result = new FuncDefStatement();
         result.name = tokens[1];
+        if(result.name == null || result.name.isEmpty()){
+            throw new IllegalArgumentException("Invalid funcdef statement: missing function name");
+        }
         result.params = optionalValue(tokens[2]);
-        result.destIndex = Integer.parseInt(tokens[3]);
+        result.destIndex = parseDestIndex(tokens[3]);
         result.collapsed = collapsed;
         return result;
     }
@@ -488,23 +517,71 @@ public final class SugarStatements{
     public static LStatement parseFuncCall(String[] tokens){
         FuncCallStatement result = new FuncCallStatement();
         result.name = tokens[1];
-        result.args = stripQuotes(tokens[2]);
+        if(result.name == null || result.name.isEmpty()){
+            throw new IllegalArgumentException("Invalid funccall statement: missing function name");
+        }
+        result.args = unescapeQuoted(stripQuotes(tokens[2]));
         result.result = optionalValue(tokens[3]);
         return result;
     }
 
     public static LStatement parseReturn(String[] tokens){
         ReturnStatement result = new ReturnStatement();
-        result.expr = stripQuotes(tokens[1]);
+        result.expr = unescapeQuoted(stripQuotes(tokens[1]));
         return result;
     }
 
     /** Removes the surrounding quotes that LParser keeps on string tokens. */
     private static String stripQuotes(String value){
+        if(value == null || value.isEmpty()) return "";
         if(value.length() >= 2 && value.charAt(0) == '"' && value.charAt(value.length() - 1) == '"'){
             return value.substring(1, value.length() - 1);
         }
         return value;
+    }
+
+    /** Escapes {@code ~} and {@code "} inside quoted statement tokens (see
+     *  {@link #unescapeQuoted}). {@code "} would cut the LParser string token short, and
+     *  {@code ~} must be escaped so the sequence is unambiguous. */
+    private static String escapeQuoted(String value){
+        if(value.indexOf('~') < 0 && value.indexOf('"') < 0) return value;
+        StringBuilder out = new StringBuilder(value.length() + 8);
+        for(int i = 0; i < value.length(); i++){
+            char c = value.charAt(i);
+            if(c == '~'){
+                out.append("~~");
+            }else if(c == '"'){
+                out.append("~q");
+            }else{
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /** Inverts {@link #escapeQuoted}: {@code ~~} becomes {@code ~}, {@code ~q} becomes
+     *  {@code "}; any other {@code ~} sequence is kept literal. */
+    private static String unescapeQuoted(String value){
+        if(value.indexOf('~') < 0) return value;
+        StringBuilder out = new StringBuilder(value.length());
+        for(int i = 0; i < value.length(); i++){
+            char c = value.charAt(i);
+            if(c == '~' && i + 1 < value.length()){
+                char next = value.charAt(i + 1);
+                if(next == '~'){
+                    out.append('~');
+                    i++;
+                }else if(next == 'q'){
+                    out.append('"');
+                    i++;
+                }else{
+                    out.append(c);
+                }
+            }else{
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
 
     /** Parses a token as a ConditionOp, or null when it is not one (e.g. a legacy destIndex).

@@ -531,7 +531,7 @@ public class PatchViewerMod extends Mod{
         if(renderCompactStackDiff(table, change, width)) return;
         String markup = compactChangeMarkup(change);
         if(markup == null || markup.isEmpty()) return;
-        addCompactLine(table, markup, width, change.bucket == CompactBucket.MODIFIED);
+        addCompactLine(table, markup, width);
     }
 
     private String compactChangeMarkup(CompactChange change){
@@ -539,8 +539,8 @@ public class PatchViewerMod extends Mod{
         String label = escape(change.label == null ? "" : change.label);
         String left = change.before;
         String right = change.after;
-        String separator = compactValueOnOwnLine(change.kind) ? ":\n" : ": ";
-        String modifiedSeparator = compactValueOnOwnLine(change.kind) ? ": []\n" : ": []";
+        String separator = ": ";
+        String modifiedSeparator = ": []";
         if(change.bucket == CompactBucket.ADDED){
             return addedColorTag() + "+[]" + label + separator + addedColorTag() + escape(formatCompactValue(right, change.kind)) + "[]";
         }
@@ -550,7 +550,7 @@ public class PatchViewerMod extends Mod{
         String oldValue = formatCompactValue(left, change.kind);
         String newValue = formatCompactValue(right, change.kind);
         return "[lightgray]" + label + modifiedSeparator
-            + modifiedOldColorTag() + escape(oldValue) + breakArrow(oldValue, newValue, change.kind)
+            + modifiedOldColorTag() + escape(oldValue) + breakArrow(oldValue, newValue)
             + modifiedNewColorTag() + escape(newValue) + "[]";
     }
 
@@ -562,9 +562,9 @@ public class PatchViewerMod extends Mod{
         table.add(label).left().width(width).growX().fillX().padTop(8f).row();
     }
 
-    private void addCompactLine(Table table, String text, float width, boolean allowWrapByArrow){
+    private void addCompactLine(Table table, String text, float width){
         if(text == null) return;
-        String normalized = compactDisplayText(text, allowWrapByArrow, width);
+        String normalized = compactDisplayText(text);
         if(normalized == null || normalized.isEmpty()) return;
         Seq<String> lines = splitCompactDisplayLines(normalized);
         for(String lineText : lines){
@@ -577,7 +577,7 @@ public class PatchViewerMod extends Mod{
         }
     }
 
-    private String compactDisplayText(String text, boolean allowWrapByArrow, float width){
+    private String compactDisplayText(String text){
         String cleaned = (text == null ? "" : text)
             .replace("<Image>", "")
             .replace("<Stack>", "")
@@ -585,58 +585,7 @@ public class PatchViewerMod extends Mod{
             .replaceAll("[ \\t]{2,}", " ")
             .trim();
         if(Strings.stripColors(cleaned).isEmpty()) return "";
-        return allowWrapByArrow ? breakCompactArrows(cleaned, width) : cleaned;
-    }
-
-    private String breakCompactArrows(String text, float width){
-        if(text == null || text.indexOf("->") < 0) return text;
-        StringBuilder out = new StringBuilder();
-        int start = 0;
-        while(start < text.length()){
-            int end = text.indexOf('\n', start);
-            if(end < 0) end = text.length();
-            String line = text.substring(start, end);
-            int arrow = line.indexOf("->");
-            if(arrow > 0 && shouldPreBreakCompactArrow(line, width)){
-                int breakAt = arrow;
-                while(breakAt > 0 && Character.isWhitespace(line.charAt(breakAt - 1))){
-                    breakAt--;
-                }
-                out.append(line, 0, breakAt).append('\n').append(line.substring(breakAt));
-            }else{
-                out.append(line);
-            }
-            if(end < text.length()) out.append('\n');
-            start = end + 1;
-        }
-        return out.toString();
-    }
-
-    private boolean shouldPreBreakCompactArrow(String text, float width){
-        if(text == null || text.indexOf("->") < 0) return false;
-        return compactVisibleUnits(text) > Math.max(38f, width / 7f);
-    }
-
-    private int compactVisibleUnits(String text){
-        if(text == null) return 0;
-        StringBuilder out = new StringBuilder();
-        int index = 0;
-        while(index < text.length()){
-            int at = text.indexOf(iconTokenPrefix, index);
-            if(at < 0){
-                out.append(text.substring(index));
-                break;
-            }
-            out.append(text, index, at);
-            int end = text.indexOf('>', at + iconTokenPrefix.length());
-            if(end < 0){
-                out.append(text.substring(at));
-                break;
-            }
-            out.append("###");
-            index = end + 1;
-        }
-        return Strings.stripColors(out.toString()).replace("[[", "[").trim().length();
+        return cleaned;
     }
 
     private Seq<String> splitCompactDisplayLines(String text){
@@ -2353,10 +2302,6 @@ public class PatchViewerMod extends Mod{
         }
     }
 
-    private boolean compactValueOnOwnLine(RowKind kind){
-        return kind == RowKind.STACK_LIST || kind == RowKind.BUILD_COST;
-    }
-
     private String compactRowText(SnapshotRow row){
         if(row == null) return null;
         String text = row.compactText == null ? row.text : row.compactText;
@@ -2449,15 +2394,10 @@ public class PatchViewerMod extends Mod{
         return modifiedOldColorTag() + escape(left) + breakArrow(left, right) + modifiedNewColorTag() + escape(right) + "[]";
     }
 
+    // The arrow never carries a forced newline: labels word-wrap at spaces and the segment
+    // flow wraps only in front of a value, so "->" always stays on the old-value line.
     private String breakArrow(String before, String after){
-        if(before.length() + after.length() > 48 || before.contains("\n") || after.contains("\n")){
-            return "[] " + arrowColor + "-> []\n";
-        }
         return "[] " + arrowColor + "-> []";
-    }
-
-    private String breakArrow(String before, String after, RowKind kind){
-        return breakArrow(before, after);
     }
 
     private float estimateDialogWidth(UnlockableContent content, ContentSnapshot before, ContentSnapshot after, ContentDiff diff, String titleMarkup, String visibleDescription, String visibleDetails){
@@ -2741,10 +2681,28 @@ public class PatchViewerMod extends Mod{
         wrapper.left().top().defaults().left().top();
 
         if(beforeInset != null){
-            wrapper.add(beforeInset).left().top().fillX().growX();
-            wrapper.row();
-            wrapper.add(arrowColor + "->[]").left().padTop(2f).padBottom(2f);
-            wrapper.row();
+            Table owner = target.cell == null ? null : target.cell.getTable();
+            float available = 0f;
+            if(owner != null){
+                available = owner.getWidth() > 0f ? owner.getWidth() : owner.getPrefWidth();
+            }
+            available = Math.max(140f, available - 12f);
+            // Arrow padding plus the wrappers' padding around each panel.
+            float inlineWidth = measureRenderedWidth(beforeInset) + measureRenderedWidth(target.table)
+                + measureMarkupWidth("->") + 24f;
+            if(inlineWidth <= available){
+                // The trailing value inset is appended right after the arrow by the shared tail below,
+                // keeping "[old] -> [new]" on one line.
+                wrapper.add(beforeInset).left().top();
+                wrapper.add(arrowColor + "->[]").center().padLeft(6f).padRight(6f).top();
+            }else{
+                // Keep the arrow beside the old value; only the new value drops to its own row.
+                wrapper.table(oldRow -> {
+                    oldRow.left().top().defaults().left().top();
+                    oldRow.add(beforeInset).left().top().growX().fillX();
+                    oldRow.add(arrowColor + "->[]").right().padLeft(8f).top();
+                }).left().top().fillX().growX().padBottom(2f).row();
+            }
         }
 
         // Replace the root cell first, then move the original inset into the wrapper. This avoids
@@ -3026,9 +2984,22 @@ public class PatchViewerMod extends Mod{
                 highlightChangedGroups(beforeLabels);
                 highlightChangedGroups(afterLabels);
             }
-            renderDiffPanel(root, null, before, kind, contentWidth, 6f);
-            root.add(arrowColor + "->[]").left().padTop(2f).padBottom(6f).row();
-            renderDiffPanel(root, null, after, kind, contentWidth, 0f);
+            // Wrapper padding around both panels plus the arrow's own padding.
+            float inlineWidth = measureRenderedWidth(before) + measureRenderedWidth(after) + measureMarkupWidth("->") + 24f;
+            if(inlineWidth <= contentWidth){
+                root.table(Styles.grayPanel, panel -> renderRenderedValue(panel, before, kind)).left().top();
+                root.add(arrowColor + "->[]").center().padLeft(6f).padRight(6f).top();
+                root.table(Styles.grayPanel, panel -> renderRenderedValue(panel, after, kind)).left().top().growX().fillX();
+                root.row();
+            }else{
+                // Keep the arrow on the old panel's row; only the new panel drops below.
+                Table oldRow = new Table();
+                oldRow.left().top().defaults().left().top();
+                oldRow.table(Styles.grayPanel, panel -> renderRenderedValue(panel, before, kind)).left().top().growX().fillX();
+                oldRow.add(arrowColor + "->[]").right().padLeft(8f).top();
+                root.add(oldRow).left().top().fillX().growX().padBottom(6f).row();
+                renderDiffPanel(root, null, after, kind, contentWidth, 0f);
+            }
         }else if(before != null){
             restoreLabelStates(beforeLabels);
             highlightAllLabels(beforeLabels, removedColorTag());
@@ -3058,9 +3029,8 @@ public class PatchViewerMod extends Mod{
                 addBuildCostStacks(line, after, modifiedNewColorTag());
             }else{
                 addBuildCostStacks(line, before, modifiedOldColorTag());
-                line.row();
-                line.add(arrowColor + "->[]").padRight(5f).top().left();
-                line.row();
+                // Keep the arrow beside the old stacks; only the new value drops to its own row.
+                line.add(arrowColor + "->[]").padLeft(6f).padRight(5f).top().left().row();
                 addBuildCostStacks(line, after, modifiedNewColorTag());
             }
         }else if(before != null){
@@ -3083,7 +3053,7 @@ public class PatchViewerMod extends Mod{
 
     private void renderCompactMarkupValue(Table table, String text, float width){
         if(table == null || text == null) return;
-        Seq<String> lines = splitCompactDisplayLines(compactDisplayText(text, false, width));
+        Seq<String> lines = splitCompactDisplayLines(compactDisplayText(text));
         for(String lineText : lines){
             if(lineText == null || Strings.stripColors(lineText).trim().isEmpty()) continue;
             Table line = new Table();
@@ -3126,23 +3096,50 @@ public class PatchViewerMod extends Mod{
 
         if(beforeComponents.isEmpty() && afterComponents.isEmpty()) return false;
 
-        if(!beforeComponents.isEmpty()){
-            AtomicStatFlow beforeFlow = new AtomicStatFlow(beforeComponents);
-            beforeFlow.rebuild(width);
-            row.add(beforeFlow).left().top().growX().fillX().width(width).row();
-        }
         if(!beforeComponents.isEmpty() && !afterComponents.isEmpty()){
-            row.add(arrowColor + "->[]").left().top().row();
-        }
-        if(!afterComponents.isEmpty()){
-            AtomicStatFlow afterFlow = new AtomicStatFlow(afterComponents);
-            afterFlow.rebuild(width);
-            row.add(afterFlow).left().top().growX().fillX().width(width).row();
+            float arrowWidth = measureMarkupWidth("->") + compactComponentGap * 2f;
+            boolean fitsOneLine = compactFlowWidth(beforeComponents) + arrowWidth + compactFlowWidth(afterComponents) <= width;
+            Seq<Element> beforeLine = new Seq<>(beforeComponents);
+            beforeLine.add(new Label(arrowColor + "->[]"));
+            if(fitsOneLine){
+                Seq<Element> merged = new Seq<>(beforeLine);
+                merged.addAll(afterComponents);
+                addCompactFlow(row, merged, width);
+            }else{
+                // Break only between "->" and the new value so the arrow stays on the old-value line.
+                addCompactFlow(row, beforeLine, width);
+                addCompactFlow(row, afterComponents, width);
+            }
+        }else if(!beforeComponents.isEmpty()){
+            addCompactFlow(row, beforeComponents, width);
+        }else{
+            addCompactFlow(row, afterComponents, width);
         }
 
         table.add(row).left().top().growX().fillX().width(width);
         table.row();
         return true;
+    }
+
+    /** Total laid-out width of a flow's components, using the same metrics as {@link AtomicStatFlow#rebuild}. */
+    private float compactFlowWidth(Seq<Element> components){
+        float total = 0f;
+        boolean hasContent = false;
+        for(Element component : components){
+            if(component == null) continue;
+            component.pack();
+            float componentWidth = Math.max(1f, Math.max(component.getPrefWidth(), component.getWidth()));
+            total += hasContent ? compactComponentGap + componentWidth : componentWidth;
+            hasContent = true;
+        }
+        return total;
+    }
+
+    private void addCompactFlow(Table table, Seq<Element> components, float width){
+        if(table == null || components == null || components.isEmpty()) return;
+        AtomicStatFlow flow = new AtomicStatFlow(components);
+        flow.rebuild(width);
+        table.add(flow).left().top().growX().fillX().width(width).row();
     }
 
     private CompactStackChange findCompactStackChange(Seq<CompactStackChange> changes, CompactStackItem item, boolean before){

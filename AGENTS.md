@@ -1,9 +1,9 @@
 # Neon 开发指南（AGENTS.md）
 
-本文件面向在本仓库工作的 AI 代理与人类协作者，风格与约束参考 `MindustryX-main/AGENTS.md`。
+本文件面向在本仓库工作的 AI 代理与人类协作者，风格与约束参考 MindustryX 仓库的 AGENTS.md。
 面向人类的分类文档（架构 / 开发 / 发布 / 测试 / 术语表 / 子系统详解）在 [`docs/`](docs/README.md)，
 两者冲突时以本文件为准。
-当本文件与上层工作区 `Documents/codex/AGENTS.md` 冲突时，以更贴近 Mindustry 模组任务的上层规范为准；
+当本文件与上层工作区（Neon 所在目录的上一级）的 AGENTS.md 冲突时，以更贴近 Mindustry 模组任务的上层规范为准；
 本文件负责 Neon 特有的架构、同步与发布纪律。
 
 ## 项目与工作流
@@ -60,12 +60,12 @@ python .\tools\update_submods.py --verify-build   # 同步后追加 gradlew comp
 - bundle 合并规则：不同子模组对同一 key 给出不同值会直接报碰撞错误（不允许静默覆盖）；
   `tools/bektools-bundles/bundle*.properties` 中的条目是 Neon 侧**显式覆盖**，优先级最高；
   `ls`（LogicSugar）拥有 `logicsugar.` / `setting.logicsugar.` 前缀的所有权。
-- `tools/generate_detail.py`（gitignore，本地工具）与 `tools/generate_dox.py` 生成文档索引，
-  与构建链路无关；`tools/deps/` 存放兜底用的 arc-core/arcnet jar。
+- `tools/generate_dox.py` 是辅助文档工具，与构建链路无关；`tools/deps/` 存放兜底用的 arc-core/arcnet jar。
 
 ## 构建
 
-- 要求：**JDK 17**（`gradle.properties` 里 `org.gradle.java.home` 已指向本机 jdk-17）。
+- 要求：**JDK 17**（Mindustry v159 运行时需要 Java 17；`gradle.properties` 的
+  `org.gradle.java.home` 按本机 JDK 路径配置）。
 - Java 目标为 **17**（`options.release.set(17)`，Mindustry v159 运行时需要 Java 17）；
   Kotlin 2.2.0，`jvmTarget = JVM_17`。不要引入更高版本 Java API。
 - 依赖解析优先级（`build.gradle`）：
@@ -83,7 +83,7 @@ python .\tools\update_submods.py --verify-build   # 同步后追加 gradlew comp
 ```
 
 - `deploy` 产物链：`jarMerged`/`zipMerged`（桌面 + Android 合并包，含 `classes.dex`）
-  → `dist/Neon.jar`、`dist/Neon.zip`、`../构建/Neon/Neon.jar|zip`；
+  → `dist/Neon.jar`、`dist/Neon.zip`（构建产物，gitignore）与 `../构建/Neon/` 副本；
   `jarLocalDev` → `../构建/Neon/Neon-dev.jar`（本地快速测试用）。
 - Android：`dexAndroid` 调 D8 生成 `classes.dex`，并通过 `--lib arc-core.jar` 把 arc 作为
   library classpath——否则 `InputProcessor` 接口方法被 dex 成外部方法，设备上

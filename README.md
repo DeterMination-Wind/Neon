@@ -50,6 +50,8 @@ Neon 已经包含相关独立模组的功能。请不要同时启用对应的独
 
 完整功能说明、使用场景和术语解释请查看 [FEATURES.md](FEATURES.md)。
 
+分类文档（架构、开发、测试、发布、用户指南）见 [docs/](docs/README.md)。
+
 ### 反馈
 
 - [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu)
@@ -108,7 +110,7 @@ Neon already contains the functionality of the related standalone mods. Do not e
 
 ### Feature details
 
-See [FEATURES.md](FEATURES.md) for the complete feature guide, use cases, and terminology.
+See [FEATURES.md](FEATURES.md) for the complete feature guide, use cases, and terminology. Categorized docs (architecture, development, testing, release, user guide) live under [docs/](docs/README.md).
 
 ### Feedback
 

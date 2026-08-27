@@ -4,6 +4,7 @@ import arc.func.Prov;
 import arc.scene.Element;
 import arc.scene.ui.layout.Table;
 
+/** Probes for MindustryX once, then locks the delegate: external X bridge if resolvable, embedded Neon overlay otherwise. */
 final class AutoDetectingOverlayUiBridge implements OverlayUiBridge {
     private final MindustryXOverlayUiBridge external = new MindustryXOverlayUiBridge();
     private final NeonEmbeddedOverlayUiBridge embedded = new NeonEmbeddedOverlayUiBridge();

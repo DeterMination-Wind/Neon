@@ -11,6 +11,7 @@ import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.Trigger;
 import mindustry.input.Binding;
 
+/** Installs and keeps the embedded overlay attached: registers the overlay keybind (Z, "mindustryX" category) and retries init on the update trigger. */
 public final class NeonOverlayBootstrap {
     private static boolean installed;
     private static KeyBind overlayBind;

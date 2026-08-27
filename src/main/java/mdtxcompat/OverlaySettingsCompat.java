@@ -7,6 +7,7 @@ import arc.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Migrates overlay window state between MindustryX-native and Neon-embedded settings keys so layouts survive runtime switches. */
 public final class OverlaySettingsCompat {
     private static final String nativePrefix = "overlayUI.";
     private static final String embeddedPrefix = "neoncompat.overlayUI.";

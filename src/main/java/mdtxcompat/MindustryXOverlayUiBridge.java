@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/** Reflective {@link OverlayUiBridge} over MindustryX's OverlayUI singleton; queues windows registered before X resolves and retries periodically. */
 public class MindustryXOverlayUiBridge implements OverlayUiBridge {
     private static final long missingRetryMillis = 5000L;
     private static final long bindRetryMillis = 250L;

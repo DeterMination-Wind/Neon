@@ -4,6 +4,7 @@ import arc.func.Prov;
 import arc.scene.Element;
 import arc.scene.ui.layout.Table;
 
+/** Inert fallback behind {@link OverlayUiBridge#UNSUPPORTED}. */
 final class NoopOverlayUiBridge implements OverlayUiBridge {
     private static final OverlayWindowHandle NO_WINDOW = new OverlayWindowHandle() {
         @Override

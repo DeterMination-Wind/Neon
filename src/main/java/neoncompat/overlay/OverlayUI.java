@@ -43,6 +43,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Neon's embedded overlay window manager, API-compatible with MindustryX's OverlayUI; used when the game runs without MindustryX. */
 public class OverlayUI {
     public static final OverlayUI INSTANCE = new OverlayUI();
     private static final Json json = new Json();

@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Locale;
 
+/** Per-module frame-time profiler: samples by module tag into rotating buckets and ranks hotspots. */
 public final class NeonProfiler{
     public static final String threadMain = "Main";
     public static final String threadAsync = "Async";

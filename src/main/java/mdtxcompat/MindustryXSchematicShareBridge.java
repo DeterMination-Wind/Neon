@@ -5,6 +5,7 @@ import mindustry.game.Schematic;
 
 import java.lang.reflect.Method;
 
+/** Reflective {@link SchematicShareBridge} over MindustryX's schematic share/clipboard methods; disables itself on reflection failure. */
 public class MindustryXSchematicShareBridge implements SchematicShareBridge {
     private boolean available = true;
     private boolean resolved;

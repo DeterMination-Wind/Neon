@@ -4,6 +4,10 @@ import arc.func.Prov;
 import arc.scene.Element;
 import arc.scene.ui.layout.Table;
 
+/**
+ * Registers floating overlay windows; {@link #AUTO_DETECT} locks onto MindustryX's
+ * OverlayUI when present, otherwise Neon's embedded overlay.
+ */
 public interface OverlayUiBridge {
     OverlayUiBridge UNSUPPORTED = new NoopOverlayUiBridge();
     OverlayUiBridge AUTO_DETECT = new AutoDetectingOverlayUiBridge();

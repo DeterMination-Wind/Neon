@@ -62,6 +62,13 @@ import java.util.Locale;
 
 import static mindustry.Vars.ui;
 
+/**
+ * Neon aggregate entry for vanilla Mindustry: initializes every bundled sub-mod in
+ * isolation (one failing module never takes down the rest), registers the unified
+ * Neon settings category on client load, and dispatches module-scoped client
+ * commands. MindustryX-injected runtimes load {@link BekToolsModX} instead, which
+ * supplies X-specific bridges and ModX subclasses through the protected constructor.
+ */
 public class BekToolsMod extends Mod{
     private static final String moduleFailureMessage = "@bektools.module.failed";
     private static final String feedbackDiscordUrl = "https://discord.com/channels/391020510269669376/1467903894716940522";

@@ -9,6 +9,7 @@ import arc.struct.Seq;
 
 import java.util.Locale;
 
+/** Window snapping for overlay windows: aligns/attaches edges to other windows and screen bounds within the adsorption distance. */
 public class AdsorptionSystem {
     public static final AdsorptionSystem INSTANCE = new AdsorptionSystem();
     public static final float ADSORPTION_DISTANCE = 16f;

@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
+/** Profiler lifecycle and UI: overlay window, settings group and client commands on top of {@link NeonProfiler}. */
 public final class NeonProfilerFeature{
     private static final String categoryKey = "neon-profiler-category";
     private static final String keyEnabled = "neon-profiler-enabled";

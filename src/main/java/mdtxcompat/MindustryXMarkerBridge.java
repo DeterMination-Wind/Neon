@@ -5,6 +5,7 @@ import arc.util.Log;
 
 import java.lang.reflect.Method;
 
+/** Reflective {@link MarkerBridge} over MindustryX's MarkerType; permanently disables itself when symbols or calls fail. */
 public class MindustryXMarkerBridge implements MarkerBridge {
     private boolean available = true;
     private boolean resolved;

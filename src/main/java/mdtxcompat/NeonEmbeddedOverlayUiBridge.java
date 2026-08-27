@@ -7,6 +7,7 @@ import arc.util.Log;
 import neoncompat.overlay.NeonOverlayBootstrap;
 import neoncompat.overlay.OverlayUI;
 
+/** {@link OverlayUiBridge} backed by Neon's own embedded overlay, used when MindustryX is absent. */
 final class NeonEmbeddedOverlayUiBridge implements OverlayUiBridge {
     private static final OverlayWindowHandle NO_WINDOW = new OverlayWindowHandle() {
         @Override

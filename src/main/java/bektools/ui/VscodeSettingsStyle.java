@@ -4,6 +4,7 @@ import arc.graphics.Color;
 import arc.scene.style.Drawable;
 import mindustry.gen.Tex;
 
+/** VSCode-like dark palette and tinted drawables for Neon's unified settings pages and overlay chrome. */
 public final class VscodeSettingsStyle{
     private static final Color bgPanel = Color.valueOf("111821");
     private static final Color bgHeader = Color.valueOf("172231");

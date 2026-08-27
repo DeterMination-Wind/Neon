@@ -2,6 +2,7 @@ package mdtxcompat;
 
 import mindustry.game.Schematic;
 
+/** Inert fallback behind {@link SchematicShareBridge#UNSUPPORTED}. */
 final class NoopSchematicShareBridge implements SchematicShareBridge {
     @Override
     public boolean isSupported() {

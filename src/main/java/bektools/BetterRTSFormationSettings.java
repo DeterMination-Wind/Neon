@@ -4,6 +4,10 @@ import bektools.ui.RbmStyle;
 import mindustry.gen.Icon;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
+/**
+ * Feeds the no-inject Better RTS Formation child's bundled settings into Neon's
+ * RbmStyle renderer through its configureBundledSettingsRenderer callback.
+ */
 public final class BetterRTSFormationSettings {
     private BetterRTSFormationSettings() {
     }

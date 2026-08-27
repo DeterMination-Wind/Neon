@@ -20,6 +20,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 
 import java.util.Locale;
 
+/** Shared Neon settings-row widgets (headers, checks, sliders, text rows, spacers) used by every bundled module's settings builder. */
 public final class RbmStyle{
     private static final float defaultButtonHeight = 42f;
     private static final float dialogEdgePadding = 56f;

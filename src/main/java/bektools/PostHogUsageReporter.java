@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.function.Supplier;
 
+/** Reports an anonymous end-of-session usage event (bundled-module availability snapshot) to PostHog. */
 final class PostHogUsageReporter{
     private static final String logTag = "[Neon/PostHog]";
     private static final String apiKey = "phc_ry3vePCjmUFcy9oQ765tTDA2FagUXVrMcw3DWPsVCkn9";

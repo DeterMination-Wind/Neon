@@ -5,6 +5,7 @@ import mindustry.mod.Mods;
 
 import java.util.LinkedHashSet;
 
+/** MindustryX runtime detection, cross-classloader class loading, and the minimum-version guard that rejects legacy X builds. */
 public final class LegacyMindustryXGuard {
     public static final String MINIMUM_VERSION = "2026.04.03.B439";
     private static final String[] MINDUSTRYX_MOD_NAMES = {"mindustryx", "mdtx"};

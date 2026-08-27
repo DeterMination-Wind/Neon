@@ -25,16 +25,20 @@ import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
 public class TranslatorUI extends UI{
     private final ObjectMap<String, Element> translatedPopups = new ObjectMap<>();
     private final IntMap<Table> translatedLabels = new IntMap<>();
+    private UI delegate;
 
     public static TranslatorUI wrap(UI original) throws IllegalAccessException{
         if(original instanceof TranslatorUI) return (TranslatorUI)original;
 
         TranslatorUI wrapper = new TranslatorUI();
+        wrapper.delegate = original;
         for(Field field : UI.class.getFields()){
             int modifiers = field.getModifiers();
             if(Modifier.isStatic(modifiers) || Modifier.isFinal(modifiers)) continue;
@@ -214,15 +218,17 @@ public class TranslatorUI extends UI{
     }
 
     @Override
-    public void showInfoPopup(@Nullable String id, String info, float duration, int align, int top, int left, int bottom, int right){
+    public void showInfoPopup(@Nullable String info, @Nullable String id, float duration, int align, int top, int left, int bottom, int right){
+        String popupKey = id == null ? "popup" : id;
         if(info == null){
-            super.showInfoPopup(id, null, duration, align, top, left, bottom, right);
+            super.showInfoPopup(null, id, duration, align, top, left, bottom, right);
+            Element old = translatedPopups.remove(popupKey);
+            if(old != null) old.remove();
             return;
         }
 
-        super.showInfoPopup(id, info, duration, align, top, left, bottom, right);
+        super.showInfoPopup(info, id, duration, align, top, left, bottom, right);
         translateOne(info, translated -> {
-            String popupKey = id == null ? "popup" : id;
             Element old = translatedPopups.remove(popupKey);
             if(old != null) old.remove();
             Element clone = showPopupClone(translated, duration, top, bottom);
@@ -230,45 +236,31 @@ public class TranslatorUI extends UI{
         });
     }
 
-    @Override
     public void showMenu(String title, String message, String[][] options, Intc callback){
-        if(!TranslatorFeature.shouldTranslateWorldText(message) && !TranslatorFeature.shouldTranslateWorldText(title)){
-            super.showMenu(title, message, options, callback);
+        String safeTitle = title == null ? "" : title;
+        String safeMessage = message == null ? "" : message;
+        String[][] safeOptions = copyOptions(options);
+        if(!menuNeedsTranslation(safeTitle, safeMessage, safeOptions)){
+            invokeNativeMenu(safeTitle, safeMessage, safeOptions, callback);
             return;
         }
-        Dialog dialog = newMenuDialog(title, message, options, (option, myself) -> {
-            callback.get(option);
-            myself.hide();
-        });
-        dialog.closeOnBack(() -> callback.get(-1));
-        dialog.show();
-        translateMenu(dialog, title, message, options);
+        translateMenu(safeTitle, safeMessage, safeOptions, (translatedTitle, translatedMessage, translatedOptions) ->
+            invokeNativeMenu(translatedTitle, translatedMessage, translatedOptions, callback));
     }
 
-    @Override
     public void showFollowUpMenu(int menuId, String title, String message, String[][] options, Intc callback){
-        if(!TranslatorFeature.shouldTranslateWorldText(message) && !TranslatorFeature.shouldTranslateWorldText(title)){
-            super.showFollowUpMenu(menuId, title, message, options, callback);
+        String safeTitle = title == null ? "" : title;
+        String safeMessage = message == null ? "" : message;
+        String[][] safeOptions = copyOptions(options);
+        if(!menuNeedsTranslation(safeTitle, safeMessage, safeOptions)){
+            invokeNativeFollowUpMenu(menuId, safeTitle, safeMessage, safeOptions, callback);
             return;
         }
-        Dialog dialog = newMenuDialog(title, message, options, (option, myself) -> callback.get(option));
-        dialog.closeOnBack(() -> {
-            followUpMenus.remove(menuId);
-            callback.get(-1);
-        });
-
-        Dialog oldDialog = followUpMenus.remove(menuId);
-        if(oldDialog != null){
-            dialog.show(Core.scene, null);
-            oldDialog.hide(null);
-        }else{
-            dialog.show();
-        }
-        followUpMenus.put(menuId, dialog);
-        translateMenu(dialog, title, message, options);
+        translateMenu(safeTitle, safeMessage, safeOptions, (translatedTitle, translatedMessage, translatedOptions) ->
+            invokeNativeFollowUpMenu(menuId, translatedTitle, translatedMessage, translatedOptions, callback));
     }
 
-    private void translateMenu(Dialog source, String title, String message, String[][] options){
+    private void translateMenu(String title, String message, String[][] options, MenuTranslationDone finished){
         int optionCount = 0;
         if(options != null){
             for(String[] row : options){
@@ -281,7 +273,7 @@ public class TranslatorUI extends UI{
         final String[] translatedMessage = {displayText(message)};
         String[][] translatedOptions = copyOptions(options);
 
-        group.finished = () -> showMenuClone(source, translatedTitle[0], translatedMessage[0], translatedOptions);
+        group.finished = () -> finished.get(translatedTitle[0], translatedMessage[0], translatedOptions);
         translateOne(title, value -> {
             translatedTitle[0] = value;
             group.done();
@@ -302,6 +294,63 @@ public class TranslatorUI extends UI{
                 }
             }
         }
+    }
+
+    private boolean menuNeedsTranslation(String title, String message, String[][] options){
+        if(TranslatorFeature.shouldTranslateWorldText(title) || TranslatorFeature.shouldTranslateWorldText(message)) return true;
+        if(options != null){
+            for(String[] row : options){
+                if(row == null) continue;
+                for(String option : row){
+                    if(TranslatorFeature.shouldTranslateWorldText(option)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void invokeNativeMenu(String title, String message, String[][] options, Intc callback){
+        invokeNativeMenuMethod("showMenu", new Class[]{String.class, String.class, String[][].class, Intc.class},
+            new Object[]{title, message, options, callback});
+    }
+
+    private void invokeNativeFollowUpMenu(int menuId, String title, String message, String[][] options, Intc callback){
+        invokeNativeMenuMethod("showFollowUpMenu", new Class[]{int.class, String.class, String.class, String[][].class, Intc.class},
+            new Object[]{menuId, title, message, options, callback});
+    }
+
+    private boolean invokeNativeMenuMethod(String name, Class<?>[] parameterTypes, Object[] arguments){
+        try{
+            Method legacy = UI.class.getMethod(name, parameterTypes);
+            legacy.invoke(delegate, arguments);
+            return true;
+        }catch(NoSuchMethodException ignored){
+            // Current Mindustry moved these methods from UI to mindustry.ui.Menus.
+        }catch(InvocationTargetException error){
+            logMenuInvocationFailure(name, error.getCause() == null ? error : error.getCause());
+            return true;
+        }catch(ReflectiveOperationException | RuntimeException | LinkageError error){
+            logMenuInvocationFailure(name, error);
+            return false;
+        }
+
+        try{
+            Class<?> menus = Class.forName("mindustry.ui.Menus");
+            Method modern = menus.getDeclaredMethod(name, parameterTypes);
+            modern.setAccessible(true);
+            modern.invoke(null, arguments);
+            return true;
+        }catch(InvocationTargetException error){
+            logMenuInvocationFailure(name, error.getCause() == null ? error : error.getCause());
+            return true;
+        }catch(ReflectiveOperationException | RuntimeException | LinkageError error){
+            logMenuInvocationFailure(name, error);
+            return false;
+        }
+    }
+
+    private void logMenuInvocationFailure(String name, Throwable error){
+        Log.warn("ForeignServerTranslator could not invoke native menu API @: @", name, error.getMessage());
     }
 
     private String[][] copyOptions(String[][] options){
@@ -336,24 +385,6 @@ public class TranslatorUI extends UI{
                 buttons.button(displayText("@cancel"), () -> {});
                 buttons.button(displayText("@ok"), () -> {});
             }).width(cloneContentWidth()).padTop(8f);
-        });
-    }
-
-    private void showMenuClone(Dialog source, String title, String message, String[][] options){
-        showLeftClone(source, title, table -> {
-            table.add(message).width(cloneContentWidth()).wrap().get().setAlignment(Align.center);
-            table.row();
-
-            for(String[] row : options){
-                if(row == null || row.length == 0) continue;
-                table.table(buttonRow -> {
-                    buttonRow.defaults().height(46f).pad(4f).growX();
-                    for(String option : row){
-                        if(option == null) continue;
-                        buttonRow.button(option, () -> {});
-                    }
-                }).width(cloneContentWidth()).row();
-            }
         });
     }
 
@@ -466,6 +497,10 @@ public class TranslatorUI extends UI{
 
     private interface PairCons{
         void get(String first, String second);
+    }
+
+    private interface MenuTranslationDone{
+        void get(String title, String message, String[][] options);
     }
 
     private static final class PendingGroup{

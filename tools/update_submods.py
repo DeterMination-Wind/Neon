@@ -1021,6 +1021,9 @@ def parse_properties(text: str) -> Dict[str, str]:
         k = k.strip()
         if not k:
             continue
+        # java.util.Properties semantics: whitespace between the separator and the
+        # value is not part of the value; some children format bundles as "key = value".
+        v = v.lstrip()
         out[k] = v
     return out
 
@@ -1093,6 +1096,15 @@ def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
         existing_text = read_text(target_path) if target_path.exists() else ""
         merged: Dict[str, str] = parse_properties(existing_text)
         origins: Dict[str, str] = {key: "existing" for key in merged}
+        bek_extra = TOOLS / "bektools-bundles" / name
+        # BEK-local overrides are re-applied after the merge, so the previous merged
+        # output may already hold an override value; a child updating its own string
+        # must not collide against that stale copy.
+        bek_override_keys = (
+            set(parse_properties(read_text(bek_extra)).keys())
+            if bek_extra.exists()
+            else set()
+        )
         collisions: List[str] = []
 
         for sm, repo_dir in mods:
@@ -1104,7 +1116,12 @@ def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
                 child_owns_key = sm.id == "ls" and (
                     key.startswith("logicsugar.") or key.startswith("setting.logicsugar.")
                 )
-                if key in merged and merged[key] != value and not child_owns_key:
+                if (
+                    key in merged
+                    and merged[key] != value
+                    and not child_owns_key
+                    and key not in bek_override_keys
+                ):
                     collisions.append(f"{name}: key '{key}' differs between {origins[key]} and {sm.id}")
                 else:
                     merged[key] = value
@@ -1114,7 +1131,6 @@ def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
             msg = "\n".join(collisions[:50])
             raise RuntimeError(f"Bundle merge collisions detected for {name}:\n{msg}")
 
-        bek_extra = TOOLS / "bektools-bundles" / name
         if bek_extra.exists():
             extra = parse_properties(read_text(bek_extra))
             for key, value in extra.items():

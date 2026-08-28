@@ -825,7 +825,9 @@ public class PatchViewerMod extends Mod{
             Label name = new Label((colorTag == null ? "" : colorTag) + escape(content.localizedName) + "[]", Styles.outlineLabel);
             name.setWrap(true);
             name.setEllipsis(false);
-            out.add(name).padLeft(4f).top();
+            // Same zero preferred width as other wrap labels: without a floor the compact flow
+            // measures this view as icon-only and later segments overlap the name.
+            out.add(name).padLeft(4f).top().minWidth(Math.max(1f, measureMarkupWidth(escape(content.localizedName))));
         }
         return out;
     }
@@ -2739,7 +2741,12 @@ public class PatchViewerMod extends Mod{
         Label value = new Label(row.text == null ? "" : row.text);
         value.setWrap(true);
         value.setEllipsis(false);
-        inset.add(value).left().top().fillX().growX();
+        // Wrap-enabled labels report a preferred width of zero, so pack-based measurement and
+        // the inline fit check in wrapNativeStatInset would under-count the old value and
+        // squeeze "[old] -> [new]" into overlapping text. Anchor the column with the real
+        // text width instead.
+        inset.add(value).left().top().fillX().growX()
+            .minWidth(Math.max(1f, measureMarkupWidth(row.text == null ? "" : row.text)));
         return inset;
     }
 

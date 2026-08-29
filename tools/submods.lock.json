@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-08-28T16:30:26Z",
+  "generatedAtUtc": "2026-08-29T05:38:51Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -352,6 +352,19 @@
       "repoUrl": null,
       "branch": null,
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\PatrolCancel"
+    },
+    "ocb": {
+      "sourceKind": "git",
+      "syncedHead": "d678f9fcee041fd446c8724bb8e8172b73bae70a",
+      "workspaceHeadAtSync": "d678f9fcee041fd446c8724bb8e8172b73bae70a",
+      "workspaceDirtyAtSync": false,
+      "upstreamRef": "origin/main",
+      "upstreamHeadAtSync": "34b8a5f6c867ce55ffd5a5d94ff316cd33aaec8b",
+      "aheadOfUpstreamAtSync": 9,
+      "behindUpstreamAtSync": 0,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\OverlayCompatBridge"
     }
   }
 }

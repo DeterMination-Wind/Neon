@@ -137,7 +137,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             state = State.UNAVAILABLE_CLASS;
             if (!missingLogged) {
                 missingLogged = true;
-                Log.info("Neon OverlayUI integration: mindustryX.features.ui.OverlayUI not found; install OverlayCompatBridge in this launcher mod directory or use MindustryX to enable overlay windows.");
+                Log.info("Neon OverlayUI integration: mindustryX.features.ui.OverlayUI not found; the bundled OverlayCompatBridge module (ocb) normally provides it, so check whether that module failed to initialize. Alternatively, use MindustryX to enable overlay windows.");
                 logLoadedModSnapshot();
             }
             return false;

@@ -21,6 +21,7 @@ import hidewhatprocessorsshow.HideWhatProcessorsShowMod;
 import mdtxcompat.LegacyMindustryXGuard;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
+import overlaycompat.OverlayCompatBridgeMod;
 import advancedreplace.AdvancedReplaceMod;
 import autopruner.AutoPrunerMod;
 import bettermapeditor.BetterMapEditorMod;
@@ -103,6 +104,7 @@ public class BekToolsMod extends Mod{
     private static final String moduleAdvancedReplace = "ar";
     private static final String moduleRandom = "random";
     private static final String moduleLockAttack = "la";
+    private static final String moduleOverlayCompatBridge = "ocb";
     private static final String moduleProfiler = "profiler";
     private static final String moduleUsageReporter = "usage-reporter";
 
@@ -135,6 +137,7 @@ public class BekToolsMod extends Mod{
     private final AdvancedReplaceMod advancedReplace;
     private final RandomMod random;
     private final LockAttackMod lockAttack;
+    private final OverlayCompatBridgeMod overlayCompatBridge;
     private final PostHogUsageReporter postHogUsageReporter;
     private boolean settingsRegistered;
 
@@ -194,6 +197,9 @@ public class BekToolsMod extends Mod{
         markBundled(moduleRandom, () -> RandomMod.bekBundled = true);
         markBundled(moduleLockAttack, () -> LockAttackMod.bekBundled = true);
 
+        // Infrastructure: provides mindustryX.features.ui.OverlayUI on vanilla clients;
+        // stays dormant when a real MindustryX runtime is present.
+        overlayCompatBridge = initializeModule(moduleOverlayCompatBridge, OverlayCompatBridgeMod::new);
         pgmm = initializeModule(modulePgmm, pgmmSupplier);
         stealthPath = initializeModule(moduleStealthPath, stealthPathSupplier);
         radialBuildMenu = initializeModule(moduleRadialBuildMenu, radialBuildMenuSupplier);
@@ -419,6 +425,7 @@ public class BekToolsMod extends Mod{
         addSubmodState(states, "高级替换", moduleAdvancedReplace, advancedReplace != null, true);
         addSubmodState(states, "随机化", moduleRandom, random != null, false);
         addSubmodState(states, "锁定攻击", moduleLockAttack, lockAttack != null, false);
+        addSubmodState(states, "OverlayUI 兼容层", moduleOverlayCompatBridge, overlayCompatBridge != null, false);
         return states;
     }
 
@@ -493,6 +500,7 @@ public class BekToolsMod extends Mod{
         entries.add(new ModuleEntry(moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, "bpa-enabled", false, st -> betterPolyAi.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, null, false, st -> advancedReplace.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleLockAttack, lockAttack != null, Core.bundle.get("bektools.section.la", "Lock Attack"), Icon.lock, null, false, st -> lockAttack.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleOverlayCompatBridge, overlayCompatBridge != null, Core.bundle.get("bektools.section.ocb", "OverlayCompatBridge"), Icon.layers, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
         entries.add(new ModuleEntry(moduleProfiler, !isModuleFailed(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, "neon-profiler-enabled", false, NeonProfilerFeature::buildSettings));
         return entries;
     }

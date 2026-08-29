@@ -289,6 +289,24 @@
       "mainClassFile": "LockAttackMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "injectBekHooks": false
+    },
+    {
+      "id": "ocb",
+      "name": "OverlayCompatBridge",
+      "localPath": "../OverlayCompatBridge",
+      "trackUpstream": true,
+      "mainClassFile": "OverlayCompatBridgeMod.java",
+      "javaPackageDir": "src/main/java/overlaycompat",
+      "sourceJavaDir": "src/overlaycompat",
+      "extraJavaDirs": [
+        "src/main/java/mindustryX/features/ui"
+      ],
+      "sourceExtraJavaDirs": [
+        "src/mindustryX/features/ui"
+      ],
+      "bundlesDir": "src/main/resources/bundles",
+      "sourceBundlesDir": "assets/bundles",
+      "injectBekHooks": false
     }
   ]
 }

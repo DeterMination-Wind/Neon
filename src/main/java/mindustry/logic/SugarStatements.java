@@ -23,6 +23,41 @@ import java.util.List;
 public final class SugarStatements{
     private SugarStatements(){}
 
+    private static boolean parsersInstalled;
+
+    /** Registers every Sugar token parser into {@code LAssembler.customParsers}. This is the
+     *  single registration point shared by mod init, the decompiler's parse preflight and the
+     *  self-tests, so all entry points agree on parsing behavior (including the legacy
+     *  dev-version markers). Idempotent per class loader. */
+    public static void installParsers(){
+        if(parsersInstalled) return;
+        parsersInstalled = true;
+
+        LAssembler.customParsers.put("forbegin", SugarStatements::parseForBegin);
+        LAssembler.customParsers.put("forbeginc", tokens -> SugarStatements.parseForBegin(tokens, true));
+        LAssembler.customParsers.put("whilebegin", SugarStatements::parseWhileBegin);
+        LAssembler.customParsers.put("whilebeginc", tokens -> SugarStatements.parseWhileBegin(tokens, true));
+        LAssembler.customParsers.put("switchbegin", SugarStatements::parseSwitchBegin);
+        LAssembler.customParsers.put("switchbeginc", tokens -> SugarStatements.parseSwitchBegin(tokens, true));
+        LAssembler.customParsers.put("ifbegin", SugarStatements::parseIfBegin);
+        LAssembler.customParsers.put("ifbeginc", tokens -> SugarStatements.parseIfBegin(tokens, true));
+        LAssembler.customParsers.put("case", SugarStatements::parseCase);
+        LAssembler.customParsers.put("elif", SugarStatements::parseElseIf);
+        LAssembler.customParsers.put("else", SugarStatements::parseElse);
+        LAssembler.customParsers.put("break", tokens -> new SugarStatements.BreakStatement());
+        LAssembler.customParsers.put("continue", tokens -> new SugarStatements.ContinueStatement());
+        LAssembler.customParsers.put("blockend", tokens -> new SugarStatements.BlockEndStatement());
+        LAssembler.customParsers.put("funcdef", SugarStatements::parseFuncDef);
+        LAssembler.customParsers.put("funcdefc", tokens -> SugarStatements.parseFuncDef(tokens, true));
+        LAssembler.customParsers.put("funccall", SugarStatements::parseFuncCall);
+        LAssembler.customParsers.put("return", SugarStatements::parseReturn);
+
+        // Read-only compatibility for markers produced by the first development version.
+        LAssembler.customParsers.put("forend", tokens -> new SugarStatements.BlockEndStatement());
+        LAssembler.customParsers.put("whileend", tokens -> new SugarStatements.BlockEndStatement());
+        LAssembler.customParsers.put("switchend", tokens -> new SugarStatements.BlockEndStatement());
+    }
+
     private static String optional(String value){
         return value.isEmpty() ? "~" : value;
     }
@@ -46,15 +81,112 @@ public final class SugarStatements{
             return LCategory.control;
         }
 
+        /** {@link JumpStatement#addOp} with the value/compare fields narrowed to 75px, so
+         *  condition rows remain usable after structure indentation is applied.
+         *
+         *  Must be an instance method on this subclass: {@code field} and {@code showSelect}
+         *  are protected LStatement members, and at runtime the mod class loader is a
+         *  different runtime package from the game's, so a same-package call from a static
+         *  helper throws IllegalAccessError (see AGENTS.md). Subclass access stays legal. */
+        public void addCompactOp(Table t, ConditionOp op, Cons<ConditionOp> setOp,
+                                 String value, Cons<String> setValue, String compare, Cons<String> setCompare){
+            if(op != ConditionOp.always) field(t, value, setValue).width(75f).pad(2f);
+
+            t.button(b -> {
+                b.add(op.symbol);
+                b.clicked(() -> showSelect(b, ConditionOp.all, op, setOp));
+            }, Styles.logict, () -> {
+            }).size(op == ConditionOp.always ? 80f : 48f, 40f).pad(4f).color(t.color);
+
+            if(op != ConditionOp.always) field(t, compare, setCompare).width(75f).pad(2f);
+        }
+
         /** Attaches a vanilla-style hover hint to a parameter label (bundle key: logicsugar.hint.<key>). */
         protected void hint(Cell<?> cell, String key){
             LCanvas.tooltip(cell, "logicsugar.hint." + key);
         }
 
-        /** Label + input row with a hover hint on the label, like vanilla fields(). */
+        /** Label + input grouped into one nested cell, preventing sibling fields from expanding
+         *  each other's columns in the compact For layout. */
         protected Cell<TextField> fieldsHint(Table table, String desc, String hintKey, String value, Cons<String> setter){
-            table.add(desc).padLeft(10).left().self(c -> hint(c, hintKey));
-            return field(table, value, setter).width(85f).padRight(10).left();
+            Cell<TextField>[] result = new Cell[]{null};
+            table.table(inner -> {
+                inner.left();
+                Color target = elem == null ? Pal.logicControl : elem.color;
+                inner.setColor(target);
+                inner.add(desc).padLeft(10).left().self(c -> hint(c, hintKey));
+                // 输入框略收窄(85→65)，使窄屏下三个"标签+输入框"组连同右侧条件不超出卡片；
+                // 同时收紧组间 padRight(10→6)。仅作用于 For 前置区，不影响其他语句。
+                result[0] = field(inner, value, setter).width(65f).padRight(6).left();
+                TextField input = result[0].get();
+                input.setColor(target);
+                // 跟随语句卡片状态（正常蓝色/无效红色），不能依赖父 Table 的初始化颜色：
+                // table.table(Cons) 回调执行时外层 Cell.color 还没应用，table.color 仍可能是白色。
+                inner.update(() -> {
+                    Color current = elem == null ? Pal.logicControl : elem.color;
+                    inner.setColor(current);
+                    input.setColor(current);
+                });
+            }).left();
+            return result[0];
+        }
+    }
+
+    /**
+     * Shared condition editor for if/elif/for/while: the native three-part selector and the
+     * EXPR/OP mode toggle stay on the same row. The row colour follows the statement card
+     * every frame, so invalid-state red marking can never leave a stale snapshot behind.
+     *
+     * @param compactCondition uses narrower condition fields (75px instead of the
+     *                         144px ones vanilla {@code addOp} reserves).
+     */
+    private static void rebuildConditionEditor(LStatement owner, Table table, boolean expressionMode, String expr,
+                                               Cons<String> setExpr, Runnable enterExpr, Runnable leaveExpr,
+                                               ConditionOp op, Cons<ConditionOp> setOp,
+                                               String value, Cons<String> setValue,
+                                               String compare, Cons<String> setCompare,
+                                               boolean compactCondition,
+                                               Runnable rebuild){
+        table.clearChildren();
+        table.left();
+        table.update(() -> {
+            Color target = owner.elem == null ? Pal.logicControl : owner.elem.color;
+            table.setColor(target);
+            for(Element child : table.getChildren()){
+                child.setColor(target);
+            }
+        });
+        if(expressionMode){
+            table.add(new ExpressionEditor(expr, text("condition.expr.hint", "a > b && enabled"), setExpr))
+                .growX().fillX().pad(4f);
+            // 显示当前状态：Expr 模式下按钮显示 "Expr"，点击切回三段式
+            table.button(b -> {
+                b.add(text("condition.expr", "Expr"));
+                b.clicked(() -> {
+                    leaveExpr.run();
+                    rebuild.run();
+                });
+            }, Styles.logict, () -> {}).size(72f, 40f).pad(4f).color(table.color);
+        }else{
+            if(compactCondition){
+                ((SugarStatement)owner).addCompactOp(table, op, result -> {
+                    setOp.get(result);
+                    rebuild.run();
+                }, value, setValue, compare, setCompare);
+            }else{
+                JumpStatement.addOp(owner, table, op, result -> {
+                    setOp.get(result);
+                    rebuild.run();
+                }, value, setValue, compare, setCompare);
+            }
+            // 条件三段式与 op 切换按钮始终保持在同一行；语句块层只负责 For 的固定分组换行。
+            table.button(b -> {
+                b.add(text("condition.expr.back", "op"));
+                b.clicked(() -> {
+                    enterExpr.run();
+                    rebuild.run();
+                });
+            }, Styles.logict, () -> {}).size(48f, 40f).pad(4f).color(table.color);
         }
     }
 
@@ -71,11 +203,22 @@ public final class SugarStatements{
         }
 
         protected void foldControl(Table table){
-            var fold = table.button(collapsed ? mindustry.gen.Icon.rightOpen : mindustry.gen.Icon.downOpen, mindustry.ui.Styles.logici, () -> {
+            // logici draws a plain black glyph with no background, which vanishes on the
+            // tinted statement card; use a visible background with a light icon instead.
+            arc.scene.ui.ImageButton.ImageButtonStyle foldStyle = new arc.scene.ui.ImageButton.ImageButtonStyle(mindustry.ui.Styles.logici);
+            foldStyle.up = mindustry.ui.Styles.logict.up;
+            foldStyle.imageUpColor = arc.graphics.Color.white;
+            var fold = table.button(collapsed ? mindustry.gen.Icon.rightOpen : mindustry.gen.Icon.downOpen, foldStyle, () -> {
                 collapsed = !collapsed;
                 SugarCanvas.refreshCurrent();
-            }).size(30f).padRight(2f).tooltip(text("fold", "Fold block")).get();
+            }).size(34f, 40f).pad(4f).tooltip(text("fold", "Fold block")).get();
             fold.update(() -> fold.getStyle().imageUp = collapsed ? mindustry.gen.Icon.rightOpen : mindustry.gen.Icon.downOpen);
+        }
+
+        /** Adds the fold control at the end of the current row; row breaks are decided by
+         *  the statement layout (e.g. For's fixed two-row grouping). */
+        protected void foldControlRow(Table table){
+            foldControl(table);
         }
 
         @Override
@@ -145,30 +288,51 @@ public final class SugarStatements{
     public static class ForBeginStatement extends BeginStatement{
         public String variable = "i", initial = "0", step = "1", compare = "10";
         public ConditionOp op = ConditionOp.lessThanEq;
+        /** When true, conditionExpr replaces the variable/operator/compare triplet. */
+        public boolean expressionMode;
+        /** When true, the expression is lowered as short-circuit control flow instead of op land/or. */
+        public boolean shortCircuitMode;
+        public String conditionExpr = "true";
 
         @Override
         public void build(Table table){
-            // Vanilla-style "label + input": fields() adds the label and field as separate
-            // left-aligned cells, so nothing gets centered.
+            // 先把前半行和后半行分成独立的子表格，避免条件控件的 growX 参与前面
+            // 字段列宽分配。宽屏合并为一行，窄屏只在步长后换一次行。
+            table.table(content -> {
+                content.left();
+                if(LCanvas.useRows()){
+                    content.table(this::buildForPrefix).left();
+                    content.row();
+                    content.table(this::buildForCondition).growX().fillX().left();
+                }else{
+                    buildForPrefix(content);
+                    buildForCondition(content);
+                }
+            }).growX().fillX().left();
+        }
+
+        private void buildForPrefix(Table table){
             fieldsHint(table, text("for.variable", "variable"), "for.variable", variable, value -> variable = value);
-            row(table);
             fieldsHint(table, text("for.initial", "initial"), "for.initial", initial, value -> initial = value);
-            row(table);
             fieldsHint(table, text("for.step", "step"), "for.step", step, value -> step = value);
-            row(table);
-            // 终止条件：描述 + 三段式（value op compare）
+        }
+
+        private void buildForCondition(Table table){
             table.add(text("for.condition", "until")).padLeft(10).left().self(c -> hint(c, "for.condition"));
-            table.table(this::rebuildCondition);
+            table.table(this::rebuildCondition).growX().fillX().left();
             foldControl(table);
         }
 
         private void rebuildCondition(Table table){
-            table.clearChildren();
-            table.setColor(elem == null ? Pal.logicControl : elem.color);
-            JumpStatement.addOp(this, table, op, result -> {
-                op = result;
-                rebuildCondition(table);
-            }, variable, result -> variable = result, compare, result -> compare = result);
+            rebuildConditionEditor(this, table, expressionMode, conditionExpr,
+                result -> conditionExpr = result,
+                () -> expressionMode = true,
+                () -> expressionMode = false,
+                op, result -> op = result,
+                variable, result -> variable = result,
+                compare, result -> compare = result,
+                true,
+                () -> rebuildCondition(table));
         }
 
         @Override public String name(){ return text("for.begin", "For Begin"); }
@@ -176,34 +340,56 @@ public final class SugarStatements{
 
         @Override
         public void write(StringBuilder out){
-            out.append(collapsed ? "forbeginc " : "forbegin ").append(variable).append(' ').append(optional(initial)).append(' ').append(optional(step)).append(' ')
-                .append(op.name()).append(' ').append(compare).append(' ').append(destIndex);
+            if(expressionMode){
+                out.append(collapsed ? "forbeginc " : "forbegin ").append(variable).append(' ')
+                    .append(optional(initial)).append(' ').append(optional(step)).append(' ')
+                    .append(shortCircuitMode ? "exprsc \"" : "expr \"")
+                    .append(conditionExpr).append("\" ").append(destIndex);
+            }else{
+                out.append(collapsed ? "forbeginc " : "forbegin ").append(variable).append(' ').append(optional(initial)).append(' ').append(optional(step)).append(' ')
+                    .append(op.name()).append(' ').append(compare).append(' ').append(destIndex);
+            }
         }
     }
 
     public static class WhileBeginStatement extends BeginStatement{
         public String value = "true", compare = "false";
         public ConditionOp op = ConditionOp.notEqual;
+        public boolean expressionMode;
+        /** When true, the expression is lowered as short-circuit control flow instead of op land/or. */
+        public boolean shortCircuitMode;
+        public String conditionExpr = "true";
 
         @Override
         public void build(Table table){
             table.add(text("condition", "condition")).self(c -> hint(c, "while.condition"));
-            table.table(this::rebuildCondition);
-            foldControl(table);
+            table.table(this::rebuildCondition).growX().fillX();
+            foldControlRow(table);
         }
 
         private void rebuildCondition(Table table){
-            table.clearChildren();
-            table.setColor(elem == null ? Pal.logicControl : elem.color);
-            JumpStatement.addOp(this, table, op, result -> {
-                op = result;
-                rebuildCondition(table);
-            }, value, result -> value = result, compare, result -> compare = result);
+            rebuildConditionEditor(this, table, expressionMode, conditionExpr,
+                result -> conditionExpr = result,
+                () -> expressionMode = true,
+                () -> expressionMode = false,
+                op, result -> op = result,
+                value, result -> value = result,
+                compare, result -> compare = result,
+                true,
+                () -> rebuildCondition(table));
         }
 
         @Override public String name(){ return text("while.begin", "While Begin"); }
         @Override public String typeName(){ return "WhileBegin"; }
-        @Override public void write(StringBuilder out){ out.append(collapsed ? "whilebeginc " : "whilebegin ").append(value).append(' ').append(op.name()).append(' ').append(compare).append(' ').append(destIndex); }
+        @Override public void write(StringBuilder out){
+            if(expressionMode){
+                out.append(collapsed ? "whilebeginc " : "whilebegin ")
+                    .append(shortCircuitMode ? "exprsc \"" : "expr \"")
+                    .append(conditionExpr).append("\" ").append(destIndex);
+            }else{
+                out.append(collapsed ? "whilebeginc " : "whilebegin ").append(value).append(' ').append(op.name()).append(' ').append(compare).append(' ').append(destIndex);
+            }
+        }
     }
 
     public static class SwitchBeginStatement extends BeginStatement{
@@ -212,8 +398,8 @@ public final class SugarStatements{
         @Override
         public void build(Table table){
             table.add(text("switch.value", "switch")).self(c -> hint(c, "switch.value"));
-            field(table, value, result -> value = result);
-            foldControl(table);
+            field(table, value, result -> value = result).width(85f);
+            foldControlRow(table);
         }
 
         @Override public String name(){ return text("switch.begin", "Switch Start"); }
@@ -235,50 +421,81 @@ public final class SugarStatements{
     public static class IfBeginStatement extends BeginStatement{
         public String value = "true", compare = "false";
         public ConditionOp op = ConditionOp.notEqual;
+        /** When true, conditionExpr replaces the variable/operator/compare triplet. */
+        public boolean expressionMode;
+        /** When true, the expression is lowered as short-circuit control flow instead of op land/or. */
+        public boolean shortCircuitMode;
+        public String conditionExpr = "true";
 
         @Override
         public void build(Table table){
             table.add(text("if.condition", "if")).self(c -> hint(c, "if.condition"));
-            table.table(this::rebuildCondition);
-            foldControl(table);
+            table.table(this::rebuildCondition).growX().fillX();
+            foldControlRow(table);
         }
 
         private void rebuildCondition(Table table){
-            table.clearChildren();
-            table.setColor(elem == null ? Pal.logicControl : elem.color);
-            JumpStatement.addOp(this, table, op, result -> {
-                op = result;
-                rebuildCondition(table);
-            }, value, result -> value = result, compare, result -> compare = result);
+            rebuildConditionEditor(this, table, expressionMode, conditionExpr,
+                result -> conditionExpr = result,
+                () -> expressionMode = true,
+                () -> expressionMode = false,
+                op, result -> op = result,
+                value, result -> value = result,
+                compare, result -> compare = result,
+                true,
+                () -> rebuildCondition(table));
         }
 
         @Override public String name(){ return text("if.begin", "If Begin"); }
         @Override public String typeName(){ return "IfBegin"; }
-        @Override public void write(StringBuilder out){ out.append(collapsed ? "ifbeginc " : "ifbegin ").append(value).append(' ').append(op.name()).append(' ').append(compare).append(' ').append(destIndex); }
+        @Override public void write(StringBuilder out){
+            if(expressionMode){
+                out.append(collapsed ? "ifbeginc " : "ifbegin ")
+                    .append(shortCircuitMode ? "exprsc \"" : "expr \"")
+                    .append(conditionExpr).append("\" ").append(destIndex);
+            }else{
+                out.append(collapsed ? "ifbeginc " : "ifbegin ").append(value).append(' ')
+                    .append(op.name()).append(' ').append(compare).append(' ').append(destIndex);
+            }
+        }
     }
 
     public static class ElseIfStatement extends SugarStatement{
         public String value = "true", compare = "false";
         public ConditionOp op = ConditionOp.notEqual;
+        public boolean expressionMode;
+        /** When true, the expression is lowered as short-circuit control flow instead of op land/or. */
+        public boolean shortCircuitMode;
+        public String conditionExpr = "true";
 
         @Override
         public void build(Table table){
             table.add(text("elif", "elif")).self(c -> hint(c, "elif"));
-            table.table(this::rebuildCondition);
+            table.table(this::rebuildCondition).growX().fillX();
         }
 
         private void rebuildCondition(Table table){
-            table.clearChildren();
-            table.setColor(elem == null ? Pal.logicControl : elem.color);
-            JumpStatement.addOp(this, table, op, result -> {
-                op = result;
-                rebuildCondition(table);
-            }, value, result -> value = result, compare, result -> compare = result);
+            rebuildConditionEditor(this, table, expressionMode, conditionExpr,
+                result -> conditionExpr = result,
+                () -> expressionMode = true,
+                () -> expressionMode = false,
+                op, result -> op = result,
+                value, result -> value = result,
+                compare, result -> compare = result,
+                true,
+                () -> rebuildCondition(table));
         }
 
         @Override public String name(){ return text("elif", "Elif"); }
         @Override public String typeName(){ return "ElseIf"; }
-        @Override public void write(StringBuilder out){ out.append("elif ").append(value).append(' ').append(op.name()).append(' ').append(compare); }
+        @Override public void write(StringBuilder out){
+            if(expressionMode){
+                out.append("elif ").append(shortCircuitMode ? "exprsc \"" : "expr \"")
+                    .append(conditionExpr).append("\"");
+            }else{
+                out.append("elif ").append(value).append(' ').append(op.name()).append(' ').append(compare);
+            }
+        }
     }
 
     public static class ElseStatement extends SugarStatement{
@@ -300,7 +517,7 @@ public final class SugarStatements{
             TextField paramsField = field(table, params, value -> params = value).width(130f).get();
             paramsField.setMessageText(text("func.params.hint", "a,b"));
             table.add(")");
-            foldControl(table);
+            foldControlRow(table);
         }
 
         @Override public String name(){ return text("func.def", "Func Def"); }
@@ -415,14 +632,21 @@ public final class SugarStatements{
         }
         result.initial = optionalValue(tokens[2]);
         result.step = optionalValue(tokens[3]);
-        // Same guard as parseIfBegin: a null/garbage op must fail with a clean error instead
-        // of a raw valueOf NPE. LParser passes no token count, so a stale op name that is
-        // itself a valid ConditionOp is indistinguishable and parses as-is.
-        ConditionOp op = parseConditionOp(tokens[4]);
-        if(op == null) throw new IllegalArgumentException("Invalid forbegin condition operator: '" + tokens[4] + "'");
-        result.op = op;
-        result.compare = tokens[5];
-        result.destIndex = parseDestIndex(tokens[6]);
+if(("expr".equals(tokens[4]) || "exprsc".equals(tokens[4])) && tokens[5].length() >= 2 && tokens[5].charAt(0) == '"'){
+            result.expressionMode = true;
+            result.shortCircuitMode = "exprsc".equals(tokens[4]);
+            result.conditionExpr = stripQuotes(tokens[5]);
+            result.destIndex = parseDestIndex(tokens[6]);
+        }else{
+            // Same guard as parseIfBegin: a null/garbage op must fail with a clean error instead
+            // of a raw valueOf NPE. LParser passes no token count, so a stale op name that is
+            // itself a valid ConditionOp is indistinguishable and parses as-is.
+            ConditionOp op = parseConditionOp(tokens[4]);
+            if(op == null) throw new IllegalArgumentException("Invalid forbegin condition operator: '" + tokens[4] + "'");
+            result.op = op;
+            result.compare = tokens[5];
+            result.destIndex = parseDestIndex(tokens[6]);
+        }
         result.collapsed = collapsed;
         return result;
     }
@@ -433,18 +657,27 @@ public final class SugarStatements{
 
     public static LStatement parseWhileBegin(String[] tokens, boolean collapsed){
         WhileBeginStatement result = new WhileBeginStatement();
-        ConditionOp parsedOp = parseConditionOp(tokens[2]);
-        if(parsedOp != null){
-            result.value = tokens[1];
-            result.op = parsedOp;
-            result.compare = tokens[3];
-            result.destIndex = parseDestIndex(tokens[4]);
+        // "whilebegin expr "<cond>" <destIndex>" — the quoted expression distinguishes it
+        // from a legacy variable literally named "expr".
+        if(("expr".equals(tokens[1]) || "exprsc".equals(tokens[1])) && tokens[2].length() >= 2 && tokens[2].charAt(0) == '"'){
+            result.expressionMode = true;
+            result.shortCircuitMode = "exprsc".equals(tokens[1]);
+            result.conditionExpr = stripQuotes(tokens[2]);
+            result.destIndex = parseDestIndex(tokens[3]);
         }else{
-            // legacy single-value condition: "whilebegin <cond> <destIndex>"
-            result.value = tokens[1];
-            result.op = ConditionOp.notEqual;
-            result.compare = "false";
-            result.destIndex = parseDestIndex(tokens[2]);
+            ConditionOp parsedOp = parseConditionOp(tokens[2]);
+            if(parsedOp != null){
+                result.value = tokens[1];
+                result.op = parsedOp;
+                result.compare = tokens[3];
+                result.destIndex = parseDestIndex(tokens[4]);
+            }else{
+                // legacy single-value condition: "whilebegin <cond> <destIndex>"
+                result.value = tokens[1];
+                result.op = ConditionOp.notEqual;
+                result.compare = "false";
+                result.destIndex = parseDestIndex(tokens[2]);
+            }
         }
         result.collapsed = collapsed;
         return result;
@@ -474,23 +707,41 @@ public final class SugarStatements{
 
     public static LStatement parseIfBegin(String[] tokens, boolean collapsed){
         IfBeginStatement result = new IfBeginStatement();
-        result.value = tokens[1];
-        ConditionOp op = parseConditionOp(tokens[2]);
-        if(op == null) throw new IllegalArgumentException("Invalid ifbegin condition operator: '" + tokens[2] + "'");
-        result.op = op;
-        result.compare = tokens[3];
-        result.destIndex = parseDestIndex(tokens[4]);
+        // "ifbegin expr \"<cond>\" <destIndex>" — require the quoted expression so an old
+        // save whose variable is literally named "expr" is not silently re-parsed as an
+        // expression condition (e.g. "ifbegin expr lessThan 5 4").
+        if(("expr".equals(tokens[1]) || "exprsc".equals(tokens[1])) && tokens.length > 2 && tokens[2].length() >= 2 && tokens[2].charAt(0) == '"'){
+            result.expressionMode = true;
+            result.shortCircuitMode = "exprsc".equals(tokens[1]);
+            result.conditionExpr = stripQuotes(tokens[2]);
+            result.destIndex = parseDestIndex(tokens[3]);
+        }else{
+            result.value = tokens[1];
+            ConditionOp op = parseConditionOp(tokens[2]);
+            if(op == null) throw new IllegalArgumentException("Invalid ifbegin condition operator: '" + tokens[2] + "'");
+            result.op = op;
+            result.compare = tokens[3];
+            result.destIndex = parseDestIndex(tokens[4]);
+        }
         result.collapsed = collapsed;
         return result;
     }
 
     public static LStatement parseElseIf(String[] tokens){
         ElseIfStatement result = new ElseIfStatement();
-        ConditionOp op = parseConditionOp(tokens[2]);
-        if(op == null) throw new IllegalArgumentException("Invalid elif condition operator: '" + tokens[2] + "'");
-        result.value = tokens[1];
-        result.op = op;
-        result.compare = tokens[3];
+        // Same quoted-expression guard as parseIfBegin: a variable named "expr" must not
+        // be silently re-parsed as an expression condition.
+        if(("expr".equals(tokens[1]) || "exprsc".equals(tokens[1])) && tokens.length > 2 && tokens[2].length() >= 2 && tokens[2].charAt(0) == '"'){
+            result.expressionMode = true;
+            result.shortCircuitMode = "exprsc".equals(tokens[1]);
+            result.conditionExpr = stripQuotes(tokens[2]);
+        }else{
+            ConditionOp op = parseConditionOp(tokens[2]);
+            if(op == null) throw new IllegalArgumentException("Invalid elif condition operator: '" + tokens[2] + "'");
+            result.value = tokens[1];
+            result.op = op;
+            result.compare = tokens[3];
+        }
         return result;
     }
 
@@ -542,8 +793,10 @@ public final class SugarStatements{
 
     /** Escapes {@code ~} and {@code "} inside quoted statement tokens (see
      *  {@link #unescapeQuoted}). {@code "} would cut the LParser string token short, and
-     *  {@code ~} must be escaped so the sequence is unambiguous. */
-    private static String escapeQuoted(String value){
+     *  {@code ~} must be escaped so the sequence is unambiguous. Public because the
+     *  decompiler must escape with exactly these rules: any drift between the two sides
+     *  would make recompilation verification silently reject valid recoveries. */
+    public static String escapeQuoted(String value){
         if(value.indexOf('~') < 0 && value.indexOf('"') < 0) return value;
         StringBuilder out = new StringBuilder(value.length() + 8);
         for(int i = 0; i < value.length(); i++){
@@ -561,7 +814,7 @@ public final class SugarStatements{
 
     /** Inverts {@link #escapeQuoted}: {@code ~~} becomes {@code ~}, {@code ~q} becomes
      *  {@code "}; any other {@code ~} sequence is kept literal. */
-    private static String unescapeQuoted(String value){
+    public static String unescapeQuoted(String value){
         if(value.indexOf('~') < 0) return value;
         StringBuilder out = new StringBuilder(value.length());
         for(int i = 0; i < value.length(); i++){

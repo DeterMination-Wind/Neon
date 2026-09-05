@@ -19,6 +19,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
  */
 public final class LogicSugarSettings{
     public static final String settingFuncMode = "logicsugar.funcMode";
+    public static final String settingSwitchStrategy = "logicsugar.switchStrategy";
 
     private LogicSugarSettings(){}
 
@@ -38,9 +39,11 @@ public final class LogicSugarSettings{
 
     private static void build(SettingsMenuDialog.SettingsTable table, boolean includeJumpLines){
         table.pref(new FuncModeSetting(settingFuncMode, "normal"));
+        table.pref(new SwitchStrategySetting(settingSwitchStrategy, "auto"));
         table.pref(new LibraryButtonSetting("logicsugar.funclib"));
         addHideVarsPref(table);
         addBoxSelectPrefs(table);
+        addCompactCardsPref(table);
         if(includeJumpLines){
             logicsugar.assist.JumpLineColor.buildSettings(table);
         }
@@ -53,10 +56,19 @@ public final class LogicSugarSettings{
         });
     }
 
+    /** Checkbox for the compact card layout (zero spacing between statement cards). */
+    static void addCompactCardsPref(SettingsMenuDialog.SettingsTable table){
+        table.checkPref(mindustry.logic.SugarCanvas.settingCompactCards, true, b -> {
+            mindustry.logic.SugarCanvas.refreshLayoutSpace();
+        });
+    }
+
     /** Checkboxes for BoxSelect drag behavior (Ctrl+click copy and Ctrl+drag copy). */
     static void addBoxSelectPrefs(SettingsMenuDialog.SettingsTable table){
         table.checkPref(logicsugar.assist.BoxSelect.settingCtrlClickCopy, true);
         table.checkPref(logicsugar.assist.BoxSelect.settingCtrlDragCopy, true);
+        // 拖动时是否临时把积木间距扩到 10f。关闭可根治视野/虚拟块偏移，但往折叠语句拖语句会更"随机"。
+        table.checkPref(logicsugar.assist.BoxSelect.settingDragExpandSpacing, false);
     }
 
     /** Click-to-cycle picker for the function expansion mode. */
@@ -91,6 +103,42 @@ public final class LogicSugarSettings{
 
         private String label(){
             return Core.bundle.get("logicsugar.settings.funcmode." + current, current);
+        }
+    }
+
+    /** Click-to-cycle picker for the switch lowering strategy (auto / chainOnly). */
+    public static class SwitchStrategySetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final String def;
+        private String current;
+        private Button button;
+
+        public SwitchStrategySetting(String name, String def){
+            super(name);
+            this.def = def;
+            Core.settings.defaults(name, def);
+            this.current = Core.settings.getString(name, def);
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            // single-cell row: the settings table is a grid, so splitting title/control
+            // into two cells would get pushed right past the panel by the wide vanilla rows
+            addDesc(table.table(box -> {
+                box.left();
+                box.add(title).padRight(12f).padLeft(4f);
+                button = box.button(button -> button.add(label()), Styles.logict, () -> {
+                    current = SugarCompiler.SwitchStrategy.parse(current) == SugarCompiler.SwitchStrategy.auto
+                        ? "chainOnly" : "auto";
+                    Core.settings.put(name, current);
+                    button.clearChildren();
+                    button.add(label());
+                }).size(150f, 44f).get();
+            }).minWidth(Math.min(500f, Core.graphics.getWidth() / 1.2f / Scl.scl(1f))).fillX().left().padTop(4f).get());
+            table.row();
+        }
+
+        private String label(){
+            return Core.bundle.get("logicsugar.settings.switchstrategy." + current, current);
         }
     }
 

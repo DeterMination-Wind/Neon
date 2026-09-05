@@ -6,6 +6,7 @@ import arc.func.Prov;
 import arc.input.KeyCode;
 import arc.scene.Element;
 import arc.scene.Group;
+import arc.scene.style.Drawable;
 import arc.scene.ui.Button;
 import arc.scene.ui.Dialog;
 import arc.scene.ui.TextButton;
@@ -26,6 +27,8 @@ import mindustry.ui.dialogs.BaseDialog;
 import mindustry.world.blocks.logic.LogicBlock;
 import logicsugar.FunctionLibrary;
 import logicsugar.FunctionLibraryDialog;
+import logicsugar.assist.expr.ExprCompiler;
+import logicsugar.assist.expr.ExprStatement;
 
 import java.lang.reflect.Field;
 import java.util.IdentityHashMap;
@@ -34,6 +37,7 @@ import java.util.Map;
 
 public class SugarLogicDialog extends LogicDialog{
     private static final String compiledCopyName = "logicsugar-copy-compiled";
+    private static final String originalViewName = "logicsugar-view-original";
     private static final Field consumerField = field(LogicDialog.class, "consumer");
     /** LogicDialog.privileged is package-private and lives in the MindustryX mod class loader at
      *  runtime, so it must be read reflectively (cross-loader package access throws
@@ -48,6 +52,13 @@ public class SugarLogicDialog extends LogicDialog{
     private TextButton cachedCopyButton;
     private Table cachedCopyMenu;
     private Dialog cachedCopyDialog;
+    private TextButton originalViewButton;
+    private Table originalViewMenu;
+    private Dialog originalViewDialog;
+    /** Raw code and recovered source for the optional original/Sugar view toggle. */
+    private String originalCode;
+    private String recoveredSugar;
+    private boolean showingOriginal;
     public LExecutor executor;
     /** When true, a failed compile during a close is passed back to the caller as raw sugar
      *  instead of being dropped. Used by the function library editing session (executor == null),
@@ -87,6 +98,7 @@ public class SugarLogicDialog extends LogicDialog{
             if(menuScanTimer >= 6f){
                 menuScanTimer = 0f;
                 installCompiledCopy();
+                installOriginalView();
             }
         });
     }
@@ -110,23 +122,25 @@ public class SugarLogicDialog extends LogicDialog{
     }
 
     private void installCompiledCopy(){
-        if(cachedCopyButton != null && cachedCopyButton.parent != cachedCopyMenu){
-            // the menu was rebuilt out from under us; rescan from scratch
-            cachedCopyButton = null;
-            cachedCopyMenu = null;
-            cachedCopyDialog = null;
+        if(cachedCopyButton != null && !inSceneTree(cachedCopyButton)){
+            // the menu (and its dialog) was closed and detached; rescan from scratch.
+            // A bare parent check is not enough: an old edit dialog's menu object may
+            // survive hidden in the scene tree, so the stale button keeps matching it.
+            clearCompiledCopyCache();
         }
         if(cachedCopyButton == null){
-            cachedCopyButton = findCopyButton(Core.scene.root);
-            cachedCopyMenu = cachedCopyButton != null && cachedCopyButton.parent instanceof Table menu ? menu : null;
-            cachedCopyDialog = cachedCopyButton != null ? parentDialog(cachedCopyButton) : null;
+            TextButton found = findCopyButton(Core.scene.root);
+            if(found != null){
+                cachedCopyButton = found;
+                cachedCopyMenu = found.parent instanceof Table table ? table : null;
+                cachedCopyDialog = parentDialog(found);
+            }
         }
         if(cachedCopyButton == null || cachedCopyMenu == null || cachedCopyDialog == null) return;
         if(cachedCopyMenu.find(compiledCopyName) != null) return;
 
         Dialog dialog = cachedCopyDialog;
-        cachedCopyMenu.row();
-        cachedCopyMenu.button("@logicsugar.copy.compiled", Icon.copy, Styles.flatt, () -> {
+        installMenuButton(cachedCopyMenu, compiledCopyName, "@logicsugar.copy.compiled", Icon.copy, () -> {
             try{
                 // copy with the session's effective library, so the embedded functions survive
                 Core.app.setClipboardText(SugarCompiler.compile(canvas.save(), SugarCompiler.currentMode(),
@@ -137,14 +151,128 @@ public class SugarLogicDialog extends LogicDialog{
                 dialog.hide();
                 showCompileError(exception, false);
             }
-        }).size(280f, 60f).left().marginLeft(12f).get().name = compiledCopyName;
-        cachedCopyMenu.invalidateHierarchy();
+        });
+    }
+
+    /** Adds a menu action for switching between an inferred Sugar view and the stored mlog. */
+    private void installOriginalView(){
+        if(originalCode == null || recoveredSugar == null) return;
+        if(originalViewButton != null && !inSceneTree(originalViewButton)) clearOriginalViewCache();
+        if(originalViewButton == null){
+            TextButton candidate = findTextButton(Core.scene.root, originalViewName);
+            if(candidate != null){
+                originalViewButton = candidate;
+                originalViewMenu = candidate.parent instanceof Table table ? table : null;
+                originalViewDialog = parentDialog(candidate);
+            }
+        }
+        if(originalViewButton != null) return;
+        // anchor next to the compiled-copy action, which runs first in the periodic scan
+        if(cachedCopyButton == null || cachedCopyMenu == null || cachedCopyDialog == null) return;
+        originalViewButton = installMenuButton(cachedCopyMenu, originalViewName,
+            "@logicsugar.view.original", Icon.edit, this::toggleOriginalView);
+        originalViewMenu = cachedCopyMenu;
+        originalViewDialog = cachedCopyDialog;
+    }
+
+    /** Mounts one named action into a copy-dialog menu and returns its button. Shared by the
+     *  compiled-copy and view-toggle features so their layout stays in lockstep. */
+    private static TextButton installMenuButton(Table menu, String name, String labelKey,
+                                                Drawable icon, Runnable handler){
+        menu.row();
+        TextButton result = menu.button(labelKey, icon, Styles.flatt, handler)
+            .size(280f, 60f).left().marginLeft(12f).get();
+        result.name = name;
+        menu.invalidateHierarchy();
+        return result;
+    }
+
+    private void clearCompiledCopyCache(){
+        cachedCopyButton = null;
+        cachedCopyMenu = null;
+        cachedCopyDialog = null;
+    }
+
+    private void clearOriginalViewCache(){
+        originalViewButton = null;
+        originalViewMenu = null;
+        originalViewDialog = null;
+    }
+
+    private TextButton findTextButton(Element element, String name){
+        if(element instanceof TextButton button && name.equals(button.name)) return button;
+        if(element instanceof Group group){
+            for(Element child : group.getChildren()){
+                TextButton found = findTextButton(child, name);
+                if(found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private void toggleOriginalView(){
+        if(originalCode == null || recoveredSugar == null) return;
+        String target = showingOriginal ? recoveredSugar : originalCode;
+        String snapshot = showingOriginal ? originalCode : recoveredSugar;
+        String current = safeCanvasSave();
+        if(current == null || !current.equals(snapshot)){
+            // the current view was edited: loading the other snapshot would drop those
+            // edits silently, so switching requires explicit confirmation. A failed
+            // save() (uncompilable expression) counts as edited too: an untouched,
+            // verified canvas always serializes successfully.
+            Vars.ui.showConfirm(
+                Core.bundle.get("logicsugar.view.confirm", "Unsaved Changes"),
+                Core.bundle.get("logicsugar.view.confirm.text",
+                    "The current view has unsaved edits. Switching views discards them.\nContinue?"),
+                () -> applyViewSwitch(target));
+            return;
+        }
+        applyViewSwitch(target);
+    }
+
+    /** Canvas serialization for change detection. {@code save()} throws on uncompilable
+     *  expressions; the caller then treats the view as edited, since an untouched,
+     *  verified canvas always serializes successfully. */
+    private String safeCanvasSave(){
+        try{
+            return canvas.save();
+        }catch(Throwable exception){
+            return null;
+        }
+    }
+
+    private void applyViewSwitch(String target){
+        try{
+            canvas.load(target);
+            editable = target;
+            showingOriginal = !showingOriginal;
+            updateOriginalViewButton();
+            if(originalViewDialog != null) originalViewDialog.hide();
+        }catch(Throwable exception){
+            showCompileError(new IllegalArgumentException("Cannot switch logic view: " + exception.getMessage()), false);
+        }
+    }
+
+    private void updateOriginalViewButton(){
+        if(originalViewButton == null) return;
+        originalViewButton.setText(showingOriginal ? "@logicsugar.view.sugar" : "@logicsugar.view.original");
     }
 
     private Dialog parentDialog(Element element){
         Element current = element;
         while(current != null && !(current instanceof Dialog)) current = current.parent;
         return (Dialog)current;
+    }
+
+    /** True when the element is still attached under the scene root (a closed dialog's
+     *  children are detached from the tree, so a cached button there is stale). */
+    private static boolean inSceneTree(Element element){
+        Element current = element;
+        while(current != null){
+            if(current == Core.scene.root) return true;
+            current = current.parent;
+        }
+        return false;
     }
 
     private TextButton findCopyButton(Element element){
@@ -263,6 +391,10 @@ public class SugarLogicDialog extends LogicDialog{
         this.executor = executor;
         discardButton.visible = executor == null;
         this.openedCode = code;
+        this.originalCode = null;
+        this.recoveredSugar = null;
+        this.showingOriginal = false;
+        clearOriginalViewCache();
         // drafts are keyed by Building; drop entries whose processor is gone so the map
         // cannot grow without bound over a session
         drafts.keySet().removeIf(key -> key instanceof Building build && !build.isValid());
@@ -283,9 +415,23 @@ public class SugarLogicDialog extends LogicDialog{
             if(verified){
                 editable = restored;
             }else{
-                // the stored code was changed outside Logic Sugar: show it as-is
-                editable = code;
-                Core.app.post(() -> Vars.ui.showInfoFade("@logicsugar.external.edit"));
+                // First try to infer a Sugar view from pure vanilla mlog. The result is only
+                // used when its normalized recompilation is verified; otherwise retain the
+                // existing raw-code behavior for externally edited programs.
+                SugarDecompiler.Result recovered = SugarDecompiler.decompile(code, privileged);
+                // structured > 0 also keeps the decompiler's carrier branch out of this view:
+                // carrier restoration is checked (and failed) above, so a "carrier" Result here
+                // would be unreachable; requiring at least one real structure is belt-and-braces.
+                if(recovered.verified && recovered.matchedMode != null && !"flat".equals(recovered.matchedMode)
+                    && recovered.structured > 0){
+                    editable = recovered.sugar;
+                    originalCode = code;
+                    recoveredSugar = recovered.sugar;
+                    Core.app.post(() -> Vars.ui.showInfoFade("@logicsugar.recovered"));
+                }else{
+                    editable = code;
+                    Core.app.post(() -> Vars.ui.showInfoFade("@logicsugar.external.edit"));
+                }
             }
         }
         effectiveLibrary = SugarCompiler.effectiveLibrary(code, SugarFunctions.library(), FunctionLibrary.loadText());
@@ -356,10 +502,41 @@ public class SugarLogicDialog extends LogicDialog{
 
     @Override
     public void hide(){
-        cachedCopyButton = null;
-        cachedCopyMenu = null;
-        cachedCopyDialog = null;
+        // 关闭保存路径（hidden -> canvas.save()）没有 try/catch：ExprStatement.write() 对
+        // 从未成功编译的表达式抛 IllegalArgumentException 会冒泡成引擎级报错。这里在
+        // hide 之前预检，命中则提示并阻止关闭——画布原样保留（标红可见），不破坏任何状态。
+        // 仅处理器会话执行预检：函数库会话（executor == null）有自己的错误处理与
+        // "放弃修改"路径（discardLibraryChanges），不应被拦截。
+        if(executor != null && !passThroughSugarOnError && hasUncompilableExpression()){
+            Core.app.post(() -> showCompileError(
+                new IllegalArgumentException(uncompilableExpressionMessage()), true));
+            return;
+        }
+        clearCompiledCopyCache();
+        clearOriginalViewCache();
         super.hide();
+    }
+
+    /** 画布上是否存在从未成功编译的表达式（ExprStatement.write 会因此抛错）。 */
+    private boolean hasUncompilableExpression(){
+        return uncompilableExpressionMessage() != null;
+    }
+
+    /** 第一个不可编译表达式的错误消息；全部合法时返回 null。
+     *  与 ExprStatement.write() 完全同口径：同样使用 functionChecker() 校验函数名，
+     *  否则未定义用户函数（如 noSuch(a)）会在预检中被漏过、保存时才抛错。 */
+    private String uncompilableExpressionMessage(){
+        if(canvas == null || canvas.statements == null) return null;
+        for(Element child : canvas.statements.getChildren()){
+            if(child instanceof LCanvas.StatementElem elem && elem.st instanceof ExprStatement expr){
+                try{
+                    ExprCompiler.compile(expr.dest, expr.expr, ExprStatement.functionChecker());
+                }catch(Exception e){
+                    return e.getMessage();
+                }
+            }
+        }
+        return null;
     }
 
     /** Library-file editing sessions only: close the editor without saving, so a user who

@@ -2,6 +2,7 @@ package mindustry.logic;
 
 import arc.struct.Seq;
 import logicsugar.assist.expr.ExprCompiler;
+import logicsugar.assist.expr.ShortCircuitCompiler;
 import mindustry.logic.LStatements.GetLinkStatement;
 import mindustry.logic.LStatements.InvalidStatement;
 import mindustry.logic.LStatements.JumpStatement;
@@ -268,8 +269,12 @@ public final class SugarFunctions{
             LStatement statement = statements.get(i);
             if(statement instanceof FuncCallStatement call){
                 resolveCall(call, null, set, i);
+                resolveStatementExprCalls(call, null, set, i);
             }else if(statement instanceof ReturnStatement){
                 throw error("return", i, "is outside a function");
+            }else{
+                // 条件表达式等文本中的调用也要进调用图（递归检测 / reachability / 参数校验）
+                resolveStatementExprCalls(statement, null, set, i);
             }
         }
         for(Function function : set.functions.values()){
@@ -277,6 +282,9 @@ public final class SugarFunctions{
                 LStatement statement = function.body.get(i);
                 if(statement instanceof FuncCallStatement call){
                     resolveCall(call, function, set, i);
+                    resolveStatementExprCalls(call, function, set, i);
+                }else{
+                    resolveStatementExprCalls(statement, function, set, i);
                 }
             }
         }
@@ -868,6 +876,39 @@ public final class SugarFunctions{
         (owner == null ? set.mainCalls : owner.callees).add(call.name);
     }
 
+    /**
+     * 登记语句文本（return 表达式 / funccall 实参 / 条件表达式）里的函数调用。
+     * 这些调用藏在表达式文本中，只有 resolveCall 收集的显式 funccall 语句是看不到的——
+     * 不登记会导致：normal 模式漏 hoist（函数体缺失）、隐式递归检测不到（return foo(x)
+     * 自调用在展开时无限循环）、参数个数错误到运行期才暴露。
+     */
+    private static void resolveStatementExprCalls(LStatement statement, Function owner, FunctionSet set, int index){
+        if(statement instanceof ReturnStatement ret){
+            registerExprCalls(ret.expr, owner, set, index);
+        }else if(statement instanceof FuncCallStatement call){
+            // 嵌套调用：g(foo(x)) —— foo 也要进调用图
+            registerExprCalls(call.args, owner, set, index);
+        }else if(statement instanceof IfBeginStatement ifBegin && ifBegin.expressionMode){
+            registerExprCalls(ifBegin.conditionExpr, owner, set, index);
+        }else if(statement instanceof ElseIfStatement elseIf && elseIf.expressionMode){
+            registerExprCalls(elseIf.conditionExpr, owner, set, index);
+        }else if(statement instanceof WhileBeginStatement whileBegin && whileBegin.expressionMode){
+            registerExprCalls(whileBegin.conditionExpr, owner, set, index);
+        }else if(statement instanceof ForBeginStatement forBegin && forBegin.expressionMode){
+            registerExprCalls(forBegin.conditionExpr, owner, set, index);
+        }
+    }
+
+    private static void registerExprCalls(String expr, Function owner, FunctionSet set, int index){
+        for(ExprCompiler.CallSite site : ExprCompiler.collectCalls(expr)){
+            FuncCallStatement stmt = new FuncCallStatement();
+            stmt.name = site.name;
+            stmt.args = site.args;
+            stmt.result = "_"; // 表达式里的调用必须能返回一个值
+            resolveCall(stmt, owner, set, index);
+        }
+    }
+
     /** Localizes an "undefined function" error when the library state explains the miss.
      *  An otherwise-valid library keeps the plain message (a function really does not
      *  exist); a missing or damaged library points the user at the repair path. */
@@ -1037,6 +1078,55 @@ public final class SugarFunctions{
                 rewritten.add(copy);
                 continue;
             }
+            if(statement instanceof IfBeginStatement ifBegin && ifBegin.expressionMode){
+                IfBeginStatement copy = new IfBeginStatement();
+                copy.value = ifBegin.value;
+                copy.compare = ifBegin.compare;
+                copy.op = ifBegin.op;
+                copy.expressionMode = true;
+                copy.shortCircuitMode = ifBegin.shortCircuitMode;
+                copy.conditionExpr = rewriteExpression(ifBegin.conditionExpr, map);
+                copy.destIndex = ifBegin.destIndex;
+                rewritten.add(copy);
+                continue;
+            }
+            if(statement instanceof ElseIfStatement elseIf && elseIf.expressionMode){
+                ElseIfStatement copy = new ElseIfStatement();
+                copy.value = elseIf.value;
+                copy.compare = elseIf.compare;
+                copy.op = elseIf.op;
+                copy.expressionMode = true;
+                copy.shortCircuitMode = elseIf.shortCircuitMode;
+                copy.conditionExpr = rewriteExpression(elseIf.conditionExpr, map);
+                rewritten.add(copy);
+                continue;
+            }
+            if(statement instanceof WhileBeginStatement whileBegin && whileBegin.expressionMode){
+                WhileBeginStatement copy = new WhileBeginStatement();
+                copy.value = whileBegin.value;
+                copy.compare = whileBegin.compare;
+                copy.op = whileBegin.op;
+                copy.expressionMode = true;
+                copy.shortCircuitMode = whileBegin.shortCircuitMode;
+                copy.conditionExpr = rewriteExpression(whileBegin.conditionExpr, map);
+                copy.destIndex = whileBegin.destIndex;
+                rewritten.add(copy);
+                continue;
+            }
+            if(statement instanceof ForBeginStatement forBegin && forBegin.expressionMode){
+                ForBeginStatement copy = new ForBeginStatement();
+                copy.variable = forBegin.variable;
+                copy.initial = forBegin.initial;
+                copy.step = forBegin.step;
+                copy.compare = forBegin.compare;
+                copy.op = forBegin.op;
+                copy.expressionMode = true;
+                copy.shortCircuitMode = forBegin.shortCircuitMode;
+                copy.conditionExpr = rewriteExpression(forBegin.conditionExpr, map);
+                copy.destIndex = forBegin.destIndex;
+                rewritten.add(copy);
+                continue;
+            }
             StringBuilder text = new StringBuilder();
             statement.write(text);
             String rewrittenText = rewriteTokens(text.toString(), map);
@@ -1167,7 +1257,7 @@ public final class SugarFunctions{
      * mode, {@code __ls_i_<id>_} per inline copy). Call sites expand recursively.
      */
     public static void lower(Seq<LStatement> statements, String prefix, FunctionSet functions, FuncMode mode,
-                             StringBuilder out, CallIds ids, String funcName){
+                             StringBuilder out, CallIds ids, String funcName, SugarCompiler.SwitchStrategy strategy){
         int[] switchOwner = switchOwners(statements);
         int[] breakOwner = breakOwners(statements);
         int[] continueOwner = continueOwners(statements);
@@ -1196,22 +1286,45 @@ public final class SugarFunctions{
             if(statement instanceof ForBeginStatement begin){
                 if(!begin.initial.isEmpty()) out.append("set ").append(begin.variable).append(' ').append(begin.initial).append('\n');
                 out.append(label(prefix, "for_check_", i)).append(":\n");
-                out.append("jump ").append(label(prefix, "for_body_", i)).append(' ').append(begin.op.name()).append(' ')
-                    .append(begin.variable).append(' ').append(begin.compare).append('\n');
-                out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
-                out.append(label(prefix, "for_body_", i)).append(":\n");
-            }else if(statement instanceof WhileBeginStatement begin){
-                out.append("jump ").append(label(prefix, "while_body_", i)).append(' ').append(begin.op.name()).append(' ')
-                    .append(begin.value).append(' ').append(begin.compare).append('\n');
-                out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
-                out.append(label(prefix, "while_body_", i)).append(":\n");
-            }else if(statement instanceof SwitchBeginStatement begin){
-                for(int at = i + 1; at < begin.destIndex; at++){
-                    if(switchOwner[at] == i && statements.get(at) instanceof CaseStatement item){
-                        out.append("jump ").append(label(prefix, "case_", at)).append(" equal ").append(begin.value).append(' ').append(item.value).append('\n');
+                if(begin.expressionMode){
+                    String bodyLabel = label(prefix, "for_body_", i);
+                    String exitLabel = label(prefix, "stmt_", begin.destIndex + 1);
+                    if(begin.shortCircuitMode){
+                        emitShortCircuitCondition(begin.conditionExpr, prefix, i, bodyLabel, exitLabel, out);
+                        out.append(bodyLabel).append(":\n");
+                    }else{
+                        String condition = emitConditionExpression(begin.conditionExpr, prefix, i, out, functions, mode, ids, strategy);
+                        out.append("jump ").append(bodyLabel).append(" notEqual ").append(condition).append(" 0\n");
                     }
+                }else{
+                    out.append("jump ").append(label(prefix, "for_body_", i)).append(' ').append(begin.op.name()).append(' ')
+                        .append(begin.variable).append(' ').append(begin.compare).append('\n');
                 }
-                out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
+                if(!begin.shortCircuitMode || !begin.expressionMode){
+                    out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
+                    out.append(label(prefix, "for_body_", i)).append(":\n");
+                }
+            }else if(statement instanceof WhileBeginStatement begin){
+                if(begin.expressionMode){
+                    String bodyLabel = label(prefix, "while_body_", i);
+                    String exitLabel = label(prefix, "stmt_", begin.destIndex + 1);
+                    if(begin.shortCircuitMode){
+                        emitShortCircuitCondition(begin.conditionExpr, prefix, i, bodyLabel, exitLabel, out);
+                        out.append(bodyLabel).append(":\n");
+                    }else{
+                        String condition = emitConditionExpression(begin.conditionExpr, prefix, i, out, functions, mode, ids, strategy);
+                        out.append("jump ").append(bodyLabel).append(" notEqual ").append(condition).append(" 0\n");
+                        out.append("jump ").append(exitLabel).append(" always x false\n");
+                        out.append(bodyLabel).append(":\n");
+                    }
+                }else{
+                    out.append("jump ").append(label(prefix, "while_body_", i)).append(' ').append(begin.op.name()).append(' ')
+                        .append(begin.value).append(' ').append(begin.compare).append('\n');
+                    out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
+                    out.append(label(prefix, "while_body_", i)).append(":\n");
+                }
+            }else if(statement instanceof SwitchBeginStatement begin){
+                emitSwitch(statements, i, begin, switchOwner, prefix, strategy, out);
             }else if(statement instanceof CaseStatement){
                 if(switchOwner[i] < 0) throw error("case", i, "is outside a switch");
                 out.append(label(prefix, "case_", i)).append(":\n");
@@ -1219,10 +1332,21 @@ public final class SugarFunctions{
                 String target = nextBranch[i] >= 0
                     ? label(prefix, "if_branch_", nextBranch[i])
                     : label(prefix, "stmt_", begin.destIndex + 1);
-                ConditionOp negated = negate(begin.op);
-                if(negated != null){
-                    out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
-                        .append(begin.value).append(' ').append(begin.compare).append('\n');
+                if(begin.expressionMode){
+                    if(begin.shortCircuitMode){
+                        String bodyLabel = label(prefix, "if_body_", i);
+                        emitShortCircuitCondition(begin.conditionExpr, prefix, i, bodyLabel, target, out);
+                        out.append(bodyLabel).append(":\n");
+                    }else{
+                        String condition = emitConditionExpression(begin.conditionExpr, prefix, i, out, functions, mode, ids, strategy);
+                        out.append("jump ").append(target).append(" equal ").append(condition).append(" 0\n");
+                    }
+                }else{
+                    ConditionOp negated = negate(begin.op);
+                    if(negated != null){
+                        out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
+                            .append(begin.value).append(' ').append(begin.compare).append('\n');
+                    }
                 }
             }else if(statement instanceof ElseIfStatement item){
                 int owner = ifOwner[i];
@@ -1233,10 +1357,21 @@ public final class SugarFunctions{
                 String target = nextBranch[i] >= 0
                     ? label(prefix, "if_branch_", nextBranch[i])
                     : label(prefix, "stmt_", end + 1);
-                ConditionOp negated = negate(item.op);
-                if(negated != null){
-                    out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
-                        .append(item.value).append(' ').append(item.compare).append('\n');
+                if(item.expressionMode){
+                    if(item.shortCircuitMode){
+                        String bodyLabel = label(prefix, "if_body_", i);
+                        emitShortCircuitCondition(item.conditionExpr, prefix, i, bodyLabel, target, out);
+                        out.append(bodyLabel).append(":\n");
+                    }else{
+                        String condition = emitConditionExpression(item.conditionExpr, prefix, i, out, functions, mode, ids, strategy);
+                        out.append("jump ").append(target).append(" equal ").append(condition).append(" 0\n");
+                    }
+                }else{
+                    ConditionOp negated = negate(item.op);
+                    if(negated != null){
+                        out.append("jump ").append(target).append(' ').append(negated.name()).append(' ')
+                            .append(item.value).append(' ').append(item.compare).append('\n');
+                    }
                 }
             }else if(statement instanceof ElseStatement){
                 int owner = ifOwner[i];
@@ -1278,10 +1413,10 @@ public final class SugarFunctions{
                         .append(jump.value).append(' ').append(jump.compare).append('\n');
                 }
             }else if(statement instanceof FuncCallStatement call){
-                expandCall(call, functions, mode, out, ids);
+                expandCall(call, functions, mode, out, ids, strategy);
             }else if(statement instanceof ReturnStatement){
                 if(funcName == null) throw error("return", i, "is outside a function");
-                emitReturn((ReturnStatement)statement, prefix, mode, out, funcName);
+                emitReturn((ReturnStatement)statement, prefix, mode, out, funcName, functions, ids, strategy);
             }else if(statement instanceof FuncDefStatement){
                 throw error("funcdef", i, "cannot be lowered; function definitions are expanded at call sites");
             }else{
@@ -1292,11 +1427,98 @@ public final class SugarFunctions{
         if(statementLabels[statements.size]) out.append(label(prefix, "stmt_", statements.size)).append(":\n");
     }
 
-    private static void emitReturn(ReturnStatement ret, String prefix, FuncMode mode, StringBuilder out, String funcName){
+    /** Emits a short-circuit predicate without materializing an eager land/or temporary. */
+    private static void emitShortCircuitCondition(String expression, String prefix, int statementIndex,
+                                                  String trueLabel, String falseLabel, StringBuilder out){
+        ShortCircuitCompiler.Predicate predicate;
+        try{
+            predicate = ShortCircuitCompiler.parse(expression);
+        }catch(RuntimeException exception){
+            throw new IllegalArgumentException("Invalid short-circuit condition expression '" + expression + "': " + exception.getMessage());
+        }
+        String labelPrefix = "__ls_" + prefix.replace('-', '_') + "sc_" + statementIndex + "_";
+        ShortCircuitCompiler.emitPredicate(predicate, trueLabel, falseLabel, out,
+            ShortCircuitCompiler.labels(labelPrefix));
+    }
+
+    /** Compiles an if/elif expression into a compiler-private boolean temporary. */
+    private static String emitConditionExpression(String expression, String prefix, int statementIndex, StringBuilder out,
+                                                  FunctionSet functions, FuncMode mode, CallIds ids,
+                                                  SugarCompiler.SwitchStrategy strategy){
+        List<ExprCompiler.Line> ops;
+        String base = "__ls_cond_" + prefix.replace('-', '_') + statementIndex;
+        String dest = base;
+        try{
+            ops = ExprCompiler.compile(dest, expression);
+        }catch(Exception e){
+            throw new IllegalArgumentException("Invalid condition expression '" + expression + "': " + e.getMessage());
+        }
+        for(ExprCompiler.Line line : ops){
+            if(line instanceof ExprCompiler.SensorLine sensor){
+                String a = renameConditionTemp(sensor.a, prefix, statementIndex);
+                String b = renameConditionTemp(sensor.b, prefix, statementIndex);
+                String d = renameConditionTemp(sensor.dest, prefix, statementIndex);
+                out.append("sensor ").append(d).append(' ').append(a).append(' ').append(b).append('\n');
+            }else if(line instanceof ExprCompiler.CallLine call){
+                // 函数调用展开：实参与结果 temp 都要进入条件命名空间
+                FuncCallStatement stmt = new FuncCallStatement();
+                stmt.name = call.name;
+                StringBuilder args = new StringBuilder();
+                for(String value : ExprCompiler.splitValues(call.args)){
+                    if(args.length() > 0) args.append(", ");
+                    args.append(renameConditionTemp(value, prefix, statementIndex));
+                }
+                stmt.args = args.toString();
+                stmt.result = renameConditionTemp(call.dest, prefix, statementIndex);
+                expandCall(stmt, functions, mode, out, ids, strategy);
+            }else{
+                ExprCompiler.OpLine op = (ExprCompiler.OpLine)line;
+                String a = renameConditionTemp(op.a, prefix, statementIndex);
+                String b = renameConditionTemp(op.b, prefix, statementIndex);
+                String d = renameConditionTemp(op.dest, prefix, statementIndex);
+                out.append("op ").append(op.op).append(' ').append(d).append(' ').append(a).append(' ').append(b).append('\n');
+            }
+        }
+        return dest;
+    }
+
+    private static String renameConditionTemp(String value, String prefix, int statementIndex){
+        if(!ExprCompiler.isTemp(value)) return value;
+        // ExprCompiler may reuse the destination temporary as an operand; preserve the
+        // generated condition's base name and append the temporary suffix only for _0+.
+        return "__ls_cond_" + prefix.replace('-', '_') + statementIndex
+            + ("_0".equals(value) ? "" : value.substring(1));
+    }
+
+    private static void emitReturn(ReturnStatement ret, String prefix, FuncMode mode, StringBuilder out, String funcName,
+                                   FunctionSet functions, CallIds ids, SugarCompiler.SwitchStrategy strategy){
         if(!ret.expr.isEmpty()){
             try{
-                List<ExprCompiler.OpLine> ops = ExprCompiler.compile("__ls_func_" + funcName + "_result", ret.expr);
-                for(ExprCompiler.OpLine op : ops) out.append(op.toText()).append('\n');
+                List<ExprCompiler.Line> ops = ExprCompiler.compile("__ls_func_" + funcName + "_result", ret.expr);
+                for(ExprCompiler.Line line : ops){
+                    if(line instanceof ExprCompiler.CallLine call){
+                        FuncCallStatement stmt = new FuncCallStatement();
+                        stmt.name = call.name;
+                        StringBuilder args = new StringBuilder();
+                        for(String value : ExprCompiler.splitValues(call.args)){
+                            if(args.length() > 0) args.append(", ");
+                            args.append(renameReturnTemp(value, funcName));
+                        }
+                        stmt.args = args.toString();
+                        stmt.result = renameReturnTemp(call.dest, funcName);
+                        expandCall(stmt, functions, mode, out, ids, strategy);
+                    }else if(line instanceof ExprCompiler.SensorLine sensor){
+                        out.append("sensor ").append(renameReturnTemp(sensor.dest, funcName)).append(' ')
+                            .append(renameReturnTemp(sensor.a, funcName)).append(' ')
+                            .append(renameReturnTemp(sensor.b, funcName)).append('\n');
+                    }else{
+                        ExprCompiler.OpLine op = (ExprCompiler.OpLine)line;
+                        out.append("op ").append(op.op).append(' ')
+                            .append(renameReturnTemp(op.dest, funcName)).append(' ')
+                            .append(renameReturnTemp(op.a, funcName)).append(' ')
+                            .append(renameReturnTemp(op.b, funcName)).append('\n');
+                    }
+                }
             }catch(Exception e){
                 throw new IllegalArgumentException("Invalid return expression '" + ret.expr + "': " + e.getMessage());
             }
@@ -1309,8 +1531,20 @@ public final class SugarFunctions{
         }
     }
 
+    /**
+     * return 表达式编译生成的临时变量进入函数命名空间（__ls_rt_&lt;func&gt;_&lt;n&gt;）。
+     * 修复上游 bug：表达式 temp 在 lower 阶段现场生成，analyze 阶段的 prepBody 来不及改名，
+     * 裸 _0 会与调用者表达式链中"跨调用存活"的 _0 冲突（函数体覆盖链 temp → 结果错值）。
+     * 前缀与 prepBody 的 __ls_f_&lt;func&gt;_&lt;n&gt; 错开，避免函数体内已有语句的 mangle 编号冲突。
+     */
+    private static String renameReturnTemp(String value, String funcName){
+        if(!ExprCompiler.isTemp(value)) return value;
+        return "__ls_rt_" + funcName + "_" + value.substring(1);
+    }
+
     /** Expands one call site. */
-    private static void expandCall(FuncCallStatement call, FunctionSet functions, FuncMode mode, StringBuilder out, CallIds ids){
+    private static void expandCall(FuncCallStatement call, FunctionSet functions, FuncMode mode, StringBuilder out, CallIds ids,
+                                   SugarCompiler.SwitchStrategy strategy){
         Function target = functions.resolve(call.name);
         if(target == null){
             throw new IllegalArgumentException("call to undefined function '" + call.name + "'");
@@ -1320,9 +1554,9 @@ public final class SugarFunctions{
             int id = ids.next();
             String prefix = "i_" + id + "_";
             for(int k = 0; k < args.size(); k++){
-                emitArg(out, args.get(k), target.bindingName(k));
+                emitArg(out, args.get(k), target.bindingName(k), functions, mode, ids, strategy);
             }
-            lower(target.body, prefix, functions, mode, out, ids, target.name);
+            lower(target.body, prefix, functions, mode, out, ids, target.name, strategy);
             // Value returns jump here so the caller-side result copy still runs;
             // void returns and jumps to the function end skip it via the exit label.
             out.append("__ls_").append(prefix).append("ret:\n");
@@ -1332,7 +1566,7 @@ public final class SugarFunctions{
             out.append("__ls_").append(prefix).append("exit:\n");
         }else{
             for(int k = 0; k < args.size(); k++){
-                emitArg(out, args.get(k), target.bindingName(k));
+                emitArg(out, args.get(k), target.bindingName(k), functions, mode, ids, strategy);
             }
             out.append("set ").append(target.retName()).append(" @counter\n");
             out.append("op add ").append(target.retName()).append(' ').append(target.retName()).append(" 2\n");
@@ -1343,20 +1577,158 @@ public final class SugarFunctions{
         }
     }
 
+    /** 展开表达式链中的一行函数调用（CallLine 的实参已是编译后的值名）。 */
+    private static void expandCallLine(ExprCompiler.CallLine call, FunctionSet functions, FuncMode mode, StringBuilder out, CallIds ids,
+                                       SugarCompiler.SwitchStrategy strategy){
+        FuncCallStatement stmt = new FuncCallStatement();
+        stmt.name = call.name;
+        stmt.args = call.args;
+        stmt.result = call.dest;
+        expandCall(stmt, functions, mode, out, ids, strategy);
+    }
+
     /** Compiles one argument expression and binds it to the parameter. */
-    private static void emitArg(StringBuilder out, String arg, String param){
-        List<ExprCompiler.OpLine> ops;
+    private static void emitArg(StringBuilder out, String arg, String param, FunctionSet functions, FuncMode mode, CallIds ids,
+                                SugarCompiler.SwitchStrategy strategy){
+        List<ExprCompiler.Line> ops;
         try{
             ops = ExprCompiler.compile("_0", arg);
         }catch(Exception e){
             throw new IllegalArgumentException("Invalid argument expression '" + arg + "': " + e.getMessage());
         }
-        if(ops.size() == 1 && ops.get(0).op.equals("add") && ops.get(0).b.equals("0")){
-            out.append("set ").append(param).append(' ').append(ops.get(0).a).append('\n');
+        if(ops.size() == 1 && ops.get(0) instanceof ExprCompiler.OpLine op
+            && op.op.equals("add") && op.b.equals("0")){
+            out.append("set ").append(param).append(' ').append(op.a).append('\n');
             return;
         }
-        for(ExprCompiler.OpLine op : ops) out.append(op.toText()).append('\n');
+        for(ExprCompiler.Line line : ops){
+            if(line instanceof ExprCompiler.CallLine call){
+                expandCallLine(call, functions, mode, out, ids, strategy);
+            }else{
+                out.append(line.toText()).append('\n');
+            }
+        }
         out.append("set ").append(param).append(" _0\n");
+    }
+
+    // ===== switch dispatch: comparison chain vs @counter jump table =======================
+
+    /** Hard cap on the jump-table slot span; wider integer ranges keep the comparison chain. */
+    static final int MAX_TABLE_SPAN = 255;
+
+    /** One direct-child {@code case} of a switch under lowering. */
+    private static final class SwitchCase{
+        final int index;
+        final String text;
+        final Double value; // null when the case value is not an integer constant
+
+        SwitchCase(int index, String text, Double value){
+            this.index = index;
+            this.text = text;
+            this.value = value;
+        }
+    }
+
+    /** A qualified jump table: slot space and each slot's case statement (-1 = hole). */
+    private static final class SwitchTable{
+        final double min;
+        final int[] slots;
+
+        SwitchTable(double min, int[] slots){
+            this.min = min;
+            this.slots = slots;
+        }
+
+        int span(){ return slots.length; }
+
+        int cost(){
+            return (min != 0 ? 1 : 0) // op sub normalization
+                + 2                    // bounds guards
+                + 1                    // @counter dispatch
+                + slots.length;        // slot rows
+        }
+    }
+
+    /**
+     * Emits the switch dispatch header. Two shapes (labels are free; only real instructions
+     * cost, mirroring Bang's is_solid cost model):
+     * <ul>
+     *   <li>comparison chain — one {@code jump equal} per case plus the default jump: N+1;</li>
+     *   <li>{@code @counter} jump table — [op sub] + two bounds guards + dispatch +
+     *       span unconditional slot rows.</li>
+     * </ul>
+     * The table deduplicates repeated case values into single slots, so duplication-heavy
+     * switches win on cost. Equal lengths prefer the table. A table requires every case
+     * value to be an integer constant with span <= {@link #MAX_TABLE_SPAN}; anything else,
+     * or the {@code chainOnly} strategy, keeps the chain (byte-identical to pre-2.3.1).
+     * Case labels and bodies still come from the case path in declaration order, so
+     * fall-through, break, nesting and in-function semantics are unchanged.
+     */
+    private static void emitSwitch(Seq<LStatement> statements, int index, SwitchBeginStatement begin,
+                                   int[] switchOwner, String prefix, SugarCompiler.SwitchStrategy strategy, StringBuilder out){
+        List<SwitchCase> cases = new ArrayList<>();
+        for(int at = index + 1; at < begin.destIndex; at++){
+            if(switchOwner[at] == index && statements.get(at) instanceof CaseStatement item){
+                cases.add(new SwitchCase(at, item.value, finiteNumber(item.value)));
+            }
+        }
+
+        SwitchTable table = switchTable(cases);
+        int chainCost = cases.size() + 1;
+        if(strategy == SugarCompiler.SwitchStrategy.chainOnly || table == null || table.cost() > chainCost){
+            for(SwitchCase item : cases){
+                out.append("jump ").append(label(prefix, "case_", item.index)).append(" equal ")
+                    .append(begin.value).append(' ').append(item.text).append('\n');
+            }
+            out.append("jump ").append(label(prefix, "stmt_", begin.destIndex + 1)).append(" always x false\n");
+            return;
+        }
+
+        int span = table.span();
+        String idxVar;
+        if(table.min != 0){
+            idxVar = "__ls_sw_" + prefix + index;
+            out.append("op sub ").append(idxVar).append(' ').append(begin.value).append(' ')
+                .append(formatNumber(table.min)).append('\n');
+        }else{
+            idxVar = begin.value; // min == 0: the source value indexes the table directly
+        }
+        String defaultLabel = label(prefix, "stmt_", begin.destIndex + 1);
+        out.append("jump ").append(defaultLabel).append(" lessThan ").append(idxVar).append(" 0\n");
+        out.append("jump ").append(defaultLabel).append(" greaterThan ").append(idxVar).append(' ').append(span - 1).append('\n');
+        out.append("op add @counter @counter ").append(idxVar).append('\n');
+        for(int slot = 0; slot < span; slot++){
+            int caseIndex = table.slots[slot];
+            out.append("jump ").append(caseIndex < 0 ? defaultLabel : label(prefix, "case_", caseIndex))
+                .append(" always x false\n");
+        }
+    }
+
+    /**
+     * Plans a jump table for the given cases, or null when none qualifies: every value must
+     * be an integer constant and (max-min)+1 must fit {@link #MAX_TABLE_SPAN}. Slot k holds
+     * the statement index of the first declared case owning value min+k, or -1 for a hole
+     * (that slot falls to the switch exit at runtime).
+     */
+    private static SwitchTable switchTable(List<SwitchCase> cases){
+        if(cases.isEmpty()) return null;
+        double min = Double.POSITIVE_INFINITY, max = Double.NEGATIVE_INFINITY;
+        for(SwitchCase item : cases){
+            Double value = item.value;
+            if(value == null || value != Math.rint(value) || Math.abs(value) > 9007199254740992d) return null;
+            min = Math.min(min, value);
+            max = Math.max(max, value);
+        }
+        long low = (long)min, high = (long)max;
+        long spanL = high - low + 1;
+        if(spanL < 1 || spanL > MAX_TABLE_SPAN) return null;
+        int[] slots = new int[(int)spanL];
+        java.util.Arrays.fill(slots, -1);
+        for(SwitchCase item : cases){
+            int slot = (int)((long)(double)item.value - low); // integral by the rint check above
+            if(slots[slot] < 0) slots[slot] = item.index;     // repeated values hit the first label
+        }
+        return new SwitchTable(low, slots);
     }
 
     private static String label(String prefix, String kind, int id){
@@ -1672,6 +2044,16 @@ public final class SugarFunctions{
             int count = counts.getOrDefault(token, 0) + amount;
             if(count <= 0) counts.remove(token);
             else counts.put(token, count);
+        }
+        // funccall 实参在 write() 文本里是带引号的 token（"_0"），isTemporary 匹配不到；
+        // 实参里的 temp 必须计数，否则优化器会把实参求值 op 当死代码删除
+        if(statement instanceof FuncCallStatement call){
+            for(String token : call.args.split("[,\\s]+")){
+                if(!isTemporary(token)) continue;
+                int count = counts.getOrDefault(token, 0) + amount;
+                if(count <= 0) counts.remove(token);
+                else counts.put(token, count);
+            }
         }
     }
 

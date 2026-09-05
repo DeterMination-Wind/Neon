@@ -11,6 +11,7 @@ import arc.scene.Group;
 import arc.scene.event.Touchable;
 import arc.scene.style.BaseDrawable;
 import arc.scene.style.Drawable;
+import arc.scene.ui.ImageButton;
 import arc.scene.ui.Label;
 import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.WidgetGroup;
@@ -18,7 +19,9 @@ import arc.struct.Seq;
 import arc.struct.SnapshotSeq;
 import arc.util.Tmp;
 import mindustry.Vars;
+import mindustry.gen.Icon;
 import mindustry.gen.Tex;
+import mindustry.ui.Styles;
 import mindustry.logic.LStatements.InvalidStatement;
 import mindustry.logic.LStatements.JumpStatement;
 import mindustry.logic.LStatements.PrintStatement;
@@ -27,7 +30,9 @@ import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.logic.SugarStatements.CaseStatement;
 import mindustry.logic.SugarStatements.ElseIfStatement;
 import mindustry.logic.SugarStatements.ElseStatement;
+import mindustry.logic.SugarStatements.ForBeginStatement;
 import mindustry.logic.SugarStatements.IfBeginStatement;
+import mindustry.logic.SugarStatements.WhileBeginStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import logicsugar.assist.BoxSelect;
 import logicsugar.assist.JumpLineColor;
@@ -74,7 +79,13 @@ public class SugarCanvas extends LCanvas{
 
     @Override
     public void load(String asm){
+        BoxSelect.canvasWillChange(this);
         super.load(asm);
+        BoxSelect.canvasDidChange(this);
+        // super.load() 先清空了 jumpLayer（statements.jumps.clear()），结构引导线层
+        // 随之被移除；installGuideLayer 只在 rebuild() 里调用（重开才触发），所以
+        // 这里必须重装，否则粘贴导入后所有结构竖线消失且新增/删除语句都无法恢复。
+        installGuideLayer();
         ExprHook.foldAll(this);
     }
 
@@ -96,6 +107,7 @@ public class SugarCanvas extends LCanvas{
     @Override
     public void draw(){
         if(BoxSelect.isDragging()) BoxSelect.drawInsertIndicatorUnder(this);
+        hideFoldedJumpCurves();
         super.draw();
         JumpLineColor.patchAllCurves(this);
         if(!BoxSelect.isSelecting() && !BoxSelect.isDragging()){
@@ -104,6 +116,38 @@ public class SugarCanvas extends LCanvas{
             BoxSelect.drawHighlights(this);
             BoxSelect.drawColorScrollbar(this);
             Draw.trans(oldTrans);
+        }
+    }
+
+    /** 折叠块内部的语句被塌陷隐藏（visible=false）后，其 jump 跳转线的 JumpCurve 仍留在
+     *  jumps 层，且 JumpCurve.act() 每帧按塌陷后错乱的坐标重算 height != 0，导致跳转曲线
+     *  横穿整个屏幕。此处把"起点或终点不可见"的跳转线压平 height=0，让 JumpCurve.draw()
+     *  的 if(height == 0) return 生效，折叠时不再绘制这些横穿的跳转线。
+     *  在 super.draw() 之前调用（act 先于 draw，draw 里设 height=0 后 super.draw 才读到）。
+     *  注意：不能访问 game 侧 LCanvas$JumpButton.to（跨 classloader 非 public 字段，
+     *  抛 IllegalAccessError），须经 public 的 JumpStatement.dest 取目标。 */
+    private void hideFoldedJumpCurves(){
+        if(statements == null) return;
+        Group jumps = getJumpLayer(this);
+        if(jumps == null) return;
+        for(Element child : jumps.getChildren()){
+            if(!(child instanceof LCanvas.JumpCurve curve)) continue;
+            LCanvas.JumpButton button = curve.button;
+            if(button == null) continue;
+            LCanvas.StatementElem src = button.elem;
+            if(src == null) continue;
+            // 目标：JumpStatement.dest 是 public，可跨 classloader 访问；Begin 结构走
+            // StructureJumpCurve（target!=null 时不画），无需处理。
+            LCanvas.StatementElem dst = null;
+            if(src.st instanceof JumpStatement jump){
+                dst = jump.dest;
+            }
+            // 起点或终点任一处于折叠隐藏态（visible=false）→ 该线不绘制
+            if(!src.visible || (dst != null && !dst.visible)){
+                // height 是 Element 的 protected 字段，不能直接写；用 public setSize(0,0)
+                // 把 width/height 压为 0，JumpCurve.draw() 的 if(height == 0) return 生效。
+                curve.setSize(0, 0);
+            }
         }
     }
 
@@ -161,18 +205,70 @@ public class SugarCanvas extends LCanvas{
 
     @Override
     public void rebuild(){
+        BoxSelect.canvasWillChange(this);
         super.rebuild();
+        BoxSelect.canvasDidChange(this);
         setLayoutSpace();
         installGuideLayer();
+    }
+
+    /** Settings key for the compact card layout toggle. */
+    public static final String settingCompactCards = "logicsugar.compactCards";
+
+    /** Statement gap in design units used by the vanilla (non-compact) layout. */
+    private static final float vanillaSpace = 10f;
+
+    /** Whether the compact card layout is enabled. Defaults to on (preserves prior behavior). */
+    public static boolean compactCards(){
+        try{
+            return Core.settings.getBool(settingCompactCards, true);
+        }catch(Throwable t){
+            return true;
+        }
+    }
+
+    /** 当前闲置（未拖拽）时的积木间距来源：紧凑开关开启时 0f，关闭时恢复原版 Scl.scl(10f)。
+     *  单一真相源，供 setLayoutSpace 与 BoxSelect.idleLayoutSpace 复用，避免改一处漏一处。 */
+    public static float currentIdleSpace(){
+        return compactCards() ? 0f : Scl.scl(vanillaSpace);
+    }
+
+    /** Re-applies the fold-height compensation to every statement in the active Sugar canvas.
+     *  The value is per element rather than static so separate canvas instances cannot overwrite
+     *  one another's layout state. */
+    public static void syncFoldHiddenSpace(LCanvas canvas, float space){
+        if(!(canvas instanceof SugarCanvas sugar) || sugar.statements == null) return;
+        float compensation = -space;
+        for(Element child : sugar.statements.getChildren()){
+            if(child instanceof SugarStatementElem elem){
+                elem.foldHiddenSpace = compensation;
+            }
+        }
     }
 
     private void setLayoutSpace(){
         if(statements == null || spaceField == null) return;
         try{
-            spaceField.setFloat(statements, 0f);
+            // Compact removes the gap between statement cards entirely; non-compact restores
+            // the vanilla 10-unit spacing so cards read as separate blocks.
+            float space = currentIdleSpace();
+            spaceField.setFloat(statements, space);
+            // 让每个折叠隐藏元素使用与当前 DragLayout 相同的 space 抵消值。
+            syncFoldHiddenSpace(this, space);
         }catch(IllegalAccessException exception){
             throw new RuntimeException("Unable to configure Logic Sugar layout", exception);
         }
+    }
+
+    /** Re-applies the compact/non-compact spacing to the currently open canvas, live. */
+    public static void refreshLayoutSpace(){
+        SugarCanvas canvas = current();
+        if(canvas == null) return;
+        canvas.setLayoutSpace();
+        SugarCanvas.markJumpHeightsDirty(canvas);
+        canvas.statements.invalidate();
+        canvas.statements.validate();
+        SugarCanvas.refreshJumpLayer(canvas);
     }
 
     private boolean isDragging(){
@@ -217,6 +313,8 @@ public class SugarCanvas extends LCanvas{
     private void installGuideLayer(){
         jumpLayer = resolveJumpLayer(this);
         if(jumpLayer == null) return;
+        // 防重：load() 会清空 jumpLayer 再重装；rebuild() 也可能重复调用
+        if(guideLayer != null && guideLayer.parent == jumpLayer) return;
         guideLayer = new StructureGuideLayer();
         guideLayer.touchable = Touchable.disabled;
         guideLayer.fillParent = true;
@@ -333,14 +431,51 @@ public class SugarCanvas extends LCanvas{
         boolean foldedHidden;
         boolean structureInvalid;
         float inset;
+        float foldHiddenSpace;
 
         SugarStatementElem(LStatement statement){
             super(statement);
+            foldHiddenSpace = -currentIdleSpace();
             background(new InsetDrawable(this, Tex.whitePane));
             update(this::refreshInset);
             if(statement instanceof BlockEndStatement && getCells().size > 1){
                 getCells().peek().height(0f).minHeight(0f).pad(0f);
                 getChildren().peek().visible = false;
+            }
+            fixActionIconHitBounds();
+        }
+
+        /**
+         * 修复高 UI 缩放（200% 等）下新增/复制/删除按钮的点击判定区偏左。
+         *
+         * 根因（已从字节码确认）：ImageButton(Drawable, ImageButtonStyle) 构造时会把传入
+         * 的 style 拷贝一份（new ImageButtonStyle(style)）再 setStyle，因此
+         * getStyle() == Styles.logici 的引用比较永远为 false——必须改用图标引用比较。
+         * Icon 是静态单例（imageUp 字段直接引用 Icon.add/copy/cancel 等实例，不被拷贝），
+         * 引用比较可靠。Icon 字体图标按 Scl.scl() 放大后 prefWidth 远大于 24f 父按钮，
+         * 子 Image 命中区重叠 → 命中判定偏左。resizeImage(24f) = imageCell().size(24f)
+         * （min/max=scl(24f)），布局时 Image 被 clamp 到与父按钮一致，命中区对齐。
+         */
+        private void fixActionIconHitBounds(){
+            fixIconButtons(this);
+        }
+
+        /** 原版/MindustryX 的语句动作按钮（均在内层白色 Table 中，经 table(...) 创建）。 */
+        private static boolean isActionButton(ImageButton button){
+            Drawable icon = button.getStyle().imageUp;
+            return icon == Icon.add || icon == Icon.copy || icon == Icon.cancel
+                || icon == Icon.fileText || icon == Icon.pencil;
+        }
+
+        private static void fixIconButtons(Group group){
+            for(Element child : group.getChildren()){
+                if(child instanceof ImageButton button && isActionButton(button)){
+                    button.resizeImage(24f);
+                    button.invalidateHierarchy();
+                }
+                if(child instanceof Group sub){
+                    fixIconButtons(sub);
+                }
             }
         }
 
@@ -360,9 +495,13 @@ public class SugarCanvas extends LCanvas{
             // marginLeft() applies Scl.scl() itself, so inset must stay in design units here;
             // pre-scaling it would double-scale (visible at 200% UI scale).
             float unit = Core.graphics.isPortrait() ? 17f : 24f;
-            float minWidth = Core.graphics.isPortrait() ? 285f : 360f;
-            float maxInset = Math.max(0f, getWidth() / Scl.scl(1f) - minWidth);
-            float nextInset = Math.min(Math.max(0, structureDepth) * unit, maxInset);
+            // Keep enough room for the condition row and the trailing mode/fold controls even
+            // in deeply nested cards; the inset must not consume that control area.
+            float minContentWidth = 360f;
+            float designWidth = getWidth() / Scl.scl(1f);
+            float maxInset = Math.max(0f, designWidth - minContentWidth);
+            float depthInset = Math.max(0, structureDepth) * unit;
+            float nextInset = Math.min(depthInset, maxInset);
             if(Math.abs(inset - nextInset) > 0.1f){
                 inset = nextInset;
                 marginLeft(inset);
@@ -373,7 +512,9 @@ public class SugarCanvas extends LCanvas{
 
         @Override
         public float getPrefHeight(){
-            return foldedHidden ? 0f : super.getPrefHeight();
+            // 折叠隐藏语句：返回 -space 抵消布局里的 space，使 getPrefHeight()+space=0，
+            // 消除折叠块内部空隙（否则非紧凑模式下 Begin 与 end 之间会撑开一段可框选的空白）。
+            return foldedHidden ? foldHiddenSpace : super.getPrefHeight();
         }
 
         @Override
@@ -506,6 +647,25 @@ public class SugarCanvas extends LCanvas{
                 if(elem.st instanceof BeginStatement begin){
                     nextSignature = 31 * nextSignature + System.identityHashCode(begin.dest);
                     nextSignature = 31 * nextSignature + (begin.collapsed ? 1 : 0);
+                }
+                // Condition content changes (typing in the Expr editor, switching op/Expr mode)
+                // must re-run invalidStatements, or stale red marking never refreshes.
+                if(elem.st instanceof IfBeginStatement ifBegin){
+                    nextSignature = 31 * nextSignature + (ifBegin.expressionMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + (ifBegin.shortCircuitMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + ifBegin.conditionExpr.hashCode();
+                }else if(elem.st instanceof ElseIfStatement elseIf){
+                    nextSignature = 31 * nextSignature + (elseIf.expressionMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + (elseIf.shortCircuitMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + elseIf.conditionExpr.hashCode();
+                }else if(elem.st instanceof WhileBeginStatement whileBegin){
+                    nextSignature = 31 * nextSignature + (whileBegin.expressionMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + (whileBegin.shortCircuitMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + whileBegin.conditionExpr.hashCode();
+                }else if(elem.st instanceof ForBeginStatement forBegin){
+                    nextSignature = 31 * nextSignature + (forBegin.expressionMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + (forBegin.shortCircuitMode ? 1 : 0);
+                    nextSignature = 31 * nextSignature + forBegin.conditionExpr.hashCode();
                 }
             }
             if(nextSignature == signature) return;

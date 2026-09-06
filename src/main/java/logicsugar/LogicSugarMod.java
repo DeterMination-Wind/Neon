@@ -15,6 +15,7 @@ import mindustry.mod.Mod;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import logicsugar.assist.BoxSelect;
 import logicsugar.assist.JumpLineColor;
+import logicsugar.assist.ProcessorStatus;
 import logicsugar.assist.VarDisplayFilter;
 import logicsugar.assist.expr.ExprHook;
 
@@ -41,6 +42,8 @@ public class LogicSugarMod extends Mod{
                 BoxSelect.init();
                 ExprHook.init();
                 VarDisplayFilter.init();
+                ProcessorStatus.init();
+                ProcessorStatus.applySettings();
                 // When bundled into Neon, every settings row is registered through
                 // bekBuildSettings (host sets bekBundled, host calls bekBuildSettings), so the
                 // mod-owned category is skipped entirely to avoid duplicate entries.
@@ -94,7 +97,9 @@ public class LogicSugarMod extends Mod{
     /** Host (Neon) settings aggregation: function mode, library entry and jump line coloring. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
         table.pref(new LogicSugarSettings.FuncModeSetting(LogicSugarSettings.settingFuncMode, "normal"));
+        table.pref(new LogicSugarSettings.AssertEmitSetting(LogicSugarSettings.settingAssertEmit, "strip"));
         table.pref(new LogicSugarSettings.LibraryButtonSetting("logicsugar.funclib"));
+        LogicSugarSettings.addProcessorStatusPrefs(table);
         LogicSugarSettings.addHideVarsPref(table);
         LogicSugarSettings.addBoxSelectPrefs(table);
         LogicSugarSettings.addCompactCardsPref(table);

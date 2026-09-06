@@ -20,6 +20,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 public final class LogicSugarSettings{
     public static final String settingFuncMode = "logicsugar.funcMode";
     public static final String settingSwitchStrategy = "logicsugar.switchStrategy";
+    public static final String settingAssertEmit = "logicsugar.assertEmit";
 
     private LogicSugarSettings(){}
 
@@ -40,7 +41,9 @@ public final class LogicSugarSettings{
     private static void build(SettingsMenuDialog.SettingsTable table, boolean includeJumpLines){
         table.pref(new FuncModeSetting(settingFuncMode, "normal"));
         table.pref(new SwitchStrategySetting(settingSwitchStrategy, "auto"));
+        table.pref(new AssertEmitSetting(settingAssertEmit, "strip"));
         table.pref(new LibraryButtonSetting("logicsugar.funclib"));
+        addProcessorStatusPrefs(table);
         addHideVarsPref(table);
         addBoxSelectPrefs(table);
         addCompactCardsPref(table);
@@ -71,6 +74,24 @@ public final class LogicSugarSettings{
         table.checkPref(logicsugar.assist.BoxSelect.settingDragExpandSpacing, false);
     }
 
+    /** Sliders for the processor status overlay (wait threshold, scan rate, warn effects). */
+    static void addProcessorStatusPrefs(SettingsMenuDialog.SettingsTable table){
+        table.sliderPref("logicsugar.waitIndication", 1000, 0, 10000, 500, i -> {
+            logicsugar.assist.ProcessorStatus.minWaitMillis = i;
+            return i == 0 ? Core.bundle.get("logicsugar.off", "off") : (i / 1000.0) + "s";
+        });
+        table.sliderPref("logicsugar.processorScan", 50, 5, 200, 5, i -> {
+            logicsugar.assist.ProcessorStatus.scanPerTick = i;
+            return Integer.toString(i);
+        });
+        table.sliderPref("logicsugar.warnEffect", 0, -5, 60, 5, i -> {
+            logicsugar.assist.ProcessorStatus.warnEffectFrequency = i;
+            return i < 0 ? Core.bundle.get("logicsugar.warn.never", "never")
+                : i == 0 ? Core.bundle.get("logicsugar.warn.once", "once")
+                : Core.bundle.format("logicsugar.warn.every", i);
+        });
+    }
+
     /** Click-to-cycle picker for the function expansion mode. */
     public static class FuncModeSetting extends SettingsMenuDialog.SettingsTable.Setting{
         private final String def;
@@ -87,7 +108,10 @@ public final class LogicSugarSettings{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             // single-cell row: the settings table is a grid, so splitting title/control
-            // into two cells would get pushed right past the panel by the wide vanilla rows
+            // into two cells would get pushed right past the panel by the wide vanilla rows.
+            // The button uses minWidth, never a fixed width: the value label (e.g. English
+            // "auto (table when cheaper)") is wider than any fixed width would allow, and a
+            // fixed cell made the label overflow onto the title text.
             addDesc(table.table(box -> {
                 box.left();
                 box.add(title).padRight(12f).padLeft(4f);
@@ -96,7 +120,7 @@ public final class LogicSugarSettings{
                     Core.settings.put(name, current);
                     button.clearChildren();
                     button.add(label());
-                }).size(150f, 44f).get();
+                }).minWidth(150f).height(44f).get();
             }).minWidth(Math.min(500f, Core.graphics.getWidth() / 1.2f / Scl.scl(1f))).fillX().left().padTop(4f).get());
             table.row();
         }
@@ -122,7 +146,10 @@ public final class LogicSugarSettings{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             // single-cell row: the settings table is a grid, so splitting title/control
-            // into two cells would get pushed right past the panel by the wide vanilla rows
+            // into two cells would get pushed right past the panel by the wide vanilla rows.
+            // The button uses minWidth, never a fixed width: the value label (e.g. English
+            // "auto (table when cheaper)") is wider than any fixed width would allow, and a
+            // fixed cell made the label overflow onto the title text.
             addDesc(table.table(box -> {
                 box.left();
                 box.add(title).padRight(12f).padLeft(4f);
@@ -132,13 +159,51 @@ public final class LogicSugarSettings{
                     Core.settings.put(name, current);
                     button.clearChildren();
                     button.add(label());
-                }).size(150f, 44f).get();
+                }).minWidth(150f).height(44f).get();
             }).minWidth(Math.min(500f, Core.graphics.getWidth() / 1.2f / Scl.scl(1f))).fillX().left().padTop(4f).get());
             table.row();
         }
 
         private String label(){
             return Core.bundle.get("logicsugar.settings.switchstrategy." + current, current);
+        }
+    }
+
+    public static class AssertEmitSetting extends SettingsMenuDialog.SettingsTable.Setting{
+        private final String def;
+        private String current;
+        private Button button;
+
+        public AssertEmitSetting(String name, String def){
+            super(name);
+            this.def = def;
+            Core.settings.defaults(name, def);
+            this.current = Core.settings.getString(name, def);
+        }
+
+        @Override
+        public void add(SettingsMenuDialog.SettingsTable table){
+            // single-cell row: the settings table is a grid, so splitting title/control
+            // into two cells would get pushed right past the panel by the wide vanilla rows.
+            // The button uses minWidth, never a fixed width: the value label (e.g. English
+            // "auto (table when cheaper)") is wider than any fixed width would allow, and a
+            // fixed cell made the label overflow onto the title text.
+            addDesc(table.table(box -> {
+                box.left();
+                box.add(title).padRight(12f).padLeft(4f);
+                button = box.button(button -> button.add(label()), Styles.logict, () -> {
+                    current = SugarCompiler.AssertEmit.parse(current) == SugarCompiler.AssertEmit.strip
+                        ? "emit" : "strip";
+                    Core.settings.put(name, current);
+                    button.clearChildren();
+                    button.add(label());
+                }).minWidth(150f).height(44f).get();
+            }).minWidth(Math.min(500f, Core.graphics.getWidth() / 1.2f / Scl.scl(1f))).fillX().left().padTop(4f).get());
+            table.row();
+        }
+
+        private String label(){
+            return Core.bundle.get("logicsugar.settings.assertemit." + current, current);
         }
     }
 

@@ -242,6 +242,9 @@ LogicSugar 为 Mindustry 逻辑编辑提供更接近结构化代码的辅助。
 - 保留跳转线着色和积木颜色设置。
 - 当 `call` 没有填写实参时，可以显示被调用函数的参数列表占位提示。
 - 参数提示会随着函数名和参数变化实时更新。
+- 断言语句（「断言」分类七张卡片）：数组下标越界、值与期望不符、打印输出比对不符都会让程序停在出错行并在处理器上方显示原因；断点可冻结整个游戏供从容检查；写日志不打断运行。默认断言只存在于编辑器中，保存的代码不含它们；「调试断言构建」（仅单机）开启后才真正运行，联机时保存的程序永远与原版客户端兼容。
+- 处理器状态指示：停机的处理器头顶显示停在哪一条，长等待的处理器画进度圆环，运行出错原地显示消息；等待阈值、检查频率与提醒特效可在设置中调节。
+- 复制变量 / 复制打印缓冲：把当前处理器的全部变量按名称整理成保留完整精度的表格复制到剪贴板（可直接粘贴进电子表格），或复制程序当前打印的内容。
 
 它适合需要频繁编写或维护大型逻辑程序的玩家，目标是降低阅读和编辑成本，而不是改变逻辑处理器本身的运行规则。
 
@@ -488,6 +491,10 @@ Color-the-ducts draws liquid-colored center marks on liquid ducts. It supports h
 ### 24. LogicSugar
 
 LogicSugar provides structured logic statements, editor replacement, and compilation helpers. It keeps jump-line and block-color assistance and can show function-argument placeholders when a `call` has no arguments.
+
+- Assertion statements (seven cards in the "Assertions" category): out-of-range array indexes, values that drift from expectations, and print-output comparisons stop the program on the offending line with a message above the processor; a breakpoint freezes the whole game for inspection; a log statement writes to the game log. Assertions live only in the editor by default and never enter saved code; the "Debug Assert Build" toggle (single-player only) makes them run for real, and multiplayer saves always stay vanilla-compatible.
+- Processor status overlay: stopped processors show which line they stopped on, long waits draw a progress ring, and failures show their message in place; threshold, scan rate and warning effects are adjustable in settings.
+- Copy Variables / Copy Print Buffer: dump all variables of the current processor as a name-sorted, full-precision table for spreadsheets, or copy the program's current print output.
 
 ### 25. Random
 

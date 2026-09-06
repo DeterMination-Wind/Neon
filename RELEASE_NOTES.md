@@ -1,3 +1,33 @@
+# N13
+
+## 中文
+
+首个稳定版 N 系列版本。本次合并 LogicSugar 两个版本（v3.1.0、v4.0.0 大版本）、新增内置 OverlayCompatBridge 子模组，并同步 PatchViewer 修复。
+
+- LogicSugar v4.0.0（大版本）：
+  - 新增断言语句（「断言」分类七张卡片）：断言边界（检查数组下标是否越界、是否为整数/倍数）、断言相等（变量值与期望不符即停机提示）、记录打印位置 + 断言打印（成对验证某段代码的打印输出，通过后自动清理）、运行错误（立即停机并显示带变量值的消息）、写日志（写入游戏日志文件）、断点（条件满足时冻结整个游戏供检查现场，继续后照常运行）。默认只在编辑器中存在，保存的代码不含断言。
+  - 新增「调试断言构建」开关（仅单机/地图编辑器生效）：打开后断言才作为真实指令运行；联机时自动关闭，保存的程序永远与原版客户端兼容。
+  - 处理器状态指示：停机的处理器头顶显示"已停在第 N 条"，长等待显示进度圆环，运行出错原地显示消息；等待阈值、检查频率、提醒特效可在设置中调节。
+  - 编辑器新增「复制变量」（全部变量按名称排序整理成表格，保留完整精度，可直接粘贴进电子表格）与「复制打印缓冲」两个按钮。
+- 同步 LogicSugar v3.1.0：语句卡片改用确定性布局，消除布局跳动；For 固定两行排版；深缩进下条件行不再被顶出可视区；修复输入框下划线变白。
+- 新增内置 OverlayCompatBridge 子模组：为使用 MindustryX OverlayUI 界面的 Java 模组提供原版界面回退，未安装 MindustryX 时相关界面仍可正常显示。
+- 同步 PatchViewer v2.4.1：修复数值对比文本重叠。
+- 版本号 120006 → 130000。
+
+## English
+
+The first stable N-series release. This update bundles two LogicSugar versions (v3.1.0 and the v4.0.0 major release), adds the new built-in OverlayCompatBridge sub-mod, and picks up a PatchViewer fix.
+
+- LogicSugar v4.0.0 (major):
+  - New assertion statements (seven cards in the new "Assertions" category): Assert Bounds (catches out-of-range array indexes, non-integers, wrong multiples), Assert Equals (stops with a message when a value differs from what you expect), Assert Flush + Assert Prints (verify a section's printed output as a pair, cleaning it up afterwards), Error (halts with a message embedding variable values), Log (writes to the game log file), Breakpoint (freezes the whole game for inspection, resumes cleanly). Assertions live only in the editor by default and never enter saved code.
+  - New "Debug Assert Build" toggle (single-player / map editor only): assertions run for real only with it enabled; it switches itself off in multiplayer, so everything you save stays vanilla-compatible.
+  - Processor status on the map: stopped processors show "Stopped at #N", long waits draw a progress ring, failures show their message in place; threshold, scan rate and warning effects are adjustable in settings.
+  - Two new editor buttons: "Copy Variables" (all variables sorted by name as a full-precision table for spreadsheets) and "Copy Print Buffer".
+- Bundled LogicSugar v3.1.0: statement cards switched to deterministic layouts, eliminating layout jitter; fixed two-row For form; condition rows stay visible under deep nesting; white text-field underlines fixed.
+- New built-in OverlayCompatBridge sub-mod: Java mods using the MindustryX OverlayUI fall back to vanilla-style interfaces when MindustryX is not installed.
+- Bundled PatchViewer v2.4.1: fixed overlapping stat diff text.
+- Version code 120006 → 130000.
+
 # B12.6
 
 ## 中文

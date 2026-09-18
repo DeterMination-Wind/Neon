@@ -1184,7 +1184,15 @@ public class LongWindowFlowFeature {
             for (Item item : content.items()) {
                 if (!flow.hasFlowItem(item)) continue;
 
-                float rate = flow.getFlowRate(item);
+                float rate;
+                try {
+                    rate = flow.getFlowRate(item);
+                } catch (Throwable ignored) {
+                    //Mindustry 160.2 DataPatcher#fixContentArrays resets the shared static displayFlow cache
+                    //while existing building modules keep a non-null flow, so getFlowRate() NPEs until the
+                    //next updateFlow() rebuilds the caches. Skip this tick instead of crashing the game.
+                    return;
+                }
                 if (rate < 0f) continue;
 
                 int itemId = item.id;

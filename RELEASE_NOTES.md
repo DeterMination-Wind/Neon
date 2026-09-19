@@ -1,9 +1,9 @@
 > [!IMPORTANT]
-> Neon 是纯客户端模组，服务器不需要安装；支持 Mindustry v159+（桌面 / Android）与 MindustryX。
-> 本版内置的 LogicSugar v5.2.0 以 Mindustry v160.1 为基线：它的数据结构卡等依赖 v160 内存语义的功能在 v159 上不保证正确。
+> 最低要求 **Mindustry v160.1**（桌面 / Android）或对应的 MindustryX；服务器不需要安装。
+> 保存出去的逻辑程序仍是普通原版 mlog：没装模组的客户端能运行，联机不受影响。
 >
-> Neon is client-side only; servers do not need it. It supports Mindustry v159+ (desktop / Android) and MindustryX.
-> The bundled LogicSugar v5.2.0 targets Mindustry v160.1: its data-structure cards and other features that rely on v160 memory semantics are not guaranteed on v159.
+> Requires **Mindustry v160.1** (desktop / Android) or a matching MindustryX. Servers do not need it.
+> Saved logic programs stay plain vanilla mlog: they run on unmodded clients and multiplayer is unaffected.
 
 > [!NOTE]
 > 本版把内置的 LogicSugar 从 v4.0.0 升级到 v5.2.0：新增数据结构卡与表达式读写、68 个运算改名成 C++ STL 风格、修复表达式卡的三处缺陷，并带上单位 flag 显示、断点行为开关、撤销重做与底栏自动换行；另外同步 betterLogisticsSpeed 的空指针修复，并校正描述符版本号。
@@ -12,6 +12,8 @@
 
 ## 中文
 
+* 最低版本提升到 **Mindustry v160.1**（桌面 / Android）：内置 LogicSugar v5.2.0 以 v160.1 的内存语义为基线，Neon 现在按同一基线编译（CI 用 jitpack `v160.1` 与对应 archash 的 arc jar）。
+* Power Grid Minimap / Hide What Processors Show：适配 v160.1 的标记可见性 API（`ObjectiveMarker.world` / `minimap` 从 boolean 改为 `@IndexBool` 索引，只能经 `control()` 改写），原生标记与「隐藏处理器标记」在 160.1 上不再报错。
 * LogicSugar v5.2.0：数据结构卡（`array`、`matrix`、`record`、`stack`、`queue`、`deque`、`bitset`、`map`、`uset`、`list`、`heap`、`chain`）把内存块区间登记成结构化数据，每种结构有独立操作卡；表达式里可直接写 `buf[i]`、`m.get(k)` 这样的读写。声明与操作全部降级为普通原版指令，没装模组的客户端照常运行，已保存的逻辑程序也能恢复成卡片。
 * LogicSugar v5.2.0：68 个数据结构运算改用 C++ STL 风格命名（`spush` → `stack_push`、`mapset` → `map_set`、`sum` → `array_sum` 等），旧短名继续可解析，改名不改变降级产物。
 * LogicSugar v5.2.0：表达式卡（Expr）修复三处缺陷——加号菜单插入后积木凭空消失、保存一次后掉回普通积木、显示多一个 `]`；单行表达式现在随载体多带一行注释标记，重开与撤销重做都能还原成表达式卡。
@@ -23,6 +25,8 @@
 
 ## English
 
+* The minimum version is now **Mindustry v160.1** (desktop / Android): the bundled LogicSugar v5.2.0 targets v160.1 memory semantics, and Neon now builds against the same baseline (CI uses jitpack `v160.1` plus the arc jars for its archash).
+* Power Grid Minimap / Hide What Processors Show: adapted to the v160.1 marker visibility API (`ObjectiveMarker.world` / `minimap` changed from booleans to `@IndexBool` indexes that must be flipped through `control()`), so native markers and the hide-markers toggle keep working on 160.1.
 * LogicSugar v5.2.0: data-structure cards (`array`, `matrix`, `record`, `stack`, `queue`, `deque`, `bitset`, `map`, `uset`, `list`, `heap`, `chain`) register memory ranges as structured data, each with its own operation cards; expressions can read and write them directly as `buf[i]` or `m.get(k)`. Declarations and operations lower to plain vanilla instructions, so unmodded clients keep working and saved programs reopen as cards.
 * LogicSugar v5.2.0: all 68 data-structure operations were renamed to C++ STL style (`spush` → `stack_push`, `mapset` → `map_set`, `sum` → `array_sum`, and so on); old short names still parse and the rename does not change lowered output.
 * LogicSugar v5.2.0: three Expr card fixes - the card vanishing after a palette insert, degrading to a plain block after one save, and one bracket too many in the display; single-line expressions now carry one comment marker so reopening and undo restore the card.

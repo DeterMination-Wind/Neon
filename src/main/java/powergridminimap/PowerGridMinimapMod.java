@@ -2444,7 +2444,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 int textId = pointId + 1;
 
                 MapObjectives.PointMarker pointMarker = new MapObjectives.PointMarker(Math.round(worldX), Math.round(worldY), pointRadius, pointStroke, color);
-                pointMarker.minimap = true;
+                showOnMinimap(pointMarker);
                 Call.createMarker(pointId, pointMarker);
 
                 boolean textCreated = false;
@@ -2472,6 +2472,28 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 Call.removeMarker(markerId);
             }catch(Throwable ignored){
                 available = false;
+            }
+        }
+
+        /**
+         * Shows a freshly built marker on the minimap in both marker APIs.
+         *
+         * <p>Up to Mindustry v160 the flag is a boolean. Since v160.1 it is an {@code @IndexBool int}
+         * holding an index into {@code MapMarkers.mapMarkers} ({@code -1} = hidden), and the marker
+         * must not be registered yet: {@code Call.createMarker} goes through {@code MapMarkers.add()},
+         * which replaces any value other than -1 with the real index. That is why this writes the
+         * field instead of calling control(), and why the field type decides the value.</p>
+         */
+        private static void showOnMinimap(MapObjectives.ObjectiveMarker marker){
+            try{
+                Field field = MapObjectives.ObjectiveMarker.class.getField("minimap");
+                if(field.getType() == boolean.class){
+                    field.setBoolean(marker, true);
+                }else{
+                    field.setInt(marker, 0);
+                }
+            }catch(Throwable t){
+                Log.err("PGMM could not set the marker minimap flag", t);
             }
         }
 

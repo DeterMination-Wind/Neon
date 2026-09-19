@@ -136,17 +136,22 @@ final class ProcessorVisualController {
         endMarkerSuppression();
         if (markersVisible || state == null || !state.isGame()) return;
 
-        for (ObjectiveMarker marker : state.markers) {
-            suppressedMarkers.put(marker, new MarkerVisibility(marker.world, marker.minimap));
-            marker.world = false;
-            marker.minimap = false;
+        // Hiding goes through control(), which also deregisters the marker upstream; walk a
+        // snapshot so the live marker list is never mutated while it is being iterated.
+        for (ObjectiveMarker marker : MarkerVisibilityCompat.snapshot(state.markers)) {
+            suppressedMarkers.put(marker, new MarkerVisibility(
+                MarkerVisibilityCompat.world(marker),
+                MarkerVisibilityCompat.minimap(marker)
+            ));
+            MarkerVisibilityCompat.world(marker, false);
+            MarkerVisibilityCompat.minimap(marker, false);
         }
     }
 
     private static void endMarkerSuppression() {
         for (ObjectMap.Entry<ObjectiveMarker, MarkerVisibility> entry : suppressedMarkers) {
-            entry.key.world = entry.value.world;
-            entry.key.minimap = entry.value.minimap;
+            MarkerVisibilityCompat.world(entry.key, entry.value.world);
+            MarkerVisibilityCompat.minimap(entry.key, entry.value.minimap);
         }
         suppressedMarkers.clear();
     }

@@ -67,7 +67,8 @@ jobs:
             echo "sdkmanager not found under $sdk_root" >&2
             exit 1
           fi
-          yes | "$sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+          yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build merged artifacts
         shell: bash

@@ -26,7 +26,7 @@
   `mod.json`/`mod.hjson`、`.github/workflows/`。
 - Neon 根仓库和各子模组仓库是**不同 Git 上下文**。执行 `git`、看 diff、提交前先确认当前目录，
   不要把 Neon 提交和子模组仓库提交混为同一次操作。
-- 注意 MindustryX 兼容目标：Neon 同时运行在原版 v159 与 MindustryX 上，
+- 注意 MindustryX 兼容目标：Neon 同时运行在原版 Mindustry v160.1 与 MindustryX 上，
   所有依赖 MindustryX 的能力必须走 `mdtxcompat` 反射桥，编译期不得直接引用
   `mindustryX.*` 类（`build.gradle` 默认不把 MindustryX 挂进 classpath）。
 - 网络注意：本机 `git` 直连 github.com 443 不通，但 `gh` CLI 可用。
@@ -66,14 +66,14 @@ python .\tools\update_submods.py --verify-build   # 同步后追加 gradlew comp
 
 ## 构建
 
-- 要求：**JDK 17**（Mindustry v159 运行时需要 Java 17；`gradle.properties` 的
+- 要求：**JDK 17**（Mindustry v160.1 运行时需要 Java 17；`gradle.properties` 的
   `org.gradle.java.home` 按本机 JDK 路径配置）。
-- Java 目标为 **17**（`options.release.set(17)`，Mindustry v159 运行时需要 Java 17）；
+- Java 目标为 **17**（`options.release.set(17)`，Mindustry v160.1 运行时需要 Java 17）；
   Kotlin 2.2.0，`jvmTarget = JVM_17`。不要引入更高版本 Java API。
 - 依赖解析优先级（`build.gradle`）：
   1. 本地 `../Mindustry-master/core/build/libs/core-release.jar`（+ 本地 Arc、desktop jar）——
      保证 Neon 与本地测试用的 v159 checkout 一致；
-  2. 否则 jitpack `com.github.Anuken.Mindustry:core:v159`，并排除 arc 传递依赖，
+  2. 否则 jitpack `com.github.Anuken.Mindustry:core:v160.1`，并排除 arc 传递依赖，
      改用 `tools/deps/` 下的 arc jar（jitpack 的 pom 指向已无法构建的 arc 孤儿 commit
      `6aee8e7686`，注释在 `build.gradle` 里，勿删）。
 - 常用命令（项目根目录、PowerShell 7）：
@@ -217,7 +217,9 @@ Neon/
   （桥、`RbmStyle`、`initializeModule` 隔离层），不额外引入平行 helper 或包装层。
 - 初始化副作用要显式：注册 hook、替换全局状态必须在模块入口可见地进行，
   不在隐蔽路径偷偷生效。
-- 编译目标是 Java 17 + v159 API；同时兼容 MindustryX 运行时（走桥）。
+- 编译目标是 Java 17；运行时基线为 Mindustry v160.1（桌面 / Android），同时兼容 MindustryX 运行时（走桥）。
+  编译类路径优先用工作区 jar，CI 回退到 jitpack v160.1 加 `tools/deps/` 的 arc jar（按 v160.1 的 archash 固定）；
+  跨版本 API 差异一律走反射或兼容层，不要直接引用只在新版本存在的类。
   涉及版本边界（minGameVersion、MindustryX 最低版本）的改动要显式声明，默认行为保持稳定。
 - 同步产物里发现的问题，修在子模组工作区再同步回来；只有 Neon 原生聚合层的问题才直接改 Neon。
 - 改动 `build.gradle` 构建链（D8、依赖解析、产物任务）时，保留解释陷阱的注释，
@@ -269,7 +271,7 @@ Neon/
 ## 常见边界问题
 
 - **MindustryX 设置表陷阱**：MindustryX 的 `SettingsTable.act()` 会在 `list.size` 变化时
-  自动重建（`lastSize` 短路），与原版 v159 行为不同。`BekToolsMod` 中
+  自动重建（`lastSize` 短路），与原版 v160.1 行为不同。`BekToolsMod` 中
   `NestedSettingsTable.build()` 覆盖、`redrawSettings()` 手动重建、
   `addModuleGroupPref` 走 `pref()` 等写法都是为此服务，改动设置页渲染前先读懂这些注释。
 - **D8 / Android**：`classes.dex` 必须由 `dexAndroid` 产出且带 `--lib arc-core.jar`；
@@ -279,7 +281,7 @@ Neon/
 - **跨类加载器**：mod 运行时访问 `mindustryX.*` 或其他 mod 的类必须用
   `LegacyMindustryXGuard.loadMindustryXClass`（按候选加载器探测），
   直接 `Class.forName` 在 MindustryX 环境下会漏。
-- **描述符现状**：`mod.json`/`mod.hjson` 当前 `hidden: true`、`minGameVersion: 159`、
+- **描述符现状**：`mod.json`/`mod.hjson` 当前 `hidden: true`、`minGameVersion: "160.1"`、
   双 `main`/`mainX` 入口；`mod.json` 与 `mod.hjson` 必须保持字段一致，
   不要只改一份。
 - **Release 资产安全**：Mindustry 游戏内安装器取 GitHub Release 返回的第一个 `.jar`，

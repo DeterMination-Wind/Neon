@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "130000"
+version = "140000"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17
@@ -19,7 +19,7 @@ sourceSets{
     }
 }
 
-def mindustryVersion = (findProperty("mindustryVersion") ?: "v159").toString()
+def mindustryVersion = (findProperty("mindustryVersion") ?: "v160.1").toString()
 def localMindustryCoreJar = new File(rootDir.parentFile, "Mindustry-master/core/build/libs/core-release.jar")
 def localMindustryDesktopJar = new File(rootDir.parentFile, "Mindustry-master/desktop/build/libs/Mindustry.jar")
 def localArcCoreJar = new File(rootDir.parentFile, "Arc/arc-core/build/libs/arc-core-1.0.jar")
@@ -30,7 +30,7 @@ repositories{
 }
 
 dependencies{
-    // Prefer the local v159 core jar so Neon builds against the same checkout used for local testing.
+    // Prefer the local Mindustry-master jars so Neon builds against the same checkout used for local testing.
     if(localMindustryCoreJar.exists()){
         def localMindustryClasspath = [localMindustryCoreJar]
         if(localArcCoreJar.exists()){
@@ -42,9 +42,10 @@ dependencies{
         compileOnly files(localMindustryClasspath)
         testImplementation files(localMindustryClasspath)
     }else{
-        // jitpack's Mindustry v159 pom references arc-core/arcnet at an orphan commit
-        // (6aee8e7686) that can no longer be built, so exclude the arc transitive
-        // dependencies and use the bundled arc build from tools/deps/ instead.
+        // jitpack's Mindustry pom pulls in arc-core/arcnet. The v159 pom points at an orphan
+        // arc commit (6aee8e7686) that can no longer be built, and Neon pins its runtime
+        // baseline anyway, so the arc transitive dependencies stay excluded and come from
+        // tools/deps/ (arc-core + arcnet at the baseline's archash). Keep both parts.
         def bundledArcClasspath = [
             new File(rootDir, "tools/deps/arc-core.jar"),
             new File(rootDir, "tools/deps/arcnet.jar")

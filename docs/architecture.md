@@ -57,7 +57,7 @@ Neon 不直接 import MindustryX 类，而是通过桥接口隔离：
 ## 构建与依赖形态
 
 - Java 17 字节码（`options.release.set(17)`），Kotlin 仅用于 `advancedreplace` 包。
-- 编译期优先使用工作区本地的 `Mindustry-master` core/desktop jar 与 Arc jar；缺省时退回 JitPack `v159` 并排除其坏传递依赖，改用 `tools/deps/` 里的 arc-core / arcnet jar。
+- 编译期优先使用工作区本地的 `Mindustry-master` core/desktop jar 与 Arc jar；缺省时退回 JitPack `v160.1` 并排除其可传递的 arc 依赖，改用 `tools/deps/` 里的 arc-core / arcnet jar。
 - 运行时依赖仅两件外部库：`pinyin4j`（拼音搜索）与 `sqlite-jdbc`（SPDB 存储）。二者都会被打进最终 jar；D8 输入还额外包含 `kotlin-stdlib`。
 - SPDB 的语义搜索会在打包阶段下载嵌入 GGUF 模型（`bge-base-zh-v1.5-q8_0.gguf`，任务 `downloadEmbeddingModel`）。
 - 发布管线（`deploy`）产出桌面+安卓合并包，细节见 [release.md](release.md) 与 [development.md](development.md)。

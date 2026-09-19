@@ -41,7 +41,7 @@ Neon 已经包含相关独立模组的功能。请不要同时启用对应的独
 
 ### 兼容性
 
-- 需要 Mindustry v159 或更高版本。
+- 需要 Mindustry v160.1 或更高版本。
 - Neon 为纯客户端模组，服务器不需要安装。
 - 原版客户端可以使用核心功能；安装 MindustryX 或提供兼容接口的环境后，支持的功能可以接入相应的 OverlayUI 和标记能力。
 - 安卓端请使用 Release 中包含 `classes.dex` 的 `Neon.jar`，不要使用桌面构建的中间文件。
@@ -103,7 +103,7 @@ Neon already contains the functionality of the related standalone mods. Do not e
 
 ### Compatibility
 
-- Requires Mindustry v159 or later.
+- Requires Mindustry v160.1 or later.
 - Neon is fully client-side; servers do not need to install it.
 - Core features work on vanilla clients. With MindustryX or a compatible bridge available, supported features can use the corresponding OverlayUI and marker integrations.
 - On Android, use the release `Neon.jar` that contains `classes.dex`, not a desktop-only or intermediate build.

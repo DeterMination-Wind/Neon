@@ -4,14 +4,14 @@
 
 ## 环境
 
-- JDK 17（Mindustry v159 运行时要求 Java 17）。
+- JDK 17（Mindustry v160.1 运行时要求 Java 17）。
 - 安卓构建需要 D8：按以下顺序自动探测——`D8_PATH` 环境变量 → `ANDROID_SDK_ROOT` / `ANDROID_HOME` 下的 `build-tools` → 工作区根的 `commandlinetools-win-*` 目录。都没有时 `dexAndroid` 会直接失败。
 - Mindustry/Arc 编译类路径优先取本地检出的 jar：
   - `../Mindustry-master/core/build/libs/core-release.jar`
   - `../Arc/arc-core/build/libs/arc-core-1.0.jar`
   - `../Mindustry-master/desktop/build/libs/Mindustry.jar`（可选）
   
-  本地不存在时退回 JitPack 的 `v159`，并改用 `tools/deps/arc-core.jar` + `tools/deps/arcnet.jar` 作为 Arc 类路径。
+  本地不存在时退回 JitPack 的 `v160.1`，并改用 `tools/deps/arc-core.jar` + `tools/deps/arcnet.jar` 作为 Arc 类路径。
 - Windows 下命令请用 PowerShell 7（`pwsh`）。
 
 ## 常用命令

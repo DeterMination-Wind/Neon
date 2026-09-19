@@ -43,7 +43,7 @@ Random 没有设置组。想体验随机化效果，在主菜单点击"千万别
 
 ### 安装与兼容
 
-- 需要 Mindustry v159+；从 [Releases](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip` 放入 `mods` 目录。
+- 需要 Mindustry v160.1+；从 [Releases](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip` 放入 `mods` 目录。
 - 纯客户端模组：单机可用，联机时服务器无需安装。
 - 安卓使用 Release 中含 `classes.dex` 的正式 `Neon.jar`。
 - **不要同时启用 Neon 与对应的独立版模组**（如单独装一份 betterMiniMap），会出现重复界面与冲突。

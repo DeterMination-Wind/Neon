@@ -26,9 +26,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Resolve Neon release version
         if: startsWith(github.ref, 'refs/tags/')
         id: version
@@ -51,8 +48,26 @@ jobs:
           echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
           echo "Building $release_name ($version_code)"
 
+      # android-actions/setup-android@v3 fails while the legacy "tools" package is gone;
+      # the runner image already ships the SDK and cmdline-tools, so install the packages
+      # we need straight from ANDROID_SDK_ROOT instead.
       - name: Install Android build-tools
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$sdk_root" ]; then
+            echo "No Android SDK found on the runner" >&2
+            exit 1
+          fi
+          sdkmanager="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager" ]; then
+            sdkmanager="$(find "$sdk_root/cmdline-tools" -maxdepth 3 -name sdkmanager -type f 2>/dev/null | sort | tail -n1)"
+          fi
+          if [ -z "$sdkmanager" ]; then
+            echo "sdkmanager not found under $sdk_root" >&2
+            exit 1
+          fi
+          yes | "$sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null
 
       - name: Build merged artifacts
         shell: bash

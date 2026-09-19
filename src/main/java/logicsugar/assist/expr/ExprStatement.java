@@ -29,6 +29,11 @@ import java.util.*;
  */
 public class ExprStatement extends LStatement{
 
+    /** This card already owns a wrapped expression and a dedicated error row. */
+    public boolean useWrapping(){
+        return false;
+    }
+
     /** 目标变量名 */
     public String dest = "result";
     /** 表达式字符串 */
@@ -39,6 +44,19 @@ public class ExprStatement extends LStatement{
 
     /** 上次编译的错误消息（null = 无错误）。作为字段保持，避免 build() 重建时丢失错误状态 */
     public transient String lastError = null;
+
+    /**
+     * 单行表达式卡的自描述标记：{@code # @ls-expr-card <dest> "<expr>"}，写在卡片展开行的
+     * <b>后一行</b>（标记认领紧邻它上面的那一行）。
+     *
+     * <p>保存文本里的单行卡与普通 {@code set}/{@code op} 积木逐字相同，而
+     * {@code ExprHook.foldAll} 的单行门槛只对数组 read/write 放行——重开处理器、撤销重做都
+     * 只能靠猜测，单行表达式卡（{@code x = 0}、{@code x = a + b}、{@code x = cos(a)}）
+     * 会退化成普通积木。标记给了确定证据：它是注释（原版 LParser 直接忽略，可执行流、
+     * 语句条数与 jump 下标都不受影响），随载体一起保存，加载时由
+     * {@link ExprTextImport} 把上一行还原成卡片。</p>
+     */
+    public static final String cardMarkerPrefix = "# @ls-expr-card ";
 
     @Override
     public void write(StringBuilder builder){
@@ -59,13 +77,23 @@ public class ExprStatement extends LStatement{
             if(i > 0) builder.append("\n");
             builder.append(lines.get(i).toText());
         }
+        // 单行卡片额外写一行自描述标记（注释）：让重开/撤销能把这一行还原成卡片而不是
+        // 普通积木。多行卡片由 foldAll 的 >= 2 门槛折回，不需要标记（那会改变语句条数）；
+        // 单行 read/write 由 foldAll 的数组门槛折回，也不加标记。
+        if(ExprHook.keepsCard(lines) && !ExprHook.foldsBackAlone(lines) && dest != null){
+            builder.append('\n').append(cardMarkerPrefix).append(dest).append(' ')
+                .append('"').append(SugarStatements.escapeQuoted(expr == null ? "" : expr)).append('"');
+        }
     }
 
-    /** 编辑期函数名校验：本地 funcdef + 库函数（数学函数由 ExprCompiler 内置处理）。 */
+    /** 编辑期函数名校验：本地 funcdef + 库函数 + 数据子系统 intrinsic（数学函数由 ExprCompiler 内置处理）。 */
     public static ExprCompiler.FunctionChecker functionChecker(){
         Set<String> names = new HashSet<>();
         SugarFunctions.LibraryIndex library = SugarFunctions.library();
         if(library != null) names.addAll(library.functions.keySet());
+        // F2: 数据模块的表达式函数名（sum/avg/count/... 以及 record 成员等）在编辑器里合法
+        names.addAll(ExprIntrinsics.intrinsicNames());
+        names.addAll(logicsugar.assist.data.DataModules.builtinFunctionNames());
         SugarCanvas canvas = SugarCanvas.current();
         if(canvas != null && canvas.statements != null){
             for(arc.scene.Element child : canvas.statements.getChildren()){
@@ -131,8 +159,9 @@ public class ExprStatement extends LStatement{
         Runnable updateLabel = () -> {
             if(lastError != null){
                 exprLabel.setColor(Color.scarlet);
-                // 转义 [ ] 防止富文本解析错误
-                String safe = lastError.replace("[", "[[").replace("]", "]]");
+                // 只转义 `[`（Arc 把 `[[` 渲染成一个 `[`）；`]` 是普通字符，转义成 `]]`
+                // 会在界面上多显示一个 `]`
+                String safe = lastError.replace("[", "[[");
                 errorLabel.setText("[#ff5555]" + safe);
                 errorLabel.visible = true;
             }else{
@@ -296,8 +325,10 @@ public class ExprStatement extends LStatement{
                 }else{
                     color = "lightgray";
                 }
-                // 富文本中 [ ] 需转义为 [[ ]]
-                String text = tok.text.replace("[", "[[").replace("]", "]]");
+                // 富文本里只有 `[` 需要转义：Arc 的标记解析把 `[[` 当作字面量 `[`，
+                // 而 `]` 本来就是普通字符——把 `]` 也转义成 `]]` 会在卡片上多显示一个 `]`
+                // （`result = list[1]` 显示成 `list[1]]`，见 highlightTextIsUnchanged 回归）。
+                String text = tok.text.replace("[", "[[");
                 sb.append("[").append(color).append("]").append(text).append("[]");
                 lastEnd = tok.start + tok.text.length();
             }
@@ -306,9 +337,9 @@ public class ExprStatement extends LStatement{
                 sb.append(expr, lastEnd, expr.length());
             }
         }catch(Exception e){
-            // 词法失败时原样返回（转义 [ ]），编辑态不能因中间输入抛异常。
+            // 词法失败时原样返回（只转义 `[`），编辑态不能因中间输入抛异常。
             sb.setLength(0);
-            sb.append(expr.replace("[", "[[").replace("]", "]]"));
+            sb.append(expr.replace("[", "[["));
         }
         return sb.toString();
     }
@@ -338,11 +369,30 @@ public class ExprStatement extends LStatement{
         if(ops == null || ops.isEmpty()){
             return new OpI(LogicOp.add, builder.var(dest), builder.var("0"), builder.var(dest));
         }
-        // 返回第一条指令，后续指令在 write() 中输出为文本
-        ExprCompiler.Line first = ops.get(0);
+        // 返回第一条可执行指令，后续指令在 write() 中输出为文本。
+        // RawLine（数组/矩阵越界断言等非 op 行）没有可映射的 LInstruction，跳过；
+        // 编辑器/预览路径不产生断言行，这里只是让 Line 列表对未知行保持健壮。
+        ExprCompiler.Line first = null;
+        for(ExprCompiler.Line line : ops){
+            if(!(line instanceof ExprCompiler.RawLine)){
+                first = line;
+                break;
+            }
+        }
+        if(first == null){
+            return new NoopI();
+        }
         if(first instanceof ExprCompiler.SensorLine sensor){
             // sensor to from type → SenseI(from, to, type)
             return new SenseI(builder.var(sensor.a), builder.var(sensor.dest), builder.var(sensor.b));
+        }
+        if(first instanceof ExprCompiler.ReadLine read){
+            // read dest memory address → ReadI(target=memory, position=address, output=dest)
+            return new ReadI(builder.var(read.a), builder.var(read.b), builder.var(read.dest));
+        }
+        if(first instanceof ExprCompiler.WriteLine write){
+            // write value memory address → WriteI(target=memory, position=address, value=input)
+            return new WriteI(builder.var(write.memory), builder.var(write.address), builder.var(write.value));
         }
         if(first instanceof ExprCompiler.CallLine){
             // 函数调用无法映射为单条原版指令：该路径本不该出现（正常流程先 unfold）

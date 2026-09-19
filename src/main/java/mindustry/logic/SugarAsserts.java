@@ -19,9 +19,10 @@ import mindustry.ui.Styles;
 
 /**
  * Assertion statement set for runtime checks and debugging, ported from the upstream
- * MlogAssertions mod (cardillan/mlogassertions) with its exact wire format, so programs
- * compiled in debug mode run identically under either mod and Mindcode-generated code
- * round-trips through the editor.
+ * MlogAssertions mod (cardillan/mlogassertions v0.8.2) with its exact wire format, so
+ * programs compiled in debug mode run identically under either mod and Mindcode-generated
+ * code round-trips through the editor. The one extension is {@code asserttype}'s null
+ * type — see {@link AssertTypeCard}.
  *
  * <p>The cards serialize to the custom instruction tokens themselves ({@code assertBounds
  * ...}), which double as the sugar source format. The compiler decides their fate at
@@ -68,6 +69,12 @@ public final class SugarAsserts{
 
     private static String text(String key, String fallback){
         return Core.bundle.get("logicsugar." + key, fallback);
+    }
+
+    /** Card titles follow the same localization toggle as the control-flow cards
+     *  ({@link SugarStatements#cardsLocalized()}); non-title labels stay always localized. */
+    private static String cardText(String key, String fallback){
+        return SugarStatements.cardText(key, fallback);
     }
 
     /** The assertion opcodes this class owns; the compiler and the decompiler use this to
@@ -120,6 +127,7 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.value", "value of")).padLeft(4);
             field(table, value, s -> value = s).width(85f).pad(2f);
             table.button(b -> {
@@ -157,7 +165,7 @@ public final class SugarAsserts{
             }, Styles.logict, () -> {}).size(48f, 40f).pad(4f).color(table.color);
         }
 
-        @Override public String name(){ return text("asserts.bounds.card", "Assert Bounds"); }
+        @Override public String name(){ return cardText("asserts.bounds.card", "Assert Bounds"); }
         @Override public String typeName(){ return "AssertBounds"; }
 
         @Override
@@ -183,6 +191,7 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.expected", "expected")).padLeft(4);
             field(table, expected, s -> expected = s).width(110f).pad(2f);
             table.add(text("asserts.actual", "actual")).padLeft(8);
@@ -194,7 +203,7 @@ public final class SugarAsserts{
             field(table, message, s -> message = s).width(0f).growX().pad(2f);
         }
 
-        @Override public String name(){ return text("asserts.equals.card", "Assert Equals"); }
+        @Override public String name(){ return cardText("asserts.equals.card", "Assert Equals"); }
         @Override public String typeName(){ return "AssertEquals"; }
 
         @Override
@@ -217,11 +226,12 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.position", "position")).padLeft(4);
             field(table, position, s -> position = s).width(110f).pad(2f);
         }
 
-        @Override public String name(){ return text("asserts.flush.card", "Assert Flush"); }
+        @Override public String name(){ return cardText("asserts.flush.card", "Assert Flush"); }
         @Override public String typeName(){ return "AssertFlush"; }
 
         @Override
@@ -245,6 +255,7 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.position", "position")).padLeft(4);
             field(table, position, s -> position = s).width(110f).pad(2f);
             table.add(text("asserts.expected", "expected")).padLeft(8);
@@ -254,7 +265,7 @@ public final class SugarAsserts{
             field(table, message, s -> message = s).width(0f).growX().pad(2f);
         }
 
-        @Override public String name(){ return text("asserts.prints.card", "Assert Prints"); }
+        @Override public String name(){ return cardText("asserts.prints.card", "Assert Prints"); }
         @Override public String typeName(){ return "AssertPrints"; }
 
         @Override
@@ -271,8 +282,12 @@ public final class SugarAsserts{
     }
 
     /** Checks that a variable currently holds a value of the expected runtime data type.
-     *  LogicSugar-original (no MlogAssertions/Mindcode counterpart): their clients degrade
-     *  this instruction to a placeholder, which only ever matters for shared debug builds. */
+     *
+     *  <p>Upstream MlogAssertions added its own {@code asserttype} in v0.8.1 with the same
+     *  opcode and 4-token layout; the six shared type tokens are byte-identical. LogicSugar
+     *  additionally offers {@code none} ("null" on the wire), which upstream's parser
+     *  rejects ({@code AssertDataType.valueOf}), so a debug build using the null type
+     *  cannot be opened by MlogAssertions/Mindcode. Every other type interchanges.</p> */
     public static class AssertTypeCard extends AssertCard{
         public static final String opcode = "asserttype";
         public String value = "value";
@@ -281,6 +296,7 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.value", "value")).padLeft(4);
             field(table, value, s -> value = s).width(110f).pad(2f);
             table.add(text("asserts.istype", "is of type")).padLeft(8);
@@ -296,7 +312,7 @@ public final class SugarAsserts{
             field(table, message, s -> message = s).width(0f).growX().pad(2f);
         }
 
-        @Override public String name(){ return text("asserts.type.card", "Assert Type"); }
+        @Override public String name(){ return cardText("asserts.type.card", "Assert Type"); }
         @Override public String typeName(){ return "AssertType"; }
 
         @Override
@@ -330,6 +346,7 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.message", "message")).padLeft(4);
             if(hasLevel){
                 table.button(b -> {
@@ -381,7 +398,7 @@ public final class SugarAsserts{
             super(opcode, false, "Runtime error");
         }
 
-        @Override public String name(){ return text("asserts.error.card", "Error"); }
+        @Override public String name(){ return cardText("asserts.error.card", "Error"); }
         @Override public String typeName(){ return "Error"; }
 
         @Override
@@ -398,7 +415,7 @@ public final class SugarAsserts{
             super(opcode, true, "Logging a message");
         }
 
-        @Override public String name(){ return text("asserts.log.card", "Log"); }
+        @Override public String name(){ return cardText("asserts.log.card", "Log"); }
         @Override public String typeName(){ return "Log"; }
 
         @Override
@@ -416,6 +433,7 @@ public final class SugarAsserts{
 
         @Override
         public void build(Table table){
+            table.clearChildren();
             table.add(text("asserts.trigger", "trigger")).padLeft(4);
             addCompactOp(table, op, o -> {
                 op = o;
@@ -423,7 +441,7 @@ public final class SugarAsserts{
             }, value, s -> value = s, compare, s -> compare = s);
         }
 
-        @Override public String name(){ return text("asserts.breakpoint.card", "Breakpoint"); }
+        @Override public String name(){ return cardText("asserts.breakpoint.card", "Breakpoint"); }
         @Override public String typeName(){ return "Breakpoint"; }
 
         @Override

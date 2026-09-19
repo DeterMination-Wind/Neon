@@ -60,6 +60,8 @@ python .\tools\update_submods.py --verify-build   # 同步后追加 gradlew comp
 - bundle 合并规则：不同子模组对同一 key 给出不同值会直接报碰撞错误（不允许静默覆盖）；
   `tools/bektools-bundles/bundle*.properties` 中的条目是 Neon 侧**显式覆盖**，优先级最高；
   `ls`（LogicSugar）拥有 `logicsugar.` / `setting.logicsugar.` 前缀的所有权。
+  v5 起它的自定义积木还用共享的 `instruction.<token>` 键提供显示名（`instruction.array`、`instruction.chain` 等），
+  与其它子模组同名键取值不同时同样按碰撞错误处理。
 - `tools/generate_dox.py` 是辅助文档工具，与构建链路无关；`tools/deps/` 存放兜底用的 arc-core/arcnet jar。
 
 ## 构建

@@ -20,10 +20,14 @@ import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.ReturnStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
+import logicsugar.assist.data.DataModules;
+import logicsugar.assist.expr.ArrayRegistry;
 import logicsugar.assist.expr.ExprCompiler;
+import logicsugar.assist.expr.ExprIntrinsics;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,9 +35,61 @@ import java.util.Map;
 import java.util.Set;
 
 public final class SugarCompiler{
-    private static final String markerBegin = "# @logic-sugar-v1 begin";
+    /**
+     * Persistence-format / API tag written into every compiled program.
+     *
+     * <p>v2 (LogicSugar v5 API) changes three things that are visible in the instruction stream:
+     * value copies use {@code set} instead of the pre-v5 numeric {@code op add d s 0} (objects,
+     * strings and the NaN marker survive), mutating data operations report failure with
+     * {@code -1}, and result-less operations are cards without a destination variable.
+     * {@link #executableStream} canonicalizes the copy spelling so v1 saves still verify, and
+     * {@link #storedFormat} exposes the tag so the remaining v1 API differences stay detectable.</p>
+     */
+    public static final int FORMAT_VERSION = 2;
+
+    /**
+     * Lowering API used by the current compile. {@link #v2} is the v5 API; {@link #v1}
+     * reproduces the pre-v5 failure/void lowering so {@link #verifyRestore} can still verify
+     * saves written before the API change (their stored instruction stream keeps the old
+     * failure values). v1 is only ever entered for that comparison.
+     */
+    public enum Api{
+        v2, v1
+    }
+
+    private static Api api = Api.v2;
+
+    /** True while re-lowering a pre-v5 save to reproduce its stored instruction stream. */
+    public static boolean legacyApi(){
+        return api == Api.v1;
+    }
+
+    /** Enters an API mode, returning the previous one for {@link #leaveApi} (pair in finally). */
+    public static Api enterApi(Api value){
+        Api previous = api;
+        api = value;
+        return previous;
+    }
+
+    /** Restores the API mode returned by {@link #enterApi}. */
+    public static void leaveApi(Api previous){
+        api = previous;
+    }
+
+    /** Failure result of a data operation: {@code -1} in the v5 API, {@code 0} before it. */
+    public static String failValue(){
+        return legacyApi() ? "0" : "-1";
+    }
+
+    private static final String markerBegin = "# @logic-sugar-v" + FORMAT_VERSION + " begin";
     private static final String markerLine = "# @logic-sugar-line ";
-    private static final String markerEnd = "# @logic-sugar-v1 end";
+    private static final String markerEnd = "# @logic-sugar-v" + FORMAT_VERSION + " end";
+
+    /** Every marker pair this version can read, newest first. */
+    private static final String[][] MARKERS = {
+        {markerBegin, markerEnd},
+        {"# @logic-sugar-v1 begin", "# @logic-sugar-v1 end"},
+    };
 
     /** Persistence carrier prefixes: real "set" statements that survive the vanilla
      *  parse/save round trip (comment markers are dropped by it). The sugar carrier holds
@@ -106,17 +162,29 @@ public final class SugarCompiler{
      *  numbering from 1 — any gap means "not a shard set"), then the single
      *  {@code set __ls_sugar "..."} shape, then the marker block. */
     public static String restore(String code){
+        return restoreInternal(code);
+    }
+
+    /** {@link #restore(String)} for function-library text, which may exceed the processor
+     *  instruction cap: the stale-dest rewrite pass parses the text with the raised library
+     *  limit instead of the vanilla cap. */
+    public static String restore(String code, boolean libraryText){
+        return libraryText ? SugarFunctions.withLibraryLimitValue(() -> restoreInternal(code))
+            : restoreInternal(code);
+    }
+
+    private static String restoreInternal(String code){
         String normalized = code.replace("\r\n", "\n");
         String[] lines = normalized.split("\n", -1);
         // Scan from the end: genuine carriers are always the last sugar-carrying lines, so a
         // user statement that happens to look like a carrier loses the race only in its favor.
         String sharded = joinShardedCarrier(lines, carrierSugarShardPrefix);
-        if(sharded != null) return sharded;
+        if(sharded != null) return rewriteStaleBlockDests(sharded);
         for(int i = lines.length - 1; i >= 0; i--){
             String line = lines[i];
             if(line.startsWith(carrierSugarPrefix) && line.endsWith("\"")){
                 try{
-                    return decode(line.substring(carrierSugarPrefix.length(), line.length() - 1));
+                    return rewriteStaleBlockDests(decode(line.substring(carrierSugarPrefix.length(), line.length() - 1)));
                 }catch(Exception ignored){
                     // damaged carrier: fall back to the marker block below
                 }
@@ -125,17 +193,17 @@ public final class SugarCompiler{
 
         int begin = -1, end = -1;
         for(int i = 0; i < lines.length; i++){
-            if(lines[i].equals(markerBegin)) begin = i;
-            if(begin >= 0 && lines[i].equals(markerEnd)) end = i;
+            if(markerVersionOf(lines[i], true) >= 0) begin = i;
+            if(begin >= 0 && markerVersionOf(lines[i], false) >= 0) end = i;
         }
-        if(begin < 0 || end <= begin) return code;
+        if(begin < 0 || end <= begin) return rewriteStaleBlockDests(code);
 
         StringBuilder result = new StringBuilder();
         for(int i = begin + 1; i < end; i++){
-            if(!lines[i].startsWith(markerLine)) return code;
+            if(!lines[i].startsWith(markerLine)) return rewriteStaleBlockDests(code);
             result.append(lines[i].substring(markerLine.length())).append('\n');
         }
-        return result.toString();
+        return rewriteStaleBlockDests(result.toString());
     }
 
     /** Returns the library source embedded in stored code (the used subset the program was
@@ -160,17 +228,60 @@ public final class SugarCompiler{
         return null;
     }
 
+    /**
+     * Counts executable lines the same way the instruction-limit check does: labels are
+     * skipped, and the comment marker block is stripped so it does not inflate the total.
+     * Used by the editor budget banner; vanilla programs (no markers) are counted as-is.
+     */
+    public static int emittedInstructionCount(String code){
+        if(code == null || code.isEmpty()) return 0;
+        return countInstructions(new StringBuilder(stripMarkers(code)));
+    }
+
     /** Removes the comment marker block (the redundant sugar source) from compiled code.
      *  The persistence carriers are kept, so restore() still works afterwards. */
     public static String stripMarkers(String code){
         String normalized = code.replace("\r\n", "\n");
-        int begin = normalized.indexOf(markerBegin);
-        if(begin < 0) return code;
-        int end = normalized.indexOf(markerEnd, begin);
-        if(end < 0) return code;
-        int after = end + markerEnd.length();
-        if(after < normalized.length() && normalized.charAt(after) == '\n') after++;
-        return normalized.substring(0, begin) + normalized.substring(after);
+        boolean stripped = false;
+        for(String[] pair : MARKERS){
+            int begin = normalized.indexOf(pair[0]);
+            if(begin < 0) continue;
+            int end = normalized.indexOf(pair[1], begin);
+            if(end < 0) continue;
+            int after = end + pair[1].length();
+            if(after < normalized.length() && normalized.charAt(after) == '\n') after++;
+            normalized = normalized.substring(0, begin) + normalized.substring(after);
+            stripped = true;
+        }
+        return stripped ? normalized : code;
+    }
+
+    /** True when the line opens a LogicSugar source marker block (any readable version). */
+    public static boolean isMarkerBeginLine(String line){
+        return markerVersionOf(line, true) >= 0;
+    }
+
+    /** True when the line closes a LogicSugar source marker block (any readable version). */
+    public static boolean isMarkerEndLine(String line){
+        return markerVersionOf(line, false) >= 0;
+    }
+
+    /** Marker position of one line in {@link #MARKERS}: pair index, or -1 when it is not a marker. */
+    private static int markerVersionOf(String line, boolean begin){
+        for(int i = 0; i < MARKERS.length; i++){
+            if(line.equals(MARKERS[i][begin ? 0 : 1])) return i;
+        }
+        return -1;
+    }
+
+    /** Format tag of stored code: {@link #FORMAT_VERSION} for current saves, {@code 1} for
+     *  {@code @logic-sugar-v1} saves, {@code 0} when no marker survives (carrier-only saves). */
+    public static int storedFormat(String code){
+        for(String line : code.replace("\r\n", "\n").split("\n", -1)){
+            int pair = markerVersionOf(line, true);
+            if(pair >= 0) return pair == 0 ? FORMAT_VERSION : 1;
+        }
+        return 0;
     }
 
     /**
@@ -192,11 +303,33 @@ public final class SugarCompiler{
                 embeddedSource = sanitized.text;
             }
         }
+        // The stored stream is the ground truth. Saves written before the v5 API carry the
+        // pre-v5 lowering (older failure values, non-void constant-result cards), so try the
+        // current API first and then re-lower with the legacy one. Only an exact stream match
+        // accepts the carrier -- a v1 save that does not reproduce its own stream still falls
+        // back to vanilla.
+        for(Api attempt : Api.values()){
+            Api previous = enterApi(attempt);
+            try{
+                if(verifyLowering(restored, code, embedded, embeddedSource)) return true;
+            }finally{
+                leaveApi(previous);
+            }
+        }
+        return false;
+    }
+
+    /** One verification pass for the API mode currently entered via {@link #enterApi}. */
+    private static boolean verifyLowering(String restored, String code,
+                                          SugarFunctions.LibraryIndex embedded, String embeddedSource){
         for(FuncMode mode : FuncMode.values()){
             // Programs saved as debug builds carry assert instructions in the stored stream;
             // recompiling with the local (possibly strip) setting would drop them and fail
-            // the comparison, so both emit shapes are tried for assertion-bearing sugar.
+            // the comparison, so both emit shapes are tried for assertion-bearing programs.
+            // The stored stream is checked as well as the sugar: array/matrix subscript
+            // bounds asserts are generated at lowering time and never appear in the sugar.
             AssertEmit[] emitShapes = SugarAsserts.containsAssertStatements(restored)
+                || SugarAsserts.containsAssertStatements(code)
                 ? AssertEmit.values() : new AssertEmit[]{AssertEmit.strip};
             for(AssertEmit emit : emitShapes){
                 try{
@@ -252,94 +385,167 @@ public final class SugarCompiler{
     /** Compiles with an explicit switch strategy and assertion emission shape. */
     public static String compile(String sugar, FuncMode mode, SugarFunctions.LibraryIndex library, String libraryText,
                                  SwitchStrategy switchStrategy, AssertEmit assertEmit){
-        Seq<LStatement> statements = LAssembler.read(sugar, true);
+        return compile(sugar, mode, library, libraryText, switchStrategy, assertEmit, true);
+    }
+
+    /** Compiles in the same privileged/non-privileged context as the edited processor. */
+    public static String compile(String sugar, FuncMode mode, SugarFunctions.LibraryIndex library, String libraryText,
+                                 SwitchStrategy switchStrategy, AssertEmit assertEmit, boolean privileged){
+        return compile(sugar, mode, library, libraryText, switchStrategy, assertEmit, privileged, false);
+    }
+
+    /** {@code librarySource} marks {@code sugar} as the function-library text itself rather
+     *  than a processor program: it is parsed with the raised library statement limit, while
+     *  the emitted program still obeys the vanilla processor instruction cap (the library's
+     *  used subset is only inlined into a processor that fits 1000 instructions). */
+    public static String compile(String sugar, FuncMode mode, SugarFunctions.LibraryIndex library, String libraryText,
+                                 SwitchStrategy switchStrategy, AssertEmit assertEmit, boolean privileged,
+                                 boolean librarySource){
+        Seq<LStatement> statements = librarySource
+            ? SugarFunctions.readLibrary(sugar, privileged)
+            : LAssembler.read(sugar, privileged);
         if(!containsSugar(statements)) return sugar;
 
+        // destIndex on begin cards is a jump comment. Older saves and hand-edited
+        // carriers can leave it pointing past the program while if/for/while/switch
+        // nesting is still well-formed. Re-pair from innermost blockend matching
+        // before validatePairs, so restore does not depend on the comment being fresh.
+        recomputeBlockDests(statements);
         validatePairs(statements);
-        SugarFunctions.FunctionSet functions = SugarFunctions.analyze(statements, library);
 
-        StringBuilder out = new StringBuilder();
-        SugarFunctions.CallIds ids = new SugarFunctions.CallIds();
-        if(mode == FuncMode.normal){
-            SugarFunctions.lower(functions.main, "", functions, mode, out, ids, null, switchStrategy, assertEmit);
-            java.util.List<SugarFunctions.Function> hoisted = functions.hoistOrder();
-            if(!hoisted.isEmpty()){
-                // Normal-mode function bodies sit right after the main program. A call site's
-                // return point (the `set <result> <retName>` after its jump) is inside main;
-                // once main runs past it, the instruction stream would fall through into the
-                // shared function body and re-execute it every tick (caller variables like
-                // <result> keep incrementing). Jump past all bodies at the end of main.
-                out.append("jump __ls_end always x false\n");
-                for(SugarFunctions.Function function : hoisted){
-                    out.append(function.entryName()).append(":\n");
-                    SugarFunctions.lower(function.body, "func_" + function.name + "_", functions, mode, out, ids, function.name, switchStrategy, assertEmit);
-                    out.append(function.exitName()).append(":\n");
-                    out.append("set @counter ").append(function.retName()).append('\n');
+        // F2: 用户函数名（本地 funcdef + 库函数）在表达式展开时遮蔽同名 intrinsic
+        // （sum/avg/count/... 走普通 funccall）。在 analyze 之前安装：collectCalls 与
+        // lower 阶段的解析器必须看到同一套遮蔽关系。try/finally 配对，异常路径同样恢复。
+        Set<String> userFunctionNames = new HashSet<>();
+        for(LStatement statement : statements){
+            if(statement instanceof FuncDefStatement def) userFunctionNames.add(def.name);
+        }
+        if(library != null) userFunctionNames.addAll(library.functions.keySet());
+        Set<String> previousUserFunctions = ExprIntrinsics.enterUserFunctions(userFunctionNames);
+        boolean previousPrivilegedSensors = ExprCompiler.enterPrivilegedSensors(privileged);
+        // F2: 数据模块注入的内置函数库并入本次编译使用的 LibraryIndex（只影响本次编译；
+        // extractLibrarySource 仍只作用于纯用户库文本，内置函数不会进入 __ls_lib 载体）。
+        SugarFunctions.LibraryIndex compileLibrary = SugarFunctions.withBuiltins(library, DataModules.builtinSugar());
+        // analyze 之前安装轻量声明表：collectCalls 需要按声明类型把方法/下标糖解析成 intrinsic
+        //（包含注入函数可达性登记），而 DataModules.collectAll 要等 analyze 之后才执行。
+        java.util.List<LStatement> statementList = new java.util.ArrayList<>(statements.size);
+        for(LStatement statement : statements) statementList.add(statement);
+        Map<String, String> previousDeclaredKinds = ExprIntrinsics.enterDeclaredKinds(DataModules.declaredKinds(statementList));
+        ArrayRegistry previousArrays = null;
+        boolean arraysEntered = false;
+        boolean modulesCollected = false;
+        try{
+            SugarFunctions.FunctionSet functions = SugarFunctions.analyze(statements, compileLibrary);
+
+            // Array declaration cards → program-level registry: the compile-time basis for
+            // resolving `buf[i]` in condition/return/argument expressions (and for the editor's
+            // fold/unfold when no explicit context is active). Strict validation (duplicates,
+            // overlapping ranges, illegal literals) runs before lowering and aborts the compile.
+            // The function-name set is local funcdefs plus library functions; array names must
+            // not shadow them. The registry is installed as a static compile-time context
+            // (same pattern as currentAssertEmit) and popped in finally, so lower()/throwing
+            // paths and the recompile inside verifyRestore() always see a consistent table.
+            Set<String> functionNames = new HashSet<>(functions.functions.keySet());
+            if(functions.library != null) functionNames.addAll(functions.library.functions.keySet());
+            ArrayRegistry arrays = ArrayRegistry.compileRegistry(statements, functionNames);
+            previousArrays = ArrayRegistry.enter(arrays);
+            arraysEntered = true;
+
+            // F2: 数据模块编译期上下文（analyze 之后、lower 之前）；restore() 在 finally 统一清理。
+            // 标记在 collectAll 之前置位：collectAll 会先安装上下文再逐模块 collect，任一模块
+            // collect 抛错都必须由 finally 的 restore() 配对清理，否则注册表泄漏到下一次编译/编辑器渲染。
+            modulesCollected = true;
+            DataModules.collectAll(statementList, functionNames);
+
+            StringBuilder out = new StringBuilder();
+            SugarFunctions.CallIds ids = new SugarFunctions.CallIds();
+            if(mode == FuncMode.normal){
+                SugarFunctions.lower(functions.main, "", functions, mode, out, ids, null, switchStrategy, assertEmit);
+                java.util.List<SugarFunctions.Function> hoisted = functions.hoistOrder();
+                if(!hoisted.isEmpty()){
+                    // Normal-mode function bodies sit right after the main program. A call site's
+                    // return point (the `set <result> <retName>` after its jump) is inside main;
+                    // once main runs past it, the instruction stream would fall through into the
+                    // shared function body and re-execute it every tick (caller variables like
+                    // <result> keep incrementing). Jump past all bodies at the end of main.
+                    out.append("jump __ls_end always x false\n");
+                    for(SugarFunctions.Function function : hoisted){
+                        out.append(function.entryName()).append(":\n");
+                        SugarFunctions.lower(function.body, "func_" + function.name + "_", functions, mode, out, ids, function.name, switchStrategy, assertEmit);
+                        out.append(function.exitName()).append(":\n");
+                        out.append("set @counter ").append(function.retName()).append('\n');
+                    }
+                    out.append("__ls_end:\n");
                 }
-                out.append("__ls_end:\n");
+            }else{
+                SugarFunctions.lower(functions.main, "", functions, mode, out, ids, null, switchStrategy, assertEmit);
             }
-        }else{
-            SugarFunctions.lower(functions.main, "", functions, mode, out, ids, null, switchStrategy, assertEmit);
-        }
 
-        // Jump-thread the lowered label text (before marker/carriers): a jump whose target
-        // label is immediately followed by another unconditional jump now points at the
-        // final destination directly. Semantics-preserving; merges stacked structure-exit
-        // defaults and jump-table hole rows that would otherwise hop twice at runtime.
-        String lowered = threadAlwaysJumpTargets(out.toString());
+            // Jump-thread the lowered label text (before marker/carriers): a jump whose target
+            // label is immediately followed by another unconditional jump now points at the
+            // final destination directly. Semantics-preserving; merges stacked structure-exit
+            // defaults and jump-table hole rows that would otherwise hop twice at runtime.
+            String lowered = threadAlwaysJumpTargets(out.toString());
 
-        // Persistence carriers: real "set" statements appended after the marker block. They
-        // survive the vanilla parse/save round trip that drops the comment markers, and are
-        // placed after them so lowered-code consumers (and the test helper) see the lowered
-        // program untouched. They execute harmlessly every tick and count toward the limit.
-        // A payload whose encoded form fits carrierMaxChars keeps the exact single-carrier
-        // line every previous version emitted; only a larger one is sharded (see
-        // appendCarrier), so small saves stay byte-identical.
-        String sugarPayload = sugar.replace("\r\n", "\n");
-        String libPayload = null;
-        Set<String> usedLibrary = new HashSet<>();
-        for(SugarFunctions.Function function : functions.hoistOrder()){
-            if(function.library) usedLibrary.add(function.name);
-        }
-        if(libraryText != null && !libraryText.trim().isEmpty() && !usedLibrary.isEmpty()){
-            String extracted = SugarFunctions.extractLibrarySource(libraryText, usedLibrary);
-            if(!extracted.isEmpty()) libPayload = extracted;
-        }
-        StringBuilder carriers = new StringBuilder();
-        boolean anySharded = appendCarriers(carriers, libPayload, sugarPayload, true);
-
-        // LAssembler.read silently truncates at LExecutor.maxInstructions lines, so the count
-        // must be computed from the emitted text itself (one instruction per non-label line).
-        // Shard lines are ordinary statements and count one each; nothing here assumes the
-        // old single-line carrier shape.
-        int loweredCount = countInstructions(new StringBuilder(lowered));
-        int instructionCount = loweredCount + countInstructions(carriers);
-        if(instructionCount > LExecutor.maxInstructions && anySharded){
-            // Before sharding, an oversized payload was dropped with a warning instead of
-            // blocking the save. Keep that degradation when the extra shard lines would push
-            // the program past the executor limit: drop the sharded payloads (the lowered
-            // stream alone may still fit) rather than failing a save that used to succeed.
-            // A lowered stream that exceeds the limit on its own still throws below, exactly
-            // as before; sharding can only add lines, never remove them.
-            StringBuilder degraded = new StringBuilder();
-            appendCarriers(degraded, libPayload, sugarPayload, false);
-            int degradedCount = loweredCount + countInstructions(degraded);
-            if(degradedCount <= LExecutor.maxInstructions){
-                Log.warn("LogicSugar: carrier shards would exceed the instruction limit (@ statements, limit @); the source will not survive this save",
-                    instructionCount, LExecutor.maxInstructions);
-                carriers = degraded;
-                instructionCount = degradedCount;
+            // Persistence carriers: real "set" statements appended after the marker block. They
+            // survive the vanilla parse/save round trip that drops the comment markers, and are
+            // placed after them so lowered-code consumers (and the test helper) see the lowered
+            // program untouched. They execute harmlessly every tick and count toward the limit.
+            // A payload whose encoded form fits carrierMaxChars keeps the exact single-carrier
+            // line every previous version emitted; only a larger one is sharded (see
+            // appendCarrier), so small saves stay byte-identical.
+            String sugarPayload = sugar.replace("\r\n", "\n");
+            String libPayload = null;
+            Set<String> usedLibrary = new HashSet<>();
+            for(SugarFunctions.Function function : functions.hoistOrder()){
+                if(function.library) usedLibrary.add(function.name);
             }
-        }
-        if(instructionCount > LExecutor.maxInstructions){
-            String hint = mode == FuncMode.inline ? " Switch to normal mode to share function bodies." : "";
-            throw new IllegalArgumentException("Compiled program has " + instructionCount + " instructions; maximum is " + LExecutor.maxInstructions + "." + hint);
-        }
+            if(libraryText != null && !libraryText.trim().isEmpty() && !usedLibrary.isEmpty()){
+                String extracted = SugarFunctions.extractLibrarySource(libraryText, usedLibrary);
+                if(!extracted.isEmpty()) libPayload = extracted;
+            }
+            StringBuilder carriers = new StringBuilder();
+            boolean anySharded = appendCarriers(carriers, libPayload, sugarPayload, true);
 
-        StringBuilder result = new StringBuilder(lowered);
-        appendMarker(result, sugar);
-        result.append(carriers);
-        return result.toString();
+            // LAssembler.read silently truncates at LExecutor.maxInstructions lines, so the count
+            // must be computed from the emitted text itself (one instruction per non-label line).
+            // Shard lines are ordinary statements and count one each; nothing here assumes the
+            // old single-line carrier shape.
+            int loweredCount = countInstructions(new StringBuilder(lowered));
+            int instructionCount = loweredCount + countInstructions(carriers);
+            if(instructionCount > LExecutor.maxInstructions && anySharded){
+                // Before sharding, an oversized payload was dropped with a warning instead of
+                // blocking the save. Keep that degradation when the extra shard lines would push
+                // the program past the executor limit: drop the sharded payloads (the lowered
+                // stream alone may still fit) rather than failing a save that used to succeed.
+                // A lowered stream that exceeds the limit on its own still throws below, exactly
+                // as before; sharding can only add lines, never remove them.
+                StringBuilder degraded = new StringBuilder();
+                appendCarriers(degraded, libPayload, sugarPayload, false);
+                int degradedCount = loweredCount + countInstructions(degraded);
+                if(degradedCount <= LExecutor.maxInstructions){
+                    Log.warn("LogicSugar: carrier shards would exceed the instruction limit (@ statements, limit @); the source will not survive this save",
+                        instructionCount, LExecutor.maxInstructions);
+                    carriers = degraded;
+                    instructionCount = degradedCount;
+                }
+            }
+            if(instructionCount > LExecutor.maxInstructions){
+                String hint = mode == FuncMode.inline ? " Switch to normal mode to share function bodies." : "";
+                throw new IllegalArgumentException("Compiled program has " + instructionCount + " instructions; maximum is " + LExecutor.maxInstructions + "." + hint);
+            }
+
+            StringBuilder result = new StringBuilder(lowered);
+            appendMarker(result, sugar);
+            result.append(carriers);
+            return result.toString();
+        }finally{
+            if(modulesCollected) DataModules.restore();
+            if(arraysEntered) ArrayRegistry.restore(previousArrays);
+            ExprCompiler.restorePrivilegedSensors(previousPrivilegedSensors);
+            ExprIntrinsics.restoreUserFunctions(previousUserFunctions);
+            ExprIntrinsics.restoreDeclaredKinds(previousDeclaredKinds);
+        }
     }
 
     /** The merged library for editing a stored program: embedded functions first, then
@@ -631,10 +837,13 @@ public final class SugarCompiler{
             if(statement instanceof FuncDefStatement def) local.add(def.name);
         }
         SugarFunctions.LibraryIndex library = SugarFunctions.library();
+        // F2: 数据模块注入的内置函数名（编辑器里对内置 funccall 不标红）
+        Set<String> builtinNames = DataModules.builtinFunctionNames();
         for(int i = 0; i < statements.size; i++){
             if(statements.get(i) instanceof FuncCallStatement call){
                 if(!local.contains(call.name)
-                    && (library == null || !library.functions.containsKey(call.name))){
+                    && (library == null || !library.functions.containsKey(call.name))
+                    && !builtinNames.contains(call.name)){
                     invalid[i] = true;
                 }
                 // 实参表达式非法（如 a1.1）时编译期会抛错，编辑期同步标红；
@@ -649,6 +858,16 @@ public final class SugarCompiler{
                 }
             }
         }
+
+        // array 声明卡的字段级问题（重名/同内存块区间重叠/非法 base/size/与函数重名）在
+        // 编辑期同步标红；严格校验仍由编译路径（compileRegistry）拦截保存
+        Set<String> arrayReservedNames = new HashSet<>(local);
+        if(library != null) arrayReservedNames.addAll(library.functions.keySet());
+        ArrayRegistry.markInvalidStatements(statements, invalid, arrayReservedNames);
+        // F2: 数据模块自有声明卡的字段级标红（record/stack/... 的注册表校验）
+        java.util.List<LStatement> statementList = new java.util.ArrayList<>(statements.size);
+        for(LStatement statement : statements) statementList.add(statement);
+        DataModules.markInvalid(statementList, invalid, arrayReservedNames);
         return invalid;
     }
 
@@ -661,7 +880,7 @@ public final class SugarCompiler{
         }
     }
 
-    /** 条件表达式里的函数名校验：本地 funcdef + 库函数（数学函数由 ExprCompiler 内置）。 */
+    /** 条件表达式里的函数名校验：本地 funcdef + 库函数 + 数据模块 intrinsic（数学函数由 ExprCompiler 内置）。 */
     private static ExprCompiler.FunctionChecker conditionChecker(Seq<LStatement> statements){
         Set<String> names = new HashSet<>();
         for(LStatement statement : statements){
@@ -669,6 +888,9 @@ public final class SugarCompiler{
         }
         SugarFunctions.LibraryIndex library = SugarFunctions.library();
         if(library != null) names.addAll(library.functions.keySet());
+        // F2: 数据模块的表达式函数名（sum/avg/count/... 与 record 成员）在条件表达式里合法
+        names.addAll(ExprIntrinsics.intrinsicNames());
+        names.addAll(DataModules.builtinFunctionNames());
         return names::contains;
     }
 
@@ -720,6 +942,72 @@ public final class SugarCompiler{
             if(statement instanceof SugarStatements.SugarStatement) return true;
         }
         return false;
+    }
+
+    /**
+     * Rewrites stale {@code destIndex} comments in restored Sugar source when begin/end
+     * nesting is unambiguous. Byte-identical when dests are already correct, so healthy
+     * carriers keep their exact source. Parse failures and unbalanced blocks leave the
+     * decoded text untouched (verifyRestore / decompiler inference still apply).
+     */
+    static String rewriteStaleBlockDests(String sugar){
+        if(sugar == null || sugar.isEmpty()) return sugar;
+        try{
+            Seq<LStatement> statements = LAssembler.read(sugar, true);
+            int[] before = snapshotDests(statements);
+            if(!recomputeBlockDests(statements)) return sugar;
+            if(Arrays.equals(before, snapshotDests(statements))) return sugar;
+            return writeStatements(statements);
+        }catch(Throwable ignored){
+            return sugar;
+        }
+    }
+
+    /**
+     * Pairs each {@link BeginStatement} with its matching {@link BlockEndStatement} by
+     * innermost-first nesting and writes the resulting dest indices. This is the unique
+     * non-crossing pairing, so a well-formed dest comment is left unchanged. Returns false
+     * when begins and ends cannot be paired (leftover begin or extra {@code blockend}).
+     */
+    static boolean recomputeBlockDests(Seq<LStatement> statements){
+        if(statements == null || statements.isEmpty()) return true;
+        int n = statements.size;
+        int[] paired = new int[n];
+        Arrays.fill(paired, -1);
+        Deque<Integer> stack = new ArrayDeque<>();
+        for(int i = 0; i < n; i++){
+            LStatement statement = statements.get(i);
+            if(statement instanceof BeginStatement){
+                stack.push(i);
+            }else if(statement instanceof BlockEndStatement){
+                if(stack.isEmpty()) return false;
+                paired[stack.pop()] = i;
+            }
+        }
+        if(!stack.isEmpty()) return false;
+        for(int i = 0; i < n; i++){
+            if(paired[i] < 0) continue;
+            ((BeginStatement)statements.get(i)).destIndex = paired[i];
+        }
+        return true;
+    }
+
+    private static int[] snapshotDests(Seq<LStatement> statements){
+        int[] dests = new int[statements.size];
+        for(int i = 0; i < statements.size; i++){
+            LStatement statement = statements.get(i);
+            dests[i] = statement instanceof BeginStatement begin ? begin.destIndex : Integer.MIN_VALUE;
+        }
+        return dests;
+    }
+
+    private static String writeStatements(Seq<LStatement> statements){
+        StringBuilder out = new StringBuilder();
+        for(LStatement statement : statements){
+            statement.write(out);
+            out.append('\n');
+        }
+        return out.toString();
     }
 
     private static void validatePairs(Seq<LStatement> statements){
@@ -828,7 +1116,9 @@ public final class SugarCompiler{
             int end = out.indexOf("\n", index);
             if(end < 0) end = out.length();
             String line = out.substring(index, end);
-            if(!line.isEmpty() && !line.endsWith(":")) count++;
+            // 注释不是指令：LParser 直接跳过（LogicSugar 的自描述标记、用户注释都是），
+            // 计入会让预算横幅与上限判断虚高。
+            if(!line.isEmpty() && !line.endsWith(":") && !line.trim().startsWith("#")) count++;
             index = end + 1;
         }
         return count;
@@ -959,18 +1249,70 @@ public final class SugarCompiler{
 
     /** Whether {@code compiled} matches the stored program under either lowering era:
      *  current output is jump-threaded, pre-2.3.1 saves are not; the thread pass is
-     *  idempotent, so normalizing the stored text through it covers both. */
+     *  idempotent, so normalizing the stored text through it covers both.
+     *
+     *  <p>Persistence carriers and the comment marker block are stripped first: they are
+     *  metadata. destIndex comments inside the sugar source can be repaired from begin/end
+     *  nesting without changing the lowered instruction stream, so comparing the carrier
+     *  Base64 would reject programs whose structure is still faithful.</p> */
     public static boolean matchesStoredStream(String recompiled, String stored){
         try{
-            if(LAssembler.write(LAssembler.read(recompiled, true)).equals(LAssembler.write(LAssembler.read(stored, true)))) return true;
+            String left = executableStream(recompiled);
+            String right = executableStream(stored);
+            if(left.equals(right)) return true;
         }catch(RuntimeException ignored){
             return false;
         }
         try{
-            return LAssembler.write(LAssembler.read(recompiled, true))
-                .equals(LAssembler.write(LAssembler.read(threadAlwaysJumpTargets(stored), true)));
+            return executableStream(recompiled)
+                .equals(executableStream(threadAlwaysJumpTargets(stored)));
         }catch(RuntimeException ignored){
             return false;
         }
+    }
+
+    /** Normalized vanilla instruction stream with LogicSugar persistence metadata removed. */
+    private static String executableStream(String code){
+        return canonicalizeCopies(LAssembler.write(LAssembler.read(stripPersistence(code), true)));
+    }
+
+    /**
+     * Canonicalizes the two spellings of a value copy: {@code set d s} (v2; copies the value as
+     * it is, so objects, strings and the NaN marker survive) and the pre-v5 numeric form
+     * {@code op add d s 0}. For numbers both forms are identical, therefore instruction-stream
+     * comparisons (carrier verification, decompiler candidates) must not distinguish them --
+     * otherwise every save written before the v5 API would fail the restore gate.
+     */
+    private static String canonicalizeCopies(String stream){
+        StringBuilder out = new StringBuilder(stream.length());
+        for(String line : stream.replace("\r\n", "\n").split("\n", -1)){
+            String[] tokens = line.trim().split("\\s+");
+            if(tokens.length == 5 && tokens[0].equals("op") && tokens[1].equals("add")
+                && tokens[4].equals("0")){
+                out.append("set ").append(tokens[2]).append(' ').append(tokens[3]);
+            }else{
+                out.append(line);
+            }
+            out.append('\n');
+        }
+        return out.toString();
+    }
+
+    /** Drops the comment marker block and {@code __ls_sugar}/{@code __ls_lib} carrier lines
+     *  (single or sharded) so instruction-stream comparisons look at executable mlog only. */
+    private static String stripPersistence(String code){
+        String withoutMarkers = stripMarkers(code);
+        StringBuilder result = new StringBuilder();
+        for(String line : withoutMarkers.replace("\r\n", "\n").split("\n", -1)){
+            if(isPersistenceCarrierLine(line)) continue;
+            result.append(line).append('\n');
+        }
+        return result.toString();
+    }
+
+    private static boolean isPersistenceCarrierLine(String line){
+        if(line.startsWith(carrierSugarPrefix) || line.startsWith(carrierLibPrefix)) return true;
+        return carrierShardNumber(line, carrierSugarShardPrefix) > 0
+            || carrierShardNumber(line, carrierLibShardPrefix) > 0;
     }
 }

@@ -242,7 +242,10 @@ LogicSugar 为 Mindustry 逻辑编辑提供更接近结构化代码的辅助。
 - 保留跳转线着色和积木颜色设置。
 - 当 `call` 没有填写实参时，可以显示被调用函数的参数列表占位提示。
 - 参数提示会随着函数名和参数变化实时更新。
-- 断言语句（「断言」分类七张卡片）：数组下标越界、值与期望不符、打印输出比对不符都会让程序停在出错行并在处理器上方显示原因；断点可冻结整个游戏供从容检查；写日志不打断运行。默认断言只存在于编辑器中，保存的代码不含它们；「调试断言构建」（仅单机）开启后才真正运行，联机时保存的程序永远与原版客户端兼容。
+- 数据结构卡：把内存块区间登记成 `array`、`matrix`、`record`、`stack`、`queue`、`deque`、`bitset`、`map`、`uset`、`list`、`heap`、`chain`，每种结构有独立的操作卡（`vector_push_back`、`map_set`、`stack_top` 等 STL 风格命名，旧短名仍可解析），也能用 `buf[i]`、`m.get(k)` 这类表达式语法糖读写。声明与操作都会降级为普通原版指令，没装模组的客户端照常运行。
+- 编辑器辅助：撤销/重做（电脑 `Ctrl+Z` / `Ctrl+Y`，手机底部按钮）、底栏按钮按窗口宽度自动换行、编译后指令条数与 1000 上限实时对照。
+- 单位 flag 显示：可选在单位正上方显示它的逻辑 flag，并给不同 flag 值分配鲜明颜色；纯展示，不影响存档与联机。
+- 断言语句（「断言」分类八张卡片）：数组下标越界、数据类型不符、值与期望不符、打印输出比对不符都会让程序停在出错行并在处理器上方显示原因；断点可冻结整个游戏供从容检查；写日志不打断运行。默认断言只存在于编辑器中，保存的代码不含它们；「调试断言构建」（仅单机）开启后才真正运行，联机时保存的程序永远与原版客户端兼容。设置中还能禁用断点、把断言失败当作断点、暂停期间保持视角分离。
 - 处理器状态指示：停机的处理器头顶显示停在哪一条，长等待的处理器画进度圆环，运行出错原地显示消息；等待阈值、检查频率与提醒特效可在设置中调节。
 - 复制变量 / 复制打印缓冲：把当前处理器的全部变量按名称整理成保留完整精度的表格复制到剪贴板（可直接粘贴进电子表格），或复制程序当前打印的内容。
 
@@ -492,9 +495,12 @@ Color-the-ducts draws liquid-colored center marks on liquid ducts. It supports h
 
 LogicSugar provides structured logic statements, editor replacement, and compilation helpers. It keeps jump-line and block-color assistance and can show function-argument placeholders when a `call` has no arguments.
 
-- Assertion statements (seven cards in the "Assertions" category): out-of-range array indexes, values that drift from expectations, and print-output comparisons stop the program on the offending line with a message above the processor; a breakpoint freezes the whole game for inspection; a log statement writes to the game log. Assertions live only in the editor by default and never enter saved code; the "Debug Assert Build" toggle (single-player only) makes them run for real, and multiplayer saves always stay vanilla-compatible.
+- Assertion statements (eight cards in the "Assertions" category): out-of-range array indexes, wrong data types, values that drift from expectations, and print-output comparisons stop the program on the offending line with a message above the processor; a breakpoint freezes the whole game for inspection; a log statement writes to the game log. Assertions live only in the editor by default and never enter saved code; the "Debug Assert Build" toggle (single-player only) makes them run for real, and multiplayer saves always stay vanilla-compatible. Settings can also disable breakpoints, treat assertion failures as breakpoints, and keep the camera detached while paused.
 - Processor status overlay: stopped processors show which line they stopped on, long waits draw a progress ring, and failures show their message in place; threshold, scan rate and warning effects are adjustable in settings.
 - Copy Variables / Copy Print Buffer: dump all variables of the current processor as a name-sorted, full-precision table for spreadsheets, or copy the program's current print output.
+- Data-structure cards: register a memory-block range as `array`, `matrix`, `record`, `stack`, `queue`, `deque`, `bitset`, `map`, `uset`, `list`, `heap` or `chain`; each structure has its own operation cards (`vector_push_back`, `map_set`, `stack_top`, ... STL-style names, old short names still parse) and expression sugar such as `buf[i]` or `m.get(k)`. Declarations and operations lower to plain vanilla instructions, so saves still run on unmodded clients.
+- Editor helpers: undo/redo (`Ctrl+Z` / `Ctrl+Y` on desktop, bottom-bar buttons on mobile), a bottom bar that wraps to the available width, and a live compiled-instruction count against the limit.
+- Unit flag display: optionally draw the logic flag of each unit above it, with a distinct vivid color per flag value; display only, saves and multiplayer are unaffected.
 
 ### 25. Random
 

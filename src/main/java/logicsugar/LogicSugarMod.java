@@ -16,7 +16,17 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 import logicsugar.assist.BoxSelect;
 import logicsugar.assist.JumpLineColor;
 import logicsugar.assist.ProcessorStatus;
+import logicsugar.assist.UnitFlags;
 import logicsugar.assist.VarDisplayFilter;
+import logicsugar.assist.data.ArrayBulkModule;
+import logicsugar.assist.data.BitsetModule;
+import logicsugar.assist.data.ChainModule;
+import logicsugar.assist.data.ContainerModule;
+import logicsugar.assist.data.DataModules;
+import logicsugar.assist.data.ListHeapModule;
+import logicsugar.assist.data.MapModule;
+import logicsugar.assist.data.RecordModule;
+import logicsugar.assist.data.SetModule;
 import logicsugar.assist.expr.ExprHook;
 
 import static arc.Events.on;
@@ -44,6 +54,8 @@ public class LogicSugarMod extends Mod{
                 VarDisplayFilter.init();
                 ProcessorStatus.init();
                 ProcessorStatus.applySettings();
+                UnitFlags.init();
+                UnitFlags.applySettings();
                 // When bundled into Neon, every settings row is registered through
                 // bekBuildSettings (host sets bekBundled, host calls bekBuildSettings), so the
                 // mod-owned category is skipped entirely to avoid duplicate entries.
@@ -72,7 +84,9 @@ public class LogicSugarMod extends Mod{
         }
     }
 
-    private static void registerStatements(){
+    /** Shared registration for game init, the decompiler preflight and headless tests.
+     *  Idempotent: repeated calls do not duplicate palette cards or parsers. */
+    public static void registerStatements(){
         if(registered) return;
         registered = true;
 
@@ -89,17 +103,37 @@ public class LogicSugarMod extends Mod{
         LogicIO.allStatements.add(SugarStatements.FuncDefStatement::new);
         LogicIO.allStatements.add(SugarStatements.FuncCallStatement::new);
         LogicIO.allStatements.add(SugarStatements.ReturnStatement::new);
+        LogicIO.allStatements.add(SugarStatements.ArrayStatement::new);
+        LogicIO.allStatements.add(SugarStatements.MatrixStatement::new);
+        // The old eight-slot arrayinit card remains parser-compatible for existing carriers,
+        // but new programs use the array module's fill(buf, value) operation card instead.
+
+        // Data subsystem modules (F2 framework): registering a module installs its
+        // expression intrinsics provider (needed before the first compile/editor use);
+        // registerParsers() below installs the declaration-card parsers. Both are
+        // idempotent, so a repeated init() cannot duplicate palette entries or parsers.
+        DataModules.register(new ArrayBulkModule());
+        DataModules.register(new RecordModule());
+        DataModules.register(new ContainerModule());
+        DataModules.register(new BitsetModule());
+        DataModules.register(new MapModule());
+        DataModules.register(new SetModule());
+        DataModules.register(new ListHeapModule());
+        DataModules.register(new ChainModule());
 
         // single registration point shared with the decompiler preflight and the self-tests
         SugarStatements.installParsers();
+        // record/stack/queue/deque/bitset/map/uset/list/heap/chain declaration cards + parsers
+        DataModules.registerParsers();
     }
 
-    /** Host (Neon) settings aggregation: function mode, library entry and jump line coloring. */
+    /** Host (Neon) settings aggregation: function mode, library entry, overlays and jump line coloring. */
     public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
         table.pref(new LogicSugarSettings.FuncModeSetting(LogicSugarSettings.settingFuncMode, "normal"));
         table.pref(new LogicSugarSettings.AssertEmitSetting(LogicSugarSettings.settingAssertEmit, "strip"));
         table.pref(new LogicSugarSettings.LibraryButtonSetting("logicsugar.funclib"));
         LogicSugarSettings.addProcessorStatusPrefs(table);
+        LogicSugarSettings.addUnitFlagsPref(table);
         LogicSugarSettings.addHideVarsPref(table);
         LogicSugarSettings.addBoxSelectPrefs(table);
         LogicSugarSettings.addCompactCardsPref(table);

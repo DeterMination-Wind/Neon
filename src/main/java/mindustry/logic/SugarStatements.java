@@ -8,6 +8,7 @@ import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
+import mindustry.gen.Icon;
 import mindustry.graphics.Pal;
 import mindustry.logic.LCanvas.JumpButton;
 import mindustry.logic.LCanvas.JumpCurve;
@@ -22,6 +23,23 @@ import java.util.List;
 
 public final class SugarStatements{
     private SugarStatements(){}
+
+    /** For / while / switch / if / functions: not mixed with vanilla jump/end. */
+    public static final LCategory advancedControl = new LCategory("advcontrol", Color.valueOf("ff8a65"), Icon.rightOpen);
+    /** Declaration cards: stack, queue, deque, map, set, list, heap, bitset, chain, record. */
+    public static final LCategory dataStructures = new LCategory("datastruct", Color.valueOf("81c784"), Icon.fileText);
+    /** Array / matrix declarations and persistent bulk-operation cards. */
+    public static final LCategory arrayAlgo = new LCategory("arrayalgo", Color.valueOf("64b5f6"), Icon.pencil);
+    /** Per-family intrinsic cards; declaration cards remain in dataStructures. */
+    public static final LCategory stackOps = new LCategory("stackops", Color.valueOf("8bc34a"), Icon.rightOpen);
+    public static final LCategory queueOps = new LCategory("queueops", Color.valueOf("8bc34a"), Icon.rightOpen);
+    public static final LCategory dequeOps = new LCategory("dequeops", Color.valueOf("8bc34a"), Icon.rightOpen);
+    public static final LCategory bitsetOps = new LCategory("bitsetops", Color.valueOf("9575cd"), Icon.pencil);
+    public static final LCategory mapOps = new LCategory("mapops", Color.valueOf("ffb74d"), Icon.fileText);
+    public static final LCategory setOps = new LCategory("setops", Color.valueOf("ffb74d"), Icon.fileText);
+    public static final LCategory listOps = new LCategory("listops", Color.valueOf("4db6ac"), Icon.fileText);
+    public static final LCategory heapOps = new LCategory("heapops", Color.valueOf("4db6ac"), Icon.fileText);
+    public static final LCategory chainOps = new LCategory("chainops", Color.valueOf("90a4ae"), Icon.fileText);
 
     private static boolean parsersInstalled;
 
@@ -51,6 +69,9 @@ public final class SugarStatements{
         LAssembler.customParsers.put("funcdefc", tokens -> SugarStatements.parseFuncDef(tokens, true));
         LAssembler.customParsers.put("funccall", SugarStatements::parseFuncCall);
         LAssembler.customParsers.put("return", SugarStatements::parseReturn);
+        LAssembler.customParsers.put("array", SugarStatements::parseArray);
+        LAssembler.customParsers.put("matrix", SugarStatements::parseMatrix);
+        LAssembler.customParsers.put("arrayinit", SugarStatements::parseArrayInit);
 
         // Read-only compatibility for markers produced by the first development version.
         LAssembler.customParsers.put("forend", tokens -> new SugarStatements.BlockEndStatement());
@@ -72,7 +93,30 @@ public final class SugarStatements{
         return Core.bundle.get("logicsugar." + key, fallback);
     }
 
+    /** Sugar follows v160's one canonical logic-localization setting. */
+    public static boolean cardsLocalized(){
+        return Core.settings.getBool("logiclocalization", true);
+    }
+
+    /** {@link #text} for card titles only ({@code name()} overrides): returns the
+     *  untranslated English fallback while card-title localization is switched off. Public
+     *  because the {@link SugarAsserts} card titles share the same policy. */
+    public static String cardText(String key, String fallback){
+        try{
+            return cardsLocalized() ? text(key, fallback) : fallback;
+        }catch(Throwable ignored){
+            // 无头环境（Core.settings/Core.bundle 未初始化）：退回英文 fallback
+            return fallback;
+        }
+    }
+
     public abstract static class SugarStatement extends LStatement{
+        /** Structured cards own explicit rows and fold controls, so they opt out of the
+         *  v160 default WrapTable layout. Kept without @Override for BE27771 source support. */
+        public boolean useWrapping(){
+            return false;
+        }
+
         @Override
         public LInstruction build(LAssembler builder){
             return new NoopI();
@@ -80,7 +124,7 @@ public final class SugarStatements{
 
         @Override
         public LCategory category(){
-            return LCategory.control;
+            return advancedControl;
         }
 
         /** {@link JumpStatement#addOp} with the value/compare fields narrowed to 75px, so
@@ -302,7 +346,7 @@ public final class SugarStatements{
             // 字段列宽分配。宽屏合并为一行，窄屏只在步长后换一次行。
             table.table(content -> {
                 content.left();
-                if(LCanvas.useRows()){
+                if(SugarCanvas.compactStatementLayout()){
                     content.table(this::buildForPrefix).left();
                     content.row();
                     content.table(this::buildForCondition).growX().fillX().left();
@@ -337,7 +381,7 @@ public final class SugarStatements{
                 () -> rebuildCondition(table));
         }
 
-        @Override public String name(){ return text("for.begin", "For Begin"); }
+        @Override public String name(){ return cardText("for.begin", "For Begin"); }
         @Override public String typeName(){ return "ForBegin"; }
 
         @Override
@@ -364,7 +408,10 @@ public final class SugarStatements{
 
         @Override
         public void build(Table table){
-            table.add(text("condition", "condition")).self(c -> hint(c, "while.condition"));
+            // 独立键（与 for.condition / if.condition 一致）。不要改回通用的 condition 键：
+            // 该键曾被本地化译成「结束条件」，与 lowering 的「为真时重复」语义相反，会让用户
+            // 写出取反的条件（例如把「栈非空」写成 !s.size()），循环体一次都不执行。
+            table.add(text("while.condition", "while")).self(c -> hint(c, "while.condition"));
             table.table(this::rebuildCondition).growX().fillX();
             foldControlRow(table);
         }
@@ -381,7 +428,7 @@ public final class SugarStatements{
                 () -> rebuildCondition(table));
         }
 
-        @Override public String name(){ return text("while.begin", "While Begin"); }
+        @Override public String name(){ return cardText("while.begin", "While Begin"); }
         @Override public String typeName(){ return "WhileBegin"; }
         @Override public void write(StringBuilder out){
             if(expressionMode){
@@ -404,7 +451,7 @@ public final class SugarStatements{
             foldControlRow(table);
         }
 
-        @Override public String name(){ return text("switch.begin", "Switch Start"); }
+        @Override public String name(){ return cardText("switch.begin", "Switch Start"); }
         @Override public String typeName(){ return "SwitchBegin"; }
         @Override public void write(StringBuilder out){ out.append(collapsed ? "switchbeginc " : "switchbegin ").append(value).append(' ').append(destIndex); }
     }
@@ -415,7 +462,7 @@ public final class SugarStatements{
             table.add(text("case.value", "case")).self(c -> hint(c, "case"));
             field(table, value, result -> value = result);
         }
-        @Override public String name(){ return text("case", "Case"); }
+        @Override public String name(){ return cardText("case", "Case"); }
         @Override public String typeName(){ return "Case"; }
         @Override public void write(StringBuilder out){ out.append("case ").append(value); }
     }
@@ -448,7 +495,7 @@ public final class SugarStatements{
                 () -> rebuildCondition(table));
         }
 
-        @Override public String name(){ return text("if.begin", "If Begin"); }
+        @Override public String name(){ return cardText("if.begin", "If Begin"); }
         @Override public String typeName(){ return "IfBegin"; }
         @Override public void write(StringBuilder out){
             if(expressionMode){
@@ -488,7 +535,7 @@ public final class SugarStatements{
                 () -> rebuildCondition(table));
         }
 
-        @Override public String name(){ return text("elif", "Elif"); }
+        @Override public String name(){ return cardText("elif", "Elif"); }
         @Override public String typeName(){ return "ElseIf"; }
         @Override public void write(StringBuilder out){
             if(expressionMode){
@@ -502,7 +549,7 @@ public final class SugarStatements{
 
     public static class ElseStatement extends SugarStatement{
         @Override public void build(Table table){}
-        @Override public String name(){ return text("else", "Else"); }
+        @Override public String name(){ return cardText("else", "Else"); }
         @Override public String typeName(){ return "Else"; }
         @Override public void write(StringBuilder out){ out.append("else"); }
     }
@@ -510,6 +557,17 @@ public final class SugarStatements{
     public static class FuncDefStatement extends BeginStatement{
         public String name = "func";
         public String params = "";
+        /**
+         * Return declaration: "" = infer from the body (the legacy three-token wire shape),
+         * "~" = void (no value return allowed), "value" = must return a value at least once.
+         * v5 saves append it before the destIndex: {@code funcdef f a ~ 3}.
+         */
+        public String returns = "";
+
+        /** True when the return declaration was written explicitly (v5 wire shape). */
+        public boolean declaredReturns(){
+            return returns != null && !returns.trim().isEmpty();
+        }
 
         @Override
         public void build(Table table){
@@ -519,15 +577,22 @@ public final class SugarStatements{
             TextField paramsField = field(table, params, value -> params = value).width(130f).get();
             paramsField.setMessageText(text("func.params.hint", "a,b"));
             table.add(")");
+            table.add(text("func.returns", "returns")).padLeft(6f).self(c -> hint(c, "func.returns"));
+            TextField returnsField = field(table, returns, value -> returns = value).width(60f).get();
+            returnsField.setMessageText(text("func.returns.hint", "~"));
             foldControlRow(table);
         }
 
-        @Override public String name(){ return text("func.def", "Func Def"); }
+        @Override public String name(){ return cardText("func.def", "Func Def"); }
         @Override public String typeName(){ return "FuncDef"; }
 
         @Override
         public void write(StringBuilder out){
-            out.append(collapsed ? "funcdefc " : "funcdef ").append(name).append(' ').append(optional(params)).append(' ').append(destIndex);
+            out.append(collapsed ? "funcdefc " : "funcdef ").append(name).append(' ').append(optional(params)).append(' ');
+            // v5 shape appends the return declaration before the destIndex; an empty declaration
+            // keeps the legacy three-token line byte-identical, so old saves round-trip untouched.
+            if(declaredReturns()) out.append(returns.trim()).append(' ');
+            out.append(destIndex);
         }
     }
 
@@ -565,7 +630,7 @@ public final class SugarStatements{
             return params == null ? fallback : String.join(", ", params);
         }
 
-        @Override public String name(){ return text("func.call", "Func Call"); }
+        @Override public String name(){ return cardText("func.call", "Func Call"); }
         @Override public String typeName(){ return "FuncCall"; }
 
         @Override
@@ -589,7 +654,7 @@ public final class SugarStatements{
                 .growX().padLeft(4f);
         }
 
-        @Override public String name(){ return text("func.return", "Return"); }
+        @Override public String name(){ return cardText("func.return", "Return"); }
         @Override public String typeName(){ return "Return"; }
 
         @Override
@@ -601,23 +666,142 @@ public final class SugarStatements{
         }
     }
 
+    /** 数组声明卡：把内存块的一段地址登记为命名数组（纯编译期元数据）。卡片本身
+     *  不产出任何 mlog 行（lower 时剥离，编译产物保持纯原版指令）；表达式下标
+     *  {@code buf[i]} / {@code buf[i] = x} 经 {@link logicsugar.assist.expr.ArrayRegistry}
+     *  解析为原版 {@code read}/{@code write}。v0 仅支持整数字面量的 base/size。 */
+    public static class ArrayStatement extends SugarStatement{
+        /** 表达式中使用的数组名。 */
+        public String array = "buf";
+        /** 承载数据的内存块变量名（如 cell1）。 */
+        public String memory = "cell1";
+        /** 数组起始物理地址（非负整数字面量）。 */
+        public String base = "0";
+        /** 数组容量（≥1 整数字面量）。 */
+        public String size = "8";
+
+        @Override
+        public void build(Table table){
+            table.add(text("array.card", "Array")).self(c -> hint(c, "array.name"));
+            field(table, array, value -> array = value).width(70f);
+            table.add(text("array.memory", "mem")).self(c -> hint(c, "array.memory"));
+            field(table, memory, value -> memory = value).width(70f);
+            table.add(text("array.base", "base")).self(c -> hint(c, "array.base"));
+            field(table, base, value -> base = value).width(45f);
+            table.add(text("array.size", "size")).self(c -> hint(c, "array.size"));
+            field(table, size, value -> size = value).width(45f);
+        }
+
+        @Override public String name(){ return cardText("array.card", "Array"); }
+        @Override public String typeName(){ return "Array"; }
+        @Override public LCategory category(){ return arrayAlgo; }
+
+        @Override
+        public void write(StringBuilder out){
+            // 固定 token 数（空槽位 "~" 占位）：LParser 复用静态 token 数组，缺尾 token 无法与残值区分
+            out.append("array ").append(optional(array)).append(' ').append(optional(memory)).append(' ')
+                .append(optional(base)).append(' ').append(optional(size));
+        }
+    }
+
+    /** 二维数组（矩阵）声明卡：把内存块的一段行主序区间 [base, base+rows*cols) 登记为
+     *  命名矩阵（纯编译期元数据，卡片本身不产出 mlog 行）。表达式 {@code m[i][j]} 读、
+     *  {@code m[i][j] = x} 写经 {@link logicsugar.assist.expr.ArrayRegistry} 换算为
+     *  原版 {@code read}/{@code write}：物理地址 = base + i*cols + j。 */
+    public static class MatrixStatement extends SugarStatement{
+        /** 表达式中使用的矩阵名。 */
+        public String matrix = "mat";
+        /** 承载数据的内存块变量名（如 cell1）。 */
+        public String memory = "cell1";
+        /** 矩阵起始物理地址（非负整数字面量）。 */
+        public String base = "0";
+        /** 行数（≥1 整数字面量）。 */
+        public String rows = "2";
+        /** 列数（≥1 整数字面量）。 */
+        public String cols = "2";
+
+        @Override
+        public void build(Table table){
+            table.add(text("matrix.card", "Matrix")).self(c -> hint(c, "matrix.name"));
+            field(table, matrix, value -> matrix = value).width(70f);
+            table.add(text("array.memory", "mem")).self(c -> hint(c, "array.memory"));
+            field(table, memory, value -> memory = value).width(70f);
+            table.add(text("array.base", "base")).self(c -> hint(c, "array.base"));
+            field(table, base, value -> base = value).width(45f);
+            table.add(text("matrix.rows", "rows")).self(c -> hint(c, "matrix.rows"));
+            field(table, rows, value -> rows = value).width(45f);
+            table.add(text("matrix.cols", "cols")).self(c -> hint(c, "matrix.cols"));
+            field(table, cols, value -> cols = value).width(45f);
+        }
+
+        @Override public String name(){ return cardText("matrix.card", "Matrix"); }
+        @Override public String typeName(){ return "Matrix"; }
+        @Override public LCategory category(){ return arrayAlgo; }
+
+        @Override
+        public void write(StringBuilder out){
+            // 固定 token 数（空槽位 "~" 占位）：LParser 复用静态 token 数组，缺尾 token 无法与残值区分
+            out.append("matrix ").append(optional(matrix)).append(' ').append(optional(memory)).append(' ')
+                .append(optional(base)).append(' ').append(optional(rows)).append(' ').append(optional(cols));
+        }
+    }
+
+    /** 数组初始化卡：{@code arrayinit <name> <v0>…<v7>}，卡片位置即初始化位置。
+     *  只接受数字字面量（整数/小数，可带负号），{@code ~} 表示跳过该槽；lower 时在该位置
+     *  发射 {@code write <v> <memory> <base+k>}（卡片本身不产出非原版行）。 */
+    public static class ArrayInitStatement extends SugarStatement{
+        /** 被初始化的数组名（必须已声明）。 */
+        public String array = "buf";
+        /** 8 个槽位值；空串表示跳过（写 "~"）。 */
+        public String[] values = new String[8];
+
+        public ArrayInitStatement(){
+            java.util.Arrays.fill(values, "");
+        }
+
+        @Override
+        public void build(Table table){
+            table.add(text("arrayinit.card", "Array Init")).self(c -> hint(c, "arrayinit.name"));
+            field(table, array, value -> array = value).width(70f);
+            for(int i = 0; i < values.length; i++){
+                final int index = i;
+                if(i % 4 == 0) table.row();
+                table.add(String.valueOf(i)).padLeft(i % 4 == 0 ? 4 : 2).color(table.color);
+                field(table, values[index], value -> values[index] = value).width(45f).pad(2f);
+            }
+        }
+
+        @Override public String name(){ return cardText("arrayinit.card", "Array Init"); }
+        @Override public String typeName(){ return "ArrayInit"; }
+        @Override public LCategory category(){ return arrayAlgo; }
+
+        @Override
+        public void write(StringBuilder out){
+            // 固定 token 数（空槽位 "~" 占位）：LParser 复用静态 token 数组，缺尾 token 无法与残值区分
+            out.append("arrayinit ").append(optional(array));
+            for(String value : values){
+                out.append(' ').append(optional(value));
+            }
+        }
+    }
+
     public static class BreakStatement extends SugarStatement{
         @Override public void build(Table table){}
-        @Override public String name(){ return text("break", "Break"); }
+        @Override public String name(){ return cardText("break", "Break"); }
         @Override public String typeName(){ return "Break"; }
         @Override public void write(StringBuilder out){ out.append("break"); }
     }
 
     public static class ContinueStatement extends SugarStatement{
         @Override public void build(Table table){}
-        @Override public String name(){ return text("continue", "Continue"); }
+        @Override public String name(){ return cardText("continue", "Continue"); }
         @Override public String typeName(){ return "Continue"; }
         @Override public void write(StringBuilder out){ out.append("continue"); }
     }
 
     public static class BlockEndStatement extends SugarStatement{
         @Override public void build(Table table){}
-        @Override public String name(){ return "}"; }
+        @Override public String name(){ return cardText("block.end", "}"); }
         @Override public String typeName(){ return "BlockEnd"; }
         @Override public void write(StringBuilder out){ out.append("blockend"); }
     }
@@ -762,9 +946,39 @@ if(("expr".equals(tokens[4]) || "exprsc".equals(tokens[4])) && tokens[5].length(
             throw new IllegalArgumentException("Invalid funcdef statement: missing function name");
         }
         result.params = optionalValue(tokens[2]);
-        result.destIndex = parseDestIndex(tokens[3]);
+        // v5 shape: `funcdef <name> <params> <ret> <destIndex>`. Legacy saves only carry
+        // `funcdef <name> <params> <destIndex>`, and a destIndex is always an integer, so an
+        // integer third slot unambiguously means "no declaration, infer from the body".
+        String third = tokens[3] == null ? "" : tokens[3].trim();   // ~ is meaningful here
+        if(isIntegerToken(third)){
+            result.returns = "";
+            result.destIndex = parseDestIndex(tokens[3]);
+        }else{
+            result.returns = normalizeReturns(third);
+            result.destIndex = parseDestIndex(tokens[4]);
+        }
         result.collapsed = collapsed;
         return result;
+    }
+
+    /** True when the token is an optional sign followed by digits (a legacy funcdef destIndex). */
+    private static boolean isIntegerToken(String token){
+        if(token == null || token.isEmpty()) return false;
+        for(int i = 0; i < token.length(); i++){
+            char c = token.charAt(i);
+            if(i == 0 && c == '-') continue;
+            if(c < '0' || c > '9') return false;
+        }
+        return true;
+    }
+
+    /** Normalizes a funcdef return declaration: {@code ~}/void/none and value/val are accepted. */
+    public static String normalizeReturns(String token){
+        String value = token == null ? "" : token.trim();
+        if(value.equals("~") || value.equalsIgnoreCase("void") || value.equalsIgnoreCase("none")) return "~";
+        if(value.equalsIgnoreCase("value") || value.equalsIgnoreCase("val")) return "value";
+        throw new IllegalArgumentException("Invalid funcdef return declaration '" + token
+            + "' (expected ~ for void or value for a value return)");
     }
 
     public static LStatement parseFuncCall(String[] tokens){
@@ -781,6 +995,52 @@ if(("expr".equals(tokens[4]) || "exprsc".equals(tokens[4])) && tokens[5].length(
     public static LStatement parseReturn(String[] tokens){
         ReturnStatement result = new ReturnStatement();
         result.expr = unescapeQuoted(stripQuotes(tokens[1]));
+        return result;
+    }
+
+    public static LStatement parseArray(String[] tokens){
+        ArrayStatement result = new ArrayStatement();
+        result.array = optionalValue(tokens[1]);
+        if(result.array.isEmpty()){
+            throw new IllegalArgumentException("Invalid array statement: missing array name");
+        }
+        result.memory = optionalValue(tokens[2]);
+        if(result.memory.isEmpty()){
+            throw new IllegalArgumentException("Invalid array statement: missing memory cell");
+        }
+        result.base = optionalValue(tokens[3]);
+        result.size = optionalValue(tokens[4]);
+        return result;
+    }
+
+    public static LStatement parseMatrix(String[] tokens){
+        MatrixStatement result = new MatrixStatement();
+        result.matrix = optionalValue(tokens[1]);
+        if(result.matrix.isEmpty()){
+            throw new IllegalArgumentException("Invalid matrix statement: missing matrix name");
+        }
+        result.memory = optionalValue(tokens[2]);
+        if(result.memory.isEmpty()){
+            throw new IllegalArgumentException("Invalid matrix statement: missing memory cell");
+        }
+        result.base = optionalValue(tokens[3]);
+        result.rows = optionalValue(tokens[4]);
+        result.cols = optionalValue(tokens[5]);
+        return result;
+    }
+
+    public static LStatement parseArrayInit(String[] tokens){
+        ArrayInitStatement result = new ArrayInitStatement();
+        result.array = optionalValue(tokens[1]);
+        if(result.array.isEmpty()){
+            throw new IllegalArgumentException("Invalid arrayinit statement: missing array name");
+        }
+        for(int i = 0; i < result.values.length; i++){
+            // 自定义解析器拿不到本行的 token 数量（LParser 复用静态 token 数组），
+            // 超出本行的槽位读到的可能是残留值；卡片写盘时总是补满 8 个槽位，
+            // 因此正常存档的往返始终精确。
+            result.values[i] = 2 + i < tokens.length ? optionalValue(tokens[2 + i]) : "";
+        }
         return result;
     }
 

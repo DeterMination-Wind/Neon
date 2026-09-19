@@ -13,6 +13,7 @@ import arc.scene.style.BaseDrawable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.ImageButton;
 import arc.scene.ui.Label;
+import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.WidgetGroup;
 import arc.struct.Seq;
@@ -36,9 +37,11 @@ import mindustry.logic.SugarStatements.WhileBeginStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
 import logicsugar.assist.BoxSelect;
 import logicsugar.assist.JumpLineColor;
+import logicsugar.assist.EscapePreview;
 import logicsugar.assist.expr.ExprCompiler;
 import logicsugar.assist.expr.ExprHook;
 import logicsugar.assist.expr.ExprStatement;
+import logicsugar.assist.expr.ExprTextImport;
 
 import java.util.IdentityHashMap;
 import java.lang.reflect.Field;
@@ -64,8 +67,19 @@ public class SugarCanvas extends LCanvas{
     private static final Field canvasJumpsField = optionalField(LCanvas.class, "jumps");
     private static final Field updateJumpHeightsField = optionalField(LCanvas.DragLayout.class, "updateJumpHeights");
     private static final Method recalculateMethod = optionalMethod(LCanvas.class, "recalculate");
+    private static final Method compactMethod = optionalMethod(LCanvas.class, "isCompact");
+    private static final Method legacyRowsMethod = optionalMethod(LCanvas.class, "useRows");
     private static final Field addressLabelField = optionalField(LCanvas.StatementElem.class, "addressLabel");
     private static final Field needsLayoutField = optionalField(WidgetGroup.class, "needsLayout");
+    private final EscapePreview escapePreview = new EscapePreview();
+
+    public Runnable afterMutate;
+    /** 为 true 时 {@link #add}/{@link #addAt} 不通知历史（{@link #load} 期间）。 */
+    public boolean suppressHistory;
+    /** True while this canvas shows the global function library (executor == null session):
+     *  the library file may exceed the processor instruction cap, so {@link #load} parses it
+     *  with the raised library limit. {@link SugarLogicDialog} sets it on every show. */
+    public boolean librarySession;
 
     public SugarCanvas(){
         super();
@@ -74,19 +88,43 @@ public class SugarCanvas extends LCanvas{
             structure.normalizeElements();
             if(isDragging()) structure.expandAll();
             structure.refresh();
+            escapePreview.update(this);
         });
     }
 
     @Override
     public void load(String asm){
-        BoxSelect.canvasWillChange(this);
+        boolean previous = suppressHistory;
+        suppressHistory = true;
+        try{
+            BoxSelect.canvasWillChange(this);
+            // 文本导入的表达式语句（README 承诺的 `result = (a + b) * 2` / `x = buf[3]` /
+            // `buf[i] = 5`）在这里补上文本形态：原版 LParser 只按首 token 查表，认不出赋值行，
+            // 会静默变成 InvalidStatement(noop)。plan() 把这行一对一换成哨兵 set 语句
+            // （语句条数不变，因此 jump 下标与标签解析完全不受影响），加载完成后换回卡片。
+            ExprTextImport.Plan importPlan = ExprTextImport.plan(asm);
+            if(librarySession){
+                // The function library may hold far more statements than a processor program;
+                // vanilla LCanvas.load parses through LParser, which stops at the processor cap.
+                SugarFunctions.withLibraryLimit(() -> loadSuper(importPlan.text()));
+            }else{
+                super.load(importPlan.text());
+            }
+            ExprTextImport.applyToCanvas(this, importPlan);
+            BoxSelect.canvasDidChange(this);
+            // super.load() 先清空了 jumpLayer（statements.jumps.clear()），结构引导线层
+            // 随之被移除；installGuideLayer 只在 rebuild() 里调用（重开才触发），所以
+            // 这里必须重装，否则粘贴导入后所有结构竖线消失且新增/删除语句都无法恢复。
+            installGuideLayer();
+            ExprHook.foldAll(this);
+        }finally{
+            suppressHistory = previous;
+        }
+    }
+
+    /** {@code super.load} behind a method reference so the library-limit wrapper can call it. */
+    private void loadSuper(String asm){
         super.load(asm);
-        BoxSelect.canvasDidChange(this);
-        // super.load() 先清空了 jumpLayer（statements.jumps.clear()），结构引导线层
-        // 随之被移除；installGuideLayer 只在 rebuild() 里调用（重开才触发），所以
-        // 这里必须重装，否则粘贴导入后所有结构竖线消失且新增/删除语句都无法恢复。
-        installGuideLayer();
-        ExprHook.foldAll(this);
     }
 
     @Override
@@ -310,6 +348,21 @@ public class SugarCanvas extends LCanvas{
         }
     }
 
+    /** Width-mode compatibility across early v160 ({@code useRows}) and current v160
+     *  ({@code isCompact}). This intentionally has no direct linkage to either method. */
+    public static boolean compactStatementLayout(){
+        Method method = compactMethod != null ? compactMethod : legacyRowsMethod;
+        if(method != null){
+            try{
+                return (boolean)method.invoke(null);
+            }catch(ReflectiveOperationException | ClassCastException ignored){}
+        }
+        // Keep the same width threshold as both upstream implementations when reflection is
+        // unavailable (e.g. a fork hides the helper).  Portrait-only fallback misclassifies a
+        // narrow desktop window and can put the For card's growX condition beside its prefix.
+        return Core.graphics != null && Core.graphics.getWidth() < Scl.scl(900f) * 1.2f;
+    }
+
     private void installGuideLayer(){
         jumpLayer = resolveJumpLayer(this);
         if(jumpLayer == null) return;
@@ -348,6 +401,25 @@ public class SugarCanvas extends LCanvas{
         }
     }
 
+    /**
+     * {@code LStatement.saveUI()} is not null-safe for jumps: the vanilla implementation does
+     * {@code dest.parent.getChildren()} and throws when the jump target element is detached
+     * (removed or not yet re-added during a structural refresh). Drop such stale targets before
+     * rebuilding indices, and keep a stray throw from reaching the render loop.
+     */
+    public static void normalizeJumpUI(LStatement statement){
+        if(statement == null) return;
+        if(statement instanceof JumpStatement jump && jump.dest != null && jump.dest.parent == null){
+            jump.dest = null;
+            jump.destIndex = -1;
+        }
+        try{
+            statement.saveUI();
+        }catch(RuntimeException ignored){
+            // A detached target is already handled above; never let stale jump bookkeeping crash the UI.
+        }
+    }
+
     /** Marks jump heights dirty on modern clients and recalculates them on legacy clients. */
     public static void markJumpHeightsDirty(LCanvas canvas){
         if(canvas == null || canvas.statements == null) return;
@@ -379,6 +451,7 @@ public class SugarCanvas extends LCanvas{
     @Override
     public void add(LStatement statement){
         statements.addChild(new SugarStatementElem(statement));
+        notifyMutate();
     }
 
     @Override
@@ -394,6 +467,12 @@ public class SugarCanvas extends LCanvas{
             markJumpHeightsDirty(this);
         }
         structure.refresh();
+        notifyMutate();
+    }
+
+    private void notifyMutate(){
+        if(suppressHistory || afterMutate == null) return;
+        afterMutate.run();
     }
 
     public static void refreshCurrent(){
@@ -519,7 +598,7 @@ public class SugarCanvas extends LCanvas{
 
         @Override
         public void copy(){
-            st.saveUI();
+            normalizeJumpUI(st);
             LStatement copied = st.copy();
             if(copied == null) return;
 
@@ -561,7 +640,7 @@ public class SugarCanvas extends LCanvas{
                 }
                 newElem = new SugarStatementElem(stNew);
             }else{ //block -> print
-                st.saveUI();
+                normalizeJumpUI(st);
                 StringBuilder thisText = new StringBuilder();
                 st.write(thisText);
                 PrintStatement stNew = new PrintStatement();
@@ -573,7 +652,7 @@ public class SugarCanvas extends LCanvas{
             for(Element c : statements.getChildren()){
                 if(c instanceof StatementElem ste && ste.st instanceof JumpStatement jst && (jst.dest == null || jst.dest == st.elem)){
                     if(jst.destIndex < 0 || jst.destIndex >= statements.getChildren().size) continue;
-                    jst.saveUI();
+                    normalizeJumpUI(jst);
                 }
             }
             statements.addChildBefore(this, newElem);
@@ -687,7 +766,7 @@ public class SugarCanvas extends LCanvas{
 
             // Preserve index-based links before replacing elements created by an external LCanvas path.
             for(Element child : current){
-                ((StatementElem)child).st.saveUI();
+                normalizeJumpUI(((StatementElem)child).st);
             }
 
             for(int i = 0; i < statements.getChildren().size; i++){
@@ -810,7 +889,7 @@ public class SugarCanvas extends LCanvas{
                     jump.dest = null;
                     jump.destIndex = -1;
                 }
-                statement.saveUI();
+                normalizeJumpUI(statement);
             }
         }
 

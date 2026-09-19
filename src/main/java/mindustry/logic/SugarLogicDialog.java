@@ -6,9 +6,13 @@ import arc.func.Prov;
 import arc.input.KeyCode;
 import arc.scene.Element;
 import arc.scene.Group;
+import arc.scene.event.InputEvent;
+import arc.scene.event.InputListener;
 import arc.scene.style.Drawable;
+import arc.graphics.Color;
 import arc.scene.ui.Button;
 import arc.scene.ui.Dialog;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
@@ -27,10 +31,14 @@ import mindustry.ui.dialogs.BaseDialog;
 import mindustry.world.blocks.logic.LogicBlock;
 import logicsugar.FunctionLibrary;
 import logicsugar.FunctionLibraryDialog;
+import logicsugar.assist.BottomBarLayout;
+import logicsugar.assist.EditHistory;
+import logicsugar.assist.InstructionBudget;
 import logicsugar.assist.expr.ExprCompiler;
 import logicsugar.assist.expr.ExprStatement;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -73,15 +81,42 @@ public class SugarLogicDialog extends LogicDialog{
     /** Content hash of the library file when the dialog opened; used to refresh the stale
      *  session snapshot when the library is edited while the processor editor stays open. */
     private int libraryHashAtOpen;
+    private boolean editingPrivileged;
     /** Shown only during library-file editing sessions: closes without saving. */
     private Button discardButton;
     private Element editButton;
     private float menuScanTimer;
+    /** Live compiled-size banner; rebuilt with the vanilla button row. */
+    private Label budgetLabel;
+    private float budgetTimer;
+    private boolean budgetToastShown;
+    private InstructionBudget.Snapshot lastBudget;
+    private final EditHistory history = new EditHistory();
+    private String lastHistorySnap = "";
+    private float historyTimer;
+    private float historyIdle;
+    private Button undoButton;
+    private Button redoButton;
+    /** Width used by the last desktop bottom-bar layout; changed after the dialog gets a real size. */
+    private float bottomButtonsWidth = -1f;
+
+    /** Fixed size of one bottom-bar button cell; vanilla setup() uses the same 160x64. */
+    private static final float barButtonWidth = 160f;
+    private static final float barButtonHeight = 64f;
+    /** Side padding of every bottom-bar cell, and of every packed row's own edges. */
+    private static final float barCellPad = 8f;
+    /** Instruction-budget label cell: 180px content plus its side pads. */
+    private static final float barBudgetWidth = 180f + 2f * barCellPad;
+    /** Horizontal padding reserved by every bottom-bar row. */
+    private static final float barRowPad = 2f * barCellPad;
 
     public SugarLogicDialog(){
         super();
         clearChildren();
         canvas = new SugarCanvas();
+        if(canvas instanceof SugarCanvas sugarCanvas){
+            sugarCanvas.afterMutate = this::recordCanvasHistory;
+        }
         add(canvas).grow().name("canvas");
         row();
         add(buttons).growX().name("buttons");
@@ -96,13 +131,51 @@ public class SugarLogicDialog extends LogicDialog{
         // (clearChildren) on EVERY show — wiping anything added outside it. Re-append the
         // Sugar-owned buttons after each rebuild; find() guards make it idempotent.
         shown(this::installSugarButtons);
+        addCaptureListener(new InputListener(){
+            @Override
+            public boolean keyDown(InputEvent event, KeyCode keycode){
+                if(Vars.mobile || !isShown()) return false;
+                boolean ctrl = Core.input.keyDown(KeyCode.controlLeft) || Core.input.keyDown(KeyCode.controlRight);
+                if(!ctrl) return false;
+                if(keycode == KeyCode.z){
+                    performUndo();
+                    return true;
+                }
+                if(keycode == KeyCode.y){
+                    performRedo();
+                    return true;
+                }
+                return false;
+            }
+        });
         update(() -> {
             installEditHook();
+            // Device-independent on purpose: mobile and narrow desktop windows take the same
+            // width-driven path. Gating this on Vars.mobile/isPortrait() is what left the phone
+            // bar on vanilla's fixed-width row, which cannot be compressed to the stage width and
+            // so leaves its first and last controls off screen. The width check is what keeps
+            // this from re-parenting half the bar every single frame.
+            float width = buttons.getWidth();
+            if(width > 0f && Math.abs(width - bottomButtonsWidth) > 1f){
+                // The shown callback can run before the parent table has measured this
+                // row. Re-run once its actual width is available (and after a resize).
+                layoutBottomButtons();
+            }
             menuScanTimer += Time.delta;
             if(menuScanTimer >= 6f){
                 menuScanTimer = 0f;
                 installCompiledCopy();
                 installOriginalView();
+            }
+            budgetTimer += Time.delta;
+            if(budgetTimer >= 24f){
+                budgetTimer = 0f;
+                refreshInstructionBudget();
+            }
+            historyTimer += Time.delta;
+            if(historyTimer >= 8f){
+                historyTimer = 0f;
+                pollCanvasHistory();
             }
         });
     }
@@ -121,6 +194,268 @@ public class SugarLogicDialog extends LogicDialog{
         // processor-inspection copy buttons (variables dump + print buffer); no-op in
         // library-file editing sessions where there is no processor to inspect
         logicsugar.assist.VarClipboard.addButtons(buttons, this);
+        installBudgetLabel();
+        installHistoryButtons();
+        bottomButtonsWidth = -1f;
+        layoutBottomButtons();
+    }
+
+    /**
+     * Rebuilds the bottom bar so that no control is ever squeezed or painted over.
+     *
+     * <p>Vanilla {@code setup()} leaves {@code buttons.defaults().size(160f, 64f)} on this
+     * row. That default sets a positive <em>maximum</em> width as well as a minimum, so every
+     * container cell added here used to be clamped to a single button; the fixed 160px
+     * children of that container then overflowed it and the inspection controls painted
+     * straight over the action controls (buttons-overlapping report, 2026-09). The inherited
+     * maximum is cleared before any container is added — a non-positive maximum means
+     * "unbounded" in Table's layout math.</p>
+     *
+     * <p>The width logic runs on <b>every</b> device, mobile included. It used to return early
+     * for {@code Vars.mobile || isPortrait()} and keep vanilla's single fixed-width row there,
+     * which is the report this method now answers: {@code TextButton} pins its label's minimum
+     * width to the text width, so on a phone that row cannot be compressed down to the screen.
+     * A row wider than the stage gets pushed out of the visible area once
+     * {@code Element.keepInStage()} pulls its overflowing edge back onto the stage, which is how
+     * the first and last controls — the back button and the function-library button — end up cut
+     * off with no way to press them. Wrapping onto rows that really fit is the only layout that
+     * keeps every control on screen at a usable size.</p>
+     */
+    private void layoutBottomButtons(){
+        // v160 names back/edit/variables but leaves the upstream Add button anonymous.
+        // Claim that exact fourth vanilla child before clearing/reparenting it; otherwise it
+        // would be lost from the action group every time the dialog is shown.
+        Element add = buttons.find("add");
+        if(add == null && buttons.getChildren().size > 3){
+            Element candidate = buttons.getChildren().get(3);
+            if(candidate instanceof Button){
+                candidate.name = "add";
+                add = candidate;
+            }
+        }
+
+        Element[] centered = {
+            buttons.find("back"),
+            buttons.find("edit"),
+            buttons.find("variables"),
+            add,
+            buttons.find("funclib"),
+            buttons.find("funclib-discard"),
+            buttons.find("logicsugar-undo"),
+            buttons.find("logicsugar-redo")
+        };
+        Element[] debug = {
+            buttons.find(logicsugar.assist.VarClipboard.copyVarsButtonName),
+            buttons.find(logicsugar.assist.VarClipboard.copyBufferButtonName),
+            buttons.find("instruction-budget")
+        };
+
+        buttons.clearChildren();
+        // See the method comment: vanilla's 160px default maximum would clamp the containers
+        // below to a single button and let their fixed-size children overlap each other.
+        buttons.defaults().maxWidth(0f);
+
+        Table centeredTable = new Table();
+        centeredTable.defaults().size(barButtonWidth, barButtonHeight);
+        centeredTable.center();
+        for(Element element : centered){
+            // Hidden optional actions (for example the library-only discard button) must not
+            // reserve an invisible slot, otherwise the visible action group is off-center.
+            if(element != null && element.visible) centeredTable.add(element);
+        }
+
+        Table debugTable = new Table();
+        debugTable.defaults().size(barButtonWidth, barButtonHeight);
+        debugTable.right().marginRight(12f);
+        for(Element element : debug){
+            if(element == null || !element.visible) continue;
+            addBarCell(debugTable, element);
+        }
+
+        float available = buttons.getWidth();
+        // Before the first layout the row has no measured width yet; the screen is an upper
+        // bound for it (dialog windows fill their parent), so that first pass is only ever
+        // corrected towards a narrower bar by the update() re-check installed above.
+        if(available <= 0f) available = Core.graphics.getWidth();
+        bottomButtonsWidth = buttons.getWidth();
+
+        // 1) Everything on one row: actions centered, inspection controls anchored to the
+        //    right edge.  Both groups are full-width layers of a stack, so they may only share
+        //    the row while their footprints cannot touch.  This is the shape every wide window
+        //    uses; the packing below is the fallback for everything narrower.
+        float sideWidth = debugTable.getPrefWidth() + 12f;
+        float wideEnough = centeredTable.getPrefWidth() + 2f * sideWidth + barRowPad;
+        if(available >= wideEnough){
+            Table debugRegion = new Table();
+            debugRegion.right();
+            debugRegion.add(debugTable).right();
+            buttons.stack(centeredTable, debugRegion).growX().height(barButtonHeight).padLeft(barCellPad).padRight(barCellPad);
+            buttons.invalidateHierarchy();
+            return;
+        }
+
+        // 2) Narrow (every phone, and any window too small for the centered stack): pack the
+        //    individual cells into rows that really fit, so nothing is squeezed into its
+        //    neighbour.  A cell never shares a row unless that row can hold it; at worst a
+        //    single cell keeps a row to itself rather than being dropped or overlapped.
+        float rowSpace = available - barRowPad;
+        // The instruction-budget label is not just the widest cell (196px), it is also the only
+        // cell that may be given up: on a bar barely wider than the screen it costs a whole extra
+        // row of height for a readout the over-budget toast already reports.  A control the user
+        // cannot press is a real loss, a readout is not, so every pressable cell stays on the bar
+        // whatever the width.  A row too narrow for the label itself never shows it.
+        boolean budgetLabelFits = rowSpace >= barBudgetWidth;
+        ArrayList<Element> packed = new ArrayList<>();
+        for(Element element : centered){
+            if(element != null && element.visible) packed.add(element);
+        }
+        for(Element element : debug){
+            if(element == null || !element.visible) continue;
+            if(element == budgetLabel && !budgetLabelFits) continue;
+            packed.add(element);
+        }
+        float[] widths = new float[packed.size()];
+        for(int i = 0; i < widths.length; i++){
+            widths[i] = packed.get(i) == budgetLabel ? barBudgetWidth : barButtonWidth;
+        }
+
+        int[] rows = BottomBarLayout.packRows(rowSpace, widths);
+        int index = 0;
+        for(int row = 0; row < rows.length; row++){
+            Table rowTable = new Table();
+            rowTable.defaults().size(barButtonWidth, barButtonHeight);
+            rowTable.center();
+            for(int cell = 0; cell < rows[row]; cell++){
+                addBarCell(rowTable, packed.get(index++));
+            }
+            buttons.add(rowTable).growX().height(barButtonHeight).padLeft(barCellPad).padRight(barCellPad);
+            if(row < rows.length - 1) buttons.row();
+        }
+        buttons.invalidateHierarchy();
+    }
+
+    /**
+     * Adds one bottom-bar cell. The instruction-budget label keeps its wider cell — that cell is
+     * where {@link #barBudgetWidth} comes from, so the two must stay in step or the row packing
+     * measures a cell the layout does not actually produce.
+     */
+    private void addBarCell(Table row, Element element){
+        if(element == budgetLabel){
+            row.add(element).width(barBudgetWidth - 2f * barCellPad).height(barButtonHeight)
+                .padLeft(barCellPad).padRight(barCellPad);
+        }else{
+            row.add(element);
+        }
+    }
+
+    private void installHistoryButtons(){
+        if(!Vars.mobile) return;
+        if(buttons.find("logicsugar-undo") == null){
+            undoButton = buttons.button("@logicsugar.undo", Icon.left, this::performUndo).get();
+            undoButton.name = "logicsugar-undo";
+        }else if(buttons.find("logicsugar-undo") instanceof Button button){
+            undoButton = button;
+        }
+        if(buttons.find("logicsugar-redo") == null){
+            redoButton = buttons.button("@logicsugar.redo", Icon.rightOpen, this::performRedo).get();
+            redoButton.name = "logicsugar-redo";
+        }else if(buttons.find("logicsugar-redo") instanceof Button button){
+            redoButton = button;
+        }
+        refreshHistoryButtons();
+    }
+
+    private void performUndo(){
+        applyHistory(history.undo(canvasSnapshot()));
+    }
+
+    private void performRedo(){
+        applyHistory(history.redo(canvasSnapshot()));
+    }
+
+    private String canvasSnapshot(){
+        try{
+            return canvas.save();
+        }catch(Throwable ignored){
+            return lastHistorySnap;
+        }
+    }
+
+    private void recordCanvasHistory(){
+        try{
+            String now = canvas.save();
+            history.record(now);
+            lastHistorySnap = now;
+            historyIdle = 0f;
+            refreshHistoryButtons();
+        }catch(Throwable ignored){
+        }
+    }
+
+    private void pollCanvasHistory(){
+        if(history.isRestoring()) return;
+        try{
+            String now = canvas.save();
+            if(!now.equals(lastHistorySnap)){
+                lastHistorySnap = now;
+                historyIdle = 0f;
+            }else{
+                historyIdle += 8f;
+                if(historyIdle >= 24f){
+                    history.record(now);
+                    historyIdle = 0f;
+                    refreshHistoryButtons();
+                }
+            }
+        }catch(Throwable ignored){
+        }
+    }
+
+    private void applyHistory(String sugar){
+        if(sugar == null) return;
+        canvas.load(sugar);
+        try{
+            String actual = canvas.save();
+            history.applied(actual);
+            lastHistorySnap = actual;
+        }catch(Throwable ignored){
+            history.applied(sugar);
+            lastHistorySnap = sugar;
+        }
+        historyIdle = 0f;
+        refreshHistoryButtons();
+    }
+
+    private void resetEditHistory(){
+        try{
+            String snap = canvas.save();
+            history.reset(snap);
+            lastHistorySnap = snap;
+        }catch(Throwable ignored){
+            history.reset("");
+            lastHistorySnap = "";
+        }
+        historyIdle = 0f;
+        refreshHistoryButtons();
+    }
+
+    private void refreshHistoryButtons(){
+        if(undoButton != null) undoButton.setDisabled(!history.canUndo());
+        if(redoButton != null) redoButton.setDisabled(!history.canRedo());
+    }
+
+    private void installBudgetLabel(){
+        if(buttons.find("instruction-budget") != null){
+            Element found = buttons.find("instruction-budget");
+            if(found instanceof Label label) budgetLabel = label;
+            return;
+        }
+        budgetLabel = new Label("");
+        budgetLabel.name = "instruction-budget";
+        budgetLabel.setAlignment(arc.util.Align.left);
+        budgetLabel.setWrap(true);
+        buttons.add(budgetLabel).name("instruction-budget").left().growX().padLeft(8f).minWidth(160f).height(40f);
+        refreshInstructionBudget();
     }
 
     private void installEditHook(){
@@ -164,7 +499,8 @@ public class SugarLogicDialog extends LogicDialog{
             try{
                 // copy with the session's effective library, so the embedded functions survive
                 Core.app.setClipboardText(SugarCompiler.compile(canvas.save(), SugarCompiler.currentMode(),
-                    effectiveLibrary.index, effectiveLibrary.text));
+                    effectiveLibrary.index, effectiveLibrary.text, SugarCompiler.currentStrategy(),
+                    SugarCompiler.currentAssertEmit(), editingPrivileged));
                 dialog.hide();
                 Vars.ui.showInfoFade("@logicsugar.copy.compiled.done");
             }catch(IllegalArgumentException exception){
@@ -355,8 +691,11 @@ public class SugarLogicDialog extends LogicDialog{
 
                     for(Prov<LStatement> prov : LogicIO.allStatements){
                         LStatement example = prov.get();
+                        String displayName = statementDisplayName(example);
                         if(example instanceof LStatements.InvalidStatement || example.hidden() || (example.privileged() && !priv) || (example.nonPrivileged() && priv) ||
-                            (!text.isEmpty() && !example.name().toLowerCase(Locale.ROOT).contains(text) && !example.typeName().toLowerCase(Locale.ROOT).contains(text)) ||
+                            (!text.isEmpty() && !displayName.toLowerCase(Locale.ROOT).contains(text)
+                                && !example.name().toLowerCase(Locale.ROOT).contains(text)
+                                && !example.typeName().toLowerCase(Locale.ROOT).contains(text)) ||
                             (!priv && !Vars.state.rules.logicUnitControl && example.category() == LCategory.unit)) continue;
 
                         if(matched[0] == null){
@@ -386,13 +725,15 @@ public class SugarLogicDialog extends LogicDialog{
                         style.fontColor = category.color;
                         style.font = Fonts.outline;
 
-                        cat.button(example.name(), style, () -> {
+                        cat.button(displayName, style, () -> {
                             canvas.addAt(position == -1 ? canvas.statements.getChildren().size : position, prov.get());
                             dialog.hide();
                         }).size(130f, 50f).self(c -> {
+                            configurePaletteButton(c.get());
                             // LogicSugar statements use dedicated hint keys; vanilla ones keep the original lookup
                             String sugarKey = "logicsugar.lst." + example.typeName().toLowerCase(Locale.ROOT);
-                            LCanvas.tooltip(c, Core.bundle.has(sugarKey) ? sugarKey : "lst." + example.name());
+                            String bundleKey = Core.bundle.has(sugarKey) ? sugarKey : statementBundleKey(example);
+                            LCanvas.tooltip(c, bundleKey != null ? bundleKey : sugarKey);
                         }).top().left();
 
                         if(cat.getChildren().size % 3 == 0) cat.row();
@@ -406,14 +747,62 @@ public class SugarLogicDialog extends LogicDialog{
         dialog.show();
     }
 
+    /**
+     * Arc's {@link TextButton} enables word wrapping by default.  In the v160 fallback-font
+     * layout a CJK title that lands exactly on the 130px palette-button boundary can leave the
+     * glyph and advance arrays out of sync and crash in {@code GlyphLayout.setText}; the six
+     * character Chinese title for {@code blockend} reproduced {@code 6 >= 6}.  Palette entries
+     * are single-line names, so truncate unusually long translations instead of wrapping them.
+     */
+    static void configurePaletteButton(TextButton button){
+        if(button == null) return;
+        button.getLabel().setWrap(false);
+        button.getLabel().setEllipsis(true);
+        button.getLabelCell().minWidth(0f);
+    }
+
+    /**
+     * Uses v160's canonical statement localization while preserving Sugar's own bundle keys.
+     * {@code localizedName()} exists on MindustryX (and on some later v160 cores) but not on
+     * vanilla v159, and Neon compiles this file against a vanilla classpath, so the optional
+     * accessor is resolved reflectively and degrades to {@link LStatement#name()}.
+     */
+    private static String statementDisplayName(LStatement statement){
+        if(statement instanceof SugarStatements.SugarStatement) return statement.name();
+        if(!Core.settings.getBool("logiclocalization", true)) return statement.name();
+        Object localized = optionalStatementString(statement, "localizedName");
+        return localized instanceof String ? (String)localized : statement.name();
+    }
+
+    /** Bundle key for a statement when the running core exposes it; {@code null} on vanilla. */
+    private static String statementBundleKey(LStatement statement){
+        Object key = optionalStatementString(statement, "statementKey");
+        return key instanceof String ? (String)key : null;
+    }
+
+    private static Object optionalStatementString(LStatement statement, String method){
+        try{
+            return statement.getClass().getMethod(method).invoke(statement);
+        }catch(ReflectiveOperationException | RuntimeException ignored){
+            return null;
+        }
+    }
+
     @Override
     public void show(String code, LExecutor executor, boolean privileged, Cons<String> modified){
         this.executor = executor;
+        // Function-library sessions (executor == null) parse with the raised library limit,
+        // including the vanilla LCanvas.load inside super.show below.
+        if(canvas instanceof SugarCanvas sugarCanvas) sugarCanvas.librarySession = executor == null;
+        this.editingPrivileged = privileged;
         discardButton.visible = executor == null;
         this.openedCode = code;
         this.originalCode = null;
         this.recoveredSugar = null;
         this.showingOriginal = false;
+        this.lastBudget = null;
+        this.budgetToastShown = false;
+        this.budgetTimer = 24f;
         clearOriginalViewCache();
         // drafts are keyed by Building; drop entries whose processor is gone so the map
         // cannot grow without bound over a session
@@ -423,7 +812,7 @@ public class SugarLogicDialog extends LogicDialog{
             // a failed compile kept the user's work; trust it over any stored code
             editable = drafts.get(key);
         }else{
-            String restored = SugarCompiler.restore(code);
+            String restored = SugarCompiler.restore(code, executor == null);
             boolean verified;
             try{
                 verified = SugarCompiler.verifyRestore(code, restored);
@@ -462,7 +851,11 @@ public class SugarLogicDialog extends LogicDialog{
         // an untouched empty canvas as "edited", so closing would submit an empty program and
         // silently wipe the processor. Pre-validate with the same parse the canvas performs.
         try{
-            LAssembler.read(editable, privileged);
+            if(executor == null){
+                SugarFunctions.readLibrary(editable, privileged);
+            }else{
+                LAssembler.read(editable, privileged);
+            }
         }catch(Throwable exception){
             hide();
             showCompileError(new IllegalArgumentException("Cannot open the logic editor: " + exception.getMessage()), false);
@@ -475,6 +868,7 @@ public class SugarLogicDialog extends LogicDialog{
         // LogicDialog normally suppresses equal results. Sugar must always win the
         // close race against remote processor edits, so replace that consumer.
         setConsumer(sugar -> submit(sugar, executor, modified, key, true));
+        resetEditHistory();
     }
 
     private void submit(String sugar, LExecutor executor, Cons<String> modified, Object key, boolean closing){
@@ -493,7 +887,9 @@ public class SugarLogicDialog extends LogicDialog{
             }
         }
         try{
-            String compiled = SugarCompiler.compile(sugar, SugarCompiler.currentMode(), effectiveLibrary.index, effectiveLibrary.text);
+            String compiled = SugarCompiler.compile(sugar, SugarCompiler.currentMode(), effectiveLibrary.index,
+                effectiveLibrary.text, SugarCompiler.currentStrategy(), SugarCompiler.currentAssertEmit(), editingPrivileged,
+                executor == null);
             if(executor != null && executor.build != null && !executor.build.isValid()){
                 drafts.remove(key);
                 return;
@@ -530,6 +926,10 @@ public class SugarLogicDialog extends LogicDialog{
         if(executor != null && !passThroughSugarOnError && hasUncompilableExpression()){
             Core.app.post(() -> showCompileError(
                 new IllegalArgumentException(uncompilableExpressionMessage()), true));
+            return;
+        }
+        if(executor != null && !passThroughSugarOnError && overProcessorBudget()){
+            Core.app.post(() -> Vars.ui.showErrorMessage(budgetCloseError().getMessage()));
             return;
         }
         clearCompiledCopyCache();
@@ -614,5 +1014,95 @@ public class SugarLogicDialog extends LogicDialog{
     private void showCompileError(IllegalArgumentException exception, boolean draftKept){
         String key = draftKept ? "logicsugar.error.draft" : "logicsugar.error.compile";
         Vars.ui.showErrorMessage(Core.bundle.format(key, exception.getMessage()));
+    }
+
+    /** Recompiles the canvas and updates the live instruction-budget banner. */
+    private void refreshInstructionBudget(){
+        if(!isShown() || budgetLabel == null || canvas == null) return;
+        String sugar;
+        try{
+            sugar = canvas.save();
+        }catch(Throwable ignored){
+            return;
+        }
+        if(executor == null){
+            // 函数库会话不是一个处理器程序：1000 条处理器保存上限不适用，函数库有独立上限。
+            // 显示「库源码行数 / 函数库上限」，超限标红提示；仍然不写入 lastBudget，
+            // 因为关闭路径只对处理器会话做超限拦截（函数库保存由 FunctionLibrary.save 把关）。
+
+            lastBudget = null;
+            int libraryLines = SugarCompiler.emittedInstructionCount(sugar);
+            boolean libraryOver = libraryLines > SugarFunctions.libraryInstructionLimit;
+            budgetLabel.setText(Core.bundle.format(
+                libraryOver ? "logicsugar.budget.library.over" : "logicsugar.budget.library",
+                libraryLines, SugarFunctions.libraryInstructionLimit));
+
+            budgetLabel.setColor(libraryOver ? Pal.remove : Color.lightGray);
+            return;
+        }
+        lastBudget = InstructionBudget.of(sugar, SugarCompiler.currentMode(),
+            effectiveLibrary.index, effectiveLibrary.text);
+        int storage = compressedSize(lastBudget);
+        updateBudgetLabel(storage);
+        boolean over = lastBudget.over() || storageOver(storage);
+        if(over && !budgetToastShown){
+            budgetToastShown = true;
+            Vars.ui.showInfoFade(Core.bundle.format("logicsugar.budget.toast",
+                lastBudget.displayCount(), lastBudget.instructionLimit));
+        }
+        if(!over) budgetToastShown = false;
+    }
+
+    private void updateBudgetLabel(int storage){
+        if(budgetLabel == null || lastBudget == null) return;
+        boolean over = lastBudget.over() || storageOver(storage);
+        String text = Core.bundle.format(over ? "logicsugar.budget.over" : "logicsugar.budget",
+            lastBudget.displayCount(), lastBudget.instructionLimit);
+        if(storage >= 0){
+            text += "\n" + Core.bundle.format("logicsugar.budget.storage", storage, maxCompressedBytes);
+        }
+        budgetLabel.setText(text);
+        budgetLabel.setColor(over ? Pal.remove : Color.lightGray);
+    }
+
+    private int compressedSize(InstructionBudget.Snapshot snapshot){
+        if(snapshot == null || snapshot.compiled == null) return -1;
+        if(executor == null || !(executor.build instanceof LogicBlock.LogicBuild)) return -1;
+        try{
+            LogicBlock.LogicBuild build = (LogicBlock.LogicBuild)executor.build;
+            return LogicBlock.compress(snapshot.compiled, build.relativeConnections()).length;
+        }catch(Throwable ignored){
+            return -1;
+        }
+    }
+
+    private boolean storageOver(int storage){
+        return storage > maxCompressedBytes;
+    }
+
+    private boolean overProcessorBudget(){
+        String sugar;
+        try{
+            sugar = canvas.save();
+        }catch(Throwable ignored){
+            return false;
+        }
+        lastBudget = InstructionBudget.of(sugar, SugarCompiler.currentMode(),
+            effectiveLibrary.index, effectiveLibrary.text);
+        int storage = compressedSize(lastBudget);
+        updateBudgetLabel(storage);
+        return lastBudget.over() || storageOver(storage);
+    }
+
+    private IllegalArgumentException budgetCloseError(){
+        if(lastBudget != null && lastBudget.over()){
+            String hint = SugarCompiler.currentMode() == SugarCompiler.FuncMode.inline
+                ? Core.bundle.get("logicsugar.error.budget.inlineHint") : "";
+            return new IllegalArgumentException(Core.bundle.format("logicsugar.error.budget",
+                lastBudget.displayCount(), lastBudget.instructionLimit, hint));
+        }
+        int storage = compressedSize(lastBudget);
+        return new IllegalArgumentException(Core.bundle.format("logicsugar.error.storage",
+            storage, maxCompressedBytes));
     }
 }

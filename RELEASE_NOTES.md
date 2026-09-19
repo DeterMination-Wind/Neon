@@ -1,63 +1,33 @@
-# N13
+> [!IMPORTANT]
+> Neon 是纯客户端模组，服务器不需要安装；支持 Mindustry v159+（桌面 / Android）与 MindustryX。
+> 本版内置的 LogicSugar v5.2.0 以 Mindustry v160.1 为基线：它的数据结构卡等依赖 v160 内存语义的功能在 v159 上不保证正确。
+>
+> Neon is client-side only; servers do not need it. It supports Mindustry v159+ (desktop / Android) and MindustryX.
+> The bundled LogicSugar v5.2.0 targets Mindustry v160.1: its data-structure cards and other features that rely on v160 memory semantics are not guaranteed on v159.
+
+> [!NOTE]
+> 本版把内置的 LogicSugar 从 v4.0.0 升级到 v5.2.0：新增数据结构卡与表达式读写、68 个运算改名成 C++ STL 风格、修复表达式卡的三处缺陷，并带上单位 flag 显示、断点行为开关、撤销重做与底栏自动换行；另外同步 betterLogisticsSpeed 的空指针修复，并校正描述符版本号。
+>
+> This release moves the bundled LogicSugar from v4.0.0 up to v5.2.0: new data-structure cards with expression read/write sugar, 68 operations renamed to C++ STL style, three Expr card fixes, plus the unit flag overlay, breakpoint switches, undo/redo and bottom-bar row packing. It also picks up a betterLogisticsSpeed null-pointer fix and a descriptor version correction.
 
 ## 中文
 
-首个稳定版 N 系列版本。本次合并 LogicSugar 两个版本（v3.1.0、v4.0.0 大版本）、新增内置 OverlayCompatBridge 子模组，并同步 PatchViewer 修复。
-
-- LogicSugar v4.0.0（大版本）：
-  - 新增断言语句（「断言」分类七张卡片）：断言边界（检查数组下标是否越界、是否为整数/倍数）、断言相等（变量值与期望不符即停机提示）、记录打印位置 + 断言打印（成对验证某段代码的打印输出，通过后自动清理）、运行错误（立即停机并显示带变量值的消息）、写日志（写入游戏日志文件）、断点（条件满足时冻结整个游戏供检查现场，继续后照常运行）。默认只在编辑器中存在，保存的代码不含断言。
-  - 新增「调试断言构建」开关（仅单机/地图编辑器生效）：打开后断言才作为真实指令运行；联机时自动关闭，保存的程序永远与原版客户端兼容。
-  - 处理器状态指示：停机的处理器头顶显示"已停在第 N 条"，长等待显示进度圆环，运行出错原地显示消息；等待阈值、检查频率、提醒特效可在设置中调节。
-  - 编辑器新增「复制变量」（全部变量按名称排序整理成表格，保留完整精度，可直接粘贴进电子表格）与「复制打印缓冲」两个按钮。
-- 同步 LogicSugar v3.1.0：语句卡片改用确定性布局，消除布局跳动；For 固定两行排版；深缩进下条件行不再被顶出可视区；修复输入框下划线变白。
-- 新增内置 OverlayCompatBridge 子模组：为使用 MindustryX OverlayUI 界面的 Java 模组提供原版界面回退，未安装 MindustryX 时相关界面仍可正常显示。
-- 同步 PatchViewer v2.4.1：修复数值对比文本重叠。
-- 版本号 120006 → 130000。
+* LogicSugar v5.2.0：数据结构卡（`array`、`matrix`、`record`、`stack`、`queue`、`deque`、`bitset`、`map`、`uset`、`list`、`heap`、`chain`）把内存块区间登记成结构化数据，每种结构有独立操作卡；表达式里可直接写 `buf[i]`、`m.get(k)` 这样的读写。声明与操作全部降级为普通原版指令，没装模组的客户端照常运行，已保存的逻辑程序也能恢复成卡片。
+* LogicSugar v5.2.0：68 个数据结构运算改用 C++ STL 风格命名（`spush` → `stack_push`、`mapset` → `map_set`、`sum` → `array_sum` 等），旧短名继续可解析，改名不改变降级产物。
+* LogicSugar v5.2.0：表达式卡（Expr）修复三处缺陷——加号菜单插入后积木凭空消失、保存一次后掉回普通积木、显示多一个 `]`；单行表达式现在随载体多带一行注释标记，重开与撤销重做都能还原成表达式卡。
+* LogicSugar：新增「数据类型」断言卡，断言分类共八张卡片；处理器状态指示与单位 flag 显示可在设置里调节，包括给不同 flag 值着不同颜色。
+* LogicSugar：编辑器新增撤销 / 重做（电脑 `Ctrl+Z` / `Ctrl+Y`，手机底部按钮）、底栏按钮按窗口宽度自动换行、编译后指令条数与 1000 上限实时对照；函数库上限提升到 10000 条语句。
+* **破坏性变更：** 13 个可失败的数据结构操作失败时返回 `-1`（旧提示写的是保持原长度、越界写入 0、不存在返回 0），照旧写的分支判断需要改成 `== -1`；`array_sort` / `array_sort_desc` / `array_find` / `array_copy` 的内置函数体在 v5.0 / v5.1 有改动，更早版本保存过、且用过它们的处理器重开时会回落到原版视图（可执行 mlog 不变，重新拖一次卡片即可恢复）。
+* betterLogisticsSpeed：修复 160.2 上物流窗口缓存重置可能抛空指针的问题。
+* 文案与描述符：并入 LogicSugar 新增的约 660 条界面文案；修正 `mod.json` 版本号仍停在 120006 的问题，与 `mod.hjson` / `build.gradle`（130000）保持一致；`FEATURES.md` 与 `docs/user` 的 LogicSugar 章节同步更新。
 
 ## English
 
-The first stable N-series release. This update bundles two LogicSugar versions (v3.1.0 and the v4.0.0 major release), adds the new built-in OverlayCompatBridge sub-mod, and picks up a PatchViewer fix.
-
-- LogicSugar v4.0.0 (major):
-  - New assertion statements (seven cards in the new "Assertions" category): Assert Bounds (catches out-of-range array indexes, non-integers, wrong multiples), Assert Equals (stops with a message when a value differs from what you expect), Assert Flush + Assert Prints (verify a section's printed output as a pair, cleaning it up afterwards), Error (halts with a message embedding variable values), Log (writes to the game log file), Breakpoint (freezes the whole game for inspection, resumes cleanly). Assertions live only in the editor by default and never enter saved code.
-  - New "Debug Assert Build" toggle (single-player / map editor only): assertions run for real only with it enabled; it switches itself off in multiplayer, so everything you save stays vanilla-compatible.
-  - Processor status on the map: stopped processors show "Stopped at #N", long waits draw a progress ring, failures show their message in place; threshold, scan rate and warning effects are adjustable in settings.
-  - Two new editor buttons: "Copy Variables" (all variables sorted by name as a full-precision table for spreadsheets) and "Copy Print Buffer".
-- Bundled LogicSugar v3.1.0: statement cards switched to deterministic layouts, eliminating layout jitter; fixed two-row For form; condition rows stay visible under deep nesting; white text-field underlines fixed.
-- New built-in OverlayCompatBridge sub-mod: Java mods using the MindustryX OverlayUI fall back to vanilla-style interfaces when MindustryX is not installed.
-- Bundled PatchViewer v2.4.1: fixed overlapping stat diff text.
-- Version code 120006 → 130000.
-
-# B12.6
-
-## 中文
-
-- 同步 LogicSugar v2.2.0（新功能）：错误的 `return` 语句（如位于函数外）标红提示；鼠标悬停语句显示简短用途说明；语句搜索框输入时高亮匹配；设置页排版对齐优化。
-- 同步 LogicSugar v2.2.0（修复与改进）：打开编辑器前校验存档代码，损坏内容给出明确提示，消除极端情况下程序被意外清空的隐患；修复函数调用参数 / 返回值含引号等特殊字符时保存后损坏；修复函数内打印文本被自动改写；修复函数库中 `memory1` 等存储设备罕见被误改名；编辑器遇到损坏代码不再崩溃；编辑大型程序与读取函数库的性能优化；修复按键重复触发、数据残留累积等稳定性问题；与 Neon 捆绑时设置项不再重复出现；内部回归测试全面恢复并新增针对性用例。
-- 重做 ForeignServerTranslator 菜单翻译：改由反射调用本机菜单系统（兼容新版 Mindustry 将菜单 API 从 `UI` 移至 `mindustry.ui.Menus` 的变更，保留旧版回退），不再用克隆对话框模拟；菜单选项文本也纳入翻译判定；信息弹窗隐藏时正确清理。
-- PatchViewer 紧凑对比排版优化：宽度足够时「旧值 -> 新值」保持同一行，放不下才换行，箭头始终留在旧值一侧；build cost 堆叠与原子统计流同样处理。
-- 版本号 120005 → 120006。
-
-## English
-
-- Bundled LogicSugar v2.2.0 (new features): out-of-place `return` statements (such as outside a function) are highlighted in red; hovering a statement shows a short hint; the statement search box highlights matches while you type; settings page alignment was cleaned up.
-- Bundled LogicSugar v2.2.0 (fixes and improvements): the editor validates saved code before opening and shows a clear message for corrupted content, eliminating a rare case where a program could be silently wiped; arguments / return values containing quotes or special characters no longer get corrupted on save; printed text inside functions is no longer rewritten; a rare mis-rename of `memory1`-style storage devices in the function library is fixed; corrupted code no longer crashes the editor; editing large programs and loading the function library are faster; duplicated key handling and stale data accumulation are fixed; settings no longer appear twice when bundled with Neon; internal regression tests are fully restored with new targeted cases.
-- Reworked ForeignServerTranslator menu translation: menus now delegate to the native menu system via reflection (handling the newer Mindustry move of the menu API from `UI` to `mindustry.ui.Menus`, with a legacy fallback) instead of a cloned fake dialog; menu option text is also checked for translatability; hidden info popups are cleaned up properly.
-- PatchViewer compact diff layout: "old -> new" stays on one line when it fits and only wraps when it does not, with the arrow always on the old-value side; build-cost stacks and atomic stat flows follow the same rule.
-- Version code 120005 → 120006.
-
-# B12.5
-
-## 中文
-
-- 合并 LogicSugar 输入框聚焦修复与 Ctrl 复制开关（对应独立版 v2.1.8）：语句输入框 / 表达式编辑器点击后可正常聚焦；新增 "Ctrl+点击 = 复制积木" 与 "Ctrl+拖动 = 复制积木" 两个设置开关，默认开启，可单独关闭。
-- 同步 PatrolCancel v1.0.1：显式实现全部 InputProcessor 方法，修复 Android 上 touchDragged 等回调触发 AbstractMethodError 的崩溃。
-- Android 打包：dexAndroid 增加 d8 --lib arc-core，确保 InputProcessor 接口默认方法在设备上可解析。
-- 版本号 120004 → 120005。
-
-## English
-
-- Bundled the LogicSugar input-focus fix and Ctrl copy switches (standalone v2.1.8): clicking statement text fields / the expression editor now takes focus correctly; two new settings "Ctrl+Click = Copy Statement" and "Ctrl+Drag = Copy Statements" are on by default and individually toggleable.
-- Synced PatrolCancel v1.0.1: all eight InputProcessor methods are now declared explicitly, fixing an Android AbstractMethodError on callbacks such as touchDragged.
-- Android packaging now passes d8 --lib arc-core so InputProcessor default methods resolve on device.
-- Version code 120004 → 120005.
+* LogicSugar v5.2.0: data-structure cards (`array`, `matrix`, `record`, `stack`, `queue`, `deque`, `bitset`, `map`, `uset`, `list`, `heap`, `chain`) register memory ranges as structured data, each with its own operation cards; expressions can read and write them directly as `buf[i]` or `m.get(k)`. Declarations and operations lower to plain vanilla instructions, so unmodded clients keep working and saved programs reopen as cards.
+* LogicSugar v5.2.0: all 68 data-structure operations were renamed to C++ STL style (`spush` → `stack_push`, `mapset` → `map_set`, `sum` → `array_sum`, and so on); old short names still parse and the rename does not change lowered output.
+* LogicSugar v5.2.0: three Expr card fixes - the card vanishing after a palette insert, degrading to a plain block after one save, and one bracket too many in the display; single-line expressions now carry one comment marker so reopening and undo restore the card.
+* LogicSugar: new Assert Type card, eight cards in the Assertions category; the processor status overlay and the unit flag overlay are configurable in settings, including a distinct color per flag value.
+* LogicSugar: undo/redo in the editor (`Ctrl+Z` / `Ctrl+Y` on desktop, bottom-bar buttons on mobile), a bottom bar that wraps to the available width, a live compiled-instruction count against the 1000 limit, and a function library limit of 10000 statements.
+* **Breaking:** the 13 fallible data-structure operations report `-1` on failure (the old tooltips said keeps its length, writes 0, or 0 when missing), so branches written against the old wording must compare `== -1`; the builtin bodies of `array_sort` / `array_sort_desc` / `array_find` / `array_copy` changed in v5.0 / v5.1, so processors saved by older builds that used them reopen in the vanilla view (the executable mlog is unchanged; re-place the card to restore the structured view).
+* betterLogisticsSpeed: fixed a possible null pointer when the logistics window cache is reset on 160.2.
+* Text and descriptor: pulled in about 660 new LogicSugar interface strings; fixed `mod.json` still reporting version 120006 instead of the 130000 used by `mod.hjson` / `build.gradle`; the LogicSugar sections of `FEATURES.md` and `docs/user` were updated.

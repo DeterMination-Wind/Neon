@@ -1114,7 +1114,18 @@ def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
             props = parse_properties(read_text(src_path))
             for key, value in props.items():
                 child_owns_key = sm.id == "ls" and (
-                    key.startswith("logicsugar.") or key.startswith("setting.logicsugar.")
+                    key.startswith("logicsugar.")
+                    or key.startswith("setting.logicsugar.")
+                    # LogicSugar also ships its own strings in these two namespaces
+                    # (`lcategory.*` palette category labels, `la.err.*` expression
+                    # errors, so named after its historical "Logic Assist" identity).
+                    # No other child defines them - verified across every sibling
+                    # workspace - so a re-valued string there is LogicSugar updating
+                    # its own text, not a cross-mod collision. `instruction.*` is
+                    # deliberately NOT listed here: AGENTS.md keeps it under the
+                    # collision rule so a genuine clash with another child still fails.
+                    or key.startswith("lcategory.")
+                    or key.startswith("la.")
                 )
                 if (
                     key in merged

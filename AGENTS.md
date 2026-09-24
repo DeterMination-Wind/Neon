@@ -59,9 +59,16 @@ python .\tools\update_submods.py --verify-build   # 同步后追加 gradlew comp
   多数子模组已改为 `injectBekHooks=false`（子仓库内自行维护契约），注入主要服务少数老模块。
 - bundle 合并规则：不同子模组对同一 key 给出不同值会直接报碰撞错误（不允许静默覆盖）；
   `tools/bektools-bundles/bundle*.properties` 中的条目是 Neon 侧**显式覆盖**，优先级最高；
-  `ls`（LogicSugar）拥有 `logicsugar.` / `setting.logicsugar.` 前缀的所有权。
+  `ls`（LogicSugar）拥有 `logicsugar.` / `setting.logicsugar.` / `lcategory.` / `la.` 前缀的所有权
+  （后两者是它自己的调色板分类名与表达式错误文案，历史身份叫 "Logic Assist"；已核对全部兄弟工作区，
+  没有其它子模组定义这些键，因此那里的改值属于它更新自家文案，不是跨子模组碰撞）。
+  `update_submods.py` 的 `child_owns_key` 判定与本节必须保持一致。
   v5 起它的自定义积木还用共享的 `instruction.<token>` 键提供显示名（`instruction.array`、`instruction.chain` 等），
-  与其它子模组同名键取值不同时同样按碰撞错误处理。
+  与其它子模组同名键取值不同时**仍然**按碰撞错误处理——`instruction.` 刻意不在豁免名单里，
+  这样别的子模组将来真撞上同名积木键时会显式失败而不是被静默覆盖。
+  ⚠️ 遗留隐患：Neon 给 LockAttack 分配的 id 也是 `la`，LogicSugar 的 `la.*` 键今天无冲突只是因为
+  LockAttack 尚未使用这些键名；若它将来新增同名键（或反过来 LogicSugar 新增），
+  真实碰撞会被上面的豁免吞掉。彻底修法是让 LogicSugar 把这些键改到 `logicsugar.*` 命名空间（需子仓库改动 + 一次发版）。
 - `tools/generate_dox.py` 是辅助文档工具，与构建链路无关；`tools/deps/` 存放兜底用的 arc-core/arcnet jar。
 
 ## 构建

@@ -14,6 +14,7 @@ import mindustry.logic.SugarStatements;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,8 +71,8 @@ public class ChainModule extends DataModule{
     /** analyze 阶段方法糖解析用的轻量声明扫描（不依赖 collect 注册表）。 */
     @Override
     public Map<String, String> declaredKinds(LStatement statement){
-        if(statement instanceof ChainDeclStatement card && card.name != null && !card.name.trim().isEmpty()) return Map.of(card.name.trim(), ID);
-        return Map.of();
+        if(statement instanceof ChainDeclStatement card && card.name != null && !card.name.trim().isEmpty()) return Collections.singletonMap(card.name.trim(), ID);
+        return Collections.emptyMap();
     }
 
     @Override
@@ -371,7 +372,7 @@ public class ChainModule extends DataModule{
                 || (functionNames != null && functionNames.contains(name));
             long end = bad ? 0 : base + 2 * size;
             if(!bad){
-                int capacity = ArrayRegistry.memoryCapacity(memory);
+                int capacity = ArrayRegistry.capacityOf(memory);
                 bad = capacity > 0 && end > capacity;
             }
             if(!bad){
@@ -438,10 +439,10 @@ public class ChainModule extends DataModule{
     }
 
     private static void checkCapacity(int index, String name, String memory, long end){
-        int capacity = ArrayRegistry.memoryCapacity(memory);
+        int capacity = ArrayRegistry.capacityOf(memory);
         if(capacity > 0 && end > capacity){
-            throw error(index, "'" + name + "' needs addresses up to " + (end - 1)
-                + ", but memory '" + memory + "' only has " + capacity + " slots");
+            throw error(index, "'" + name + "' needs addresses up to "
+                + ArrayRegistry.capacityExceeded(memory, end, capacity));
         }
     }
 

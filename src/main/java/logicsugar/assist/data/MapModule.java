@@ -107,8 +107,8 @@ public class MapModule extends DataModule{
     /** analyze 阶段方法糖解析用的轻量声明扫描（不依赖 collect 注册表）。 */
     @Override
     public Map<String, String> declaredKinds(LStatement statement){
-        if(statement instanceof MapStatement card && card.map != null && !card.map.trim().isEmpty()) return Map.of(card.map.trim(), ID);
-        return Map.of();
+        if(statement instanceof MapStatement card && card.map != null && !card.map.trim().isEmpty()) return Collections.singletonMap(card.map.trim(), ID);
+        return Collections.emptyMap();
     }
 
     @Override
@@ -293,9 +293,9 @@ public class MapModule extends DataModule{
         }
         long end = base + 2L * capacity;
         if(end > Integer.MAX_VALUE) return "base + 2*capacity is too large (" + end + ")";
-        int limit = ArrayRegistry.memoryCapacity(memory);
+        int limit = ArrayRegistry.capacityOf(memory);
         if(limit > 0 && end > limit){
-            return "needs addresses up to " + (end - 1) + ", but memory '" + memory + "' only has " + limit + " slots";
+            return "needs addresses up to " + ArrayRegistry.capacityExceeded(memory, end, limit);
         }
         return null;
     }
@@ -311,7 +311,7 @@ public class MapModule extends DataModule{
         if(base < 0 || base > Integer.MAX_VALUE || capacity < 1 || capacity > Integer.MAX_VALUE) return null;
         long end = base + 2L * capacity;
         if(end > Integer.MAX_VALUE) return null;
-        int limit = ArrayRegistry.memoryCapacity(memory);
+        int limit = ArrayRegistry.capacityOf(memory);
         if(limit > 0 && end > limit) return null;
         return new MapInfo(name, memory, (int)(long)base, (int)(long)capacity);
     }

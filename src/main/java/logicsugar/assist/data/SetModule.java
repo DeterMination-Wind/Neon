@@ -91,8 +91,8 @@ public class SetModule extends DataModule{
     /** analyze 阶段方法糖解析用的轻量声明扫描（不依赖 collect 注册表）。 */
     @Override
     public Map<String, String> declaredKinds(LStatement statement){
-        if(statement instanceof USetStatement card && card.uset != null && !card.uset.trim().isEmpty()) return Map.of(card.uset.trim(), ID);
-        return Map.of();
+        if(statement instanceof USetStatement card && card.uset != null && !card.uset.trim().isEmpty()) return Collections.singletonMap(card.uset.trim(), ID);
+        return Collections.emptyMap();
     }
 
     @Override
@@ -271,9 +271,9 @@ public class SetModule extends DataModule{
         }
         long end = base + capacity;
         if(end > Integer.MAX_VALUE) return "base + capacity is too large (" + end + ")";
-        int limit = ArrayRegistry.memoryCapacity(memory);
+        int limit = ArrayRegistry.capacityOf(memory);
         if(limit > 0 && end > limit){
-            return "needs addresses up to " + (end - 1) + ", but memory '" + memory + "' only has " + limit + " slots";
+            return "needs addresses up to " + ArrayRegistry.capacityExceeded(memory, end, limit);
         }
         return null;
     }
@@ -288,7 +288,7 @@ public class SetModule extends DataModule{
         if(base < 0 || base > Integer.MAX_VALUE || capacity < 1 || capacity > Integer.MAX_VALUE) return null;
         long end = base + capacity;
         if(end > Integer.MAX_VALUE) return null;
-        int limit = ArrayRegistry.memoryCapacity(memory);
+        int limit = ArrayRegistry.capacityOf(memory);
         if(limit > 0 && end > limit) return null;
         return new SetInfo(name, memory, (int)(long)base, (int)(long)capacity);
     }

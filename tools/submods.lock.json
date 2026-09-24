@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-09-19T02:53:20Z",
+  "generatedAtUtc": "2026-09-24T16:55:51Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -290,12 +290,12 @@
     },
     "ls": {
       "sourceKind": "git",
-      "syncedHead": "c4b8af26ad518de16a5e823cad2449f3fa2f722a",
-      "workspaceHeadAtSync": "c4b8af26ad518de16a5e823cad2449f3fa2f722a",
+      "syncedHead": "4496e4fb4dfd8f586db6453487f87675e0d32ba2",
+      "workspaceHeadAtSync": "4496e4fb4dfd8f586db6453487f87675e0d32ba2",
       "workspaceDirtyAtSync": false,
       "upstreamRef": "origin/main",
-      "upstreamHeadAtSync": "2670df7abc58dcc96dc0e5bd90173a73d426aea3",
-      "aheadOfUpstreamAtSync": 2,
+      "upstreamHeadAtSync": "3b03ca981f6df4d6206bcc4472d8e1bd9176e5d6",
+      "aheadOfUpstreamAtSync": 1,
       "behindUpstreamAtSync": 0,
       "repoUrl": null,
       "branch": null,

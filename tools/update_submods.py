@@ -1116,16 +1116,25 @@ def merge_selected_bundles(mods: List[Tuple[SubMod, Path]]) -> None:
                 child_owns_key = sm.id == "ls" and (
                     key.startswith("logicsugar.")
                     or key.startswith("setting.logicsugar.")
-                    # LogicSugar also ships its own strings in these two namespaces
-                    # (`lcategory.*` palette category labels, `la.err.*` expression
-                    # errors, so named after its historical "Logic Assist" identity).
-                    # No other child defines them - verified across every sibling
-                    # workspace - so a re-valued string there is LogicSugar updating
-                    # its own text, not a cross-mod collision. `instruction.*` is
-                    # deliberately NOT listed here: AGENTS.md keeps it under the
-                    # collision rule so a genuine clash with another child still fails.
+                    # LogicSugar also ships its own strings under two older identities and
+                    # re-values them, so the scoped merge must not read its own update as a
+                    # cross-mod collision:
+                    #   `lcategory.*` - palette category labels (`lcategory.datastruct.*`,
+                    #                   `lcategory.arrayalgo.*`).
+                    #   `la.err.*`    - expression errors, from its earlier "Logic Assist"
+                    #                   name (`la` is the id Neon assigns to it today).
+                    # Deliberately narrow, and deliberately NOT a whole-namespace exemption:
+                    #   * `instruction.*` stays under the collision rule - AGENTS.md keeps it
+                    #     there on purpose so a real clash with another child still fails;
+                    #   * `lcategory.` is not exempted wholesale either, because a sibling
+                    #     workspace that is not registered here (NewHorizonMod) already uses
+                    #     `lcategory.nh-*` - sharing the prefix today because it has no
+                    #     overlapping key is not a reason to give up the check;
+                    #   * the rest of `la.*` (`la.cancel`/`la.copy`/`la.move`/`la.settings`)
+                    #     collides with the unregistered `../logic-assist` workspace that was
+                    #     the original owner of this namespace, so it stays checked too.
                     or key.startswith("lcategory.")
-                    or key.startswith("la.")
+                    or key.startswith("la.err.")
                 )
                 if (
                     key in merged

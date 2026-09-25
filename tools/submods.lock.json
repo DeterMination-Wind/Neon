@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-09-25T15:02:17Z",
+  "generatedAtUtc": "2026-09-25T17:07:45Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -290,16 +290,16 @@
     },
     "ls": {
       "sourceKind": "git",
-      "syncedHead": "a5e98be2ac143667f2af1ec7fe466c261ba8e764",
-      "workspaceHeadAtSync": "a5e98be2ac143667f2af1ec7fe466c261ba8e764",
+      "syncedHead": "a9e94fca194393bcb2818490fa592f6249a855cf",
+      "workspaceHeadAtSync": "a9e94fca194393bcb2818490fa592f6249a855cf",
       "workspaceDirtyAtSync": false,
       "upstreamRef": "origin/main",
-      "upstreamHeadAtSync": "a5e98be2ac143667f2af1ec7fe466c261ba8e764",
+      "upstreamHeadAtSync": "a9e94fca194393bcb2818490fa592f6249a855cf",
       "aheadOfUpstreamAtSync": 0,
       "behindUpstreamAtSync": 0,
       "repoUrl": null,
       "branch": null,
-      "localPath": "C:\\Users\\华硕\\Documents\\codex\\LogicSugar"
+      "localPath": "D:\\User\\Desktop\\BEK"
     },
     "la": {
       "sourceKind": "git",

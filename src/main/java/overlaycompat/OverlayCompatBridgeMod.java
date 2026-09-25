@@ -18,7 +18,11 @@ import java.lang.reflect.Method;
 
 public class OverlayCompatBridgeMod extends Mod {
     private static final String OVERLAY_UI_CLASS = "mindustryX.features.ui.OverlayUI";
+    /** Present on a real MindustryX client. This bridge's jar does not contain them. */
+    private static final String[] MINDUSTRYX_MARKER_CLASSES = {"mindustryX.VarsX", "mindustryX.loader.Main"};
     private static boolean installed;
+    /** True is cached as soon as markers show. False is cached only after the HUD exists, so an early miss can be retried. */
+    private static Boolean mindustryXRuntime;
 
     private enum OverlayState {
         UNRESOLVED,
@@ -57,11 +61,36 @@ public class OverlayCompatBridgeMod extends Mod {
     }
 
     /**
-     * When a real MindustryX runtime is present it owns mindustryX.features.ui.OverlayUI;
-     * this bridge must stay dormant instead of binding its own (bundled) copy.
-     * Mirrors the marker checks of Neon's LegacyMindustryXGuard.
+     * When a real MindustryX runtime is present it owns mindustryX.features.ui.OverlayUI
+     * and already draws the gear button. This bridge must stay dormant instead of binding
+     * its bundled copy, or the two buttons overlap.
+     * Loader properties and a mod named mindustryx/mdtx are not enough: X is the client.
+     * Marker classes ({@code mindustryX.VarsX}, {@code mindustryX.loader.Main}) are the
+     * reliable signal and are not shipped in this jar.
      */
     private static boolean isMindustryXRuntime() {
+        if (mindustryXRuntime != null) return mindustryXRuntime;
+        boolean detected = probeMindustryXRuntime();
+        if (detected) {
+            mindustryXRuntime = Boolean.TRUE;
+            return true;
+        }
+        if (dormancyDecisionReady()) mindustryXRuntime = Boolean.FALSE;
+        return false;
+    }
+
+    /** Same gate as binding. A negative answer before this stays uncached. */
+    private static boolean dormancyDecisionReady() {
+        return !Vars.headless
+            && Core.graphics != null
+            && Core.scene != null
+            && Vars.ui != null
+            && Vars.ui.hudGroup != null
+            && Vars.ui.hudfrag != null
+            && Vars.state != null;
+    }
+
+    private static boolean probeMindustryXRuntime() {
         if ("1".equals(System.getProperty("mdtx.loader"))) return true;
         if (System.getProperty("MDTX-loaded") != null) return true;
         if (Vars.mods != null) {
@@ -72,7 +101,35 @@ public class OverlayCompatBridgeMod extends Mod {
                 }
             }
         }
+        ClassLoader[] loaders = {
+            Thread.currentThread().getContextClassLoader(),
+            Vars.class.getClassLoader(),
+            ClassLoader.getSystemClassLoader(),
+            OverlayCompatBridgeMod.class.getClassLoader()
+        };
+        for (ClassLoader loader : loaders) {
+            if (loader == null) continue;
+            for (String marker : MINDUSTRYX_MARKER_CLASSES) {
+                try {
+                    Class.forName(marker, false, loader);
+                    return true;
+                } catch (Throwable ignored) {
+                }
+            }
+        }
         return false;
+    }
+
+    /** Drop a gear button this bridge already attached, so a late X detection cannot leave it up. */
+    private void detachBundledOverlay() {
+        if (overlayClass == null || overlayInstance == null) return;
+        try {
+            Method detach = overlayClass.getMethod("detach");
+            invoke(detach, overlayInstance);
+            if (isAttachedMethod != null && Boolean.TRUE.equals(invoke(isAttachedMethod, overlayInstance))) return;
+            overlayInstance = null;
+        } catch (Throwable ignored) {
+        }
     }
 
     private void ensureKeybind() {
@@ -83,7 +140,14 @@ public class OverlayCompatBridgeMod extends Mod {
 
     private void update() {
         if (Vars.headless || Core.scene == null) return;
-        if (isMindustryXRuntime()) return;
+        if (isMindustryXRuntime()) {
+            if (overlayInstance != null) detachBundledOverlay();
+            if (overlayState != OverlayState.UNAVAILABLE_CLASS) {
+                setState(OverlayState.UNAVAILABLE_CLASS, "MindustryX runtime present; bridge stays dormant");
+            }
+            return;
+        }
+        if (mindustryXRuntime == null) return;
         ensureKeybind();
         if (!isOverlayAttached()) {
             initializeOverlay("update");
@@ -111,6 +175,16 @@ public class OverlayCompatBridgeMod extends Mod {
     }
 
     private void scheduleInit(String source) {
+        if (Vars.headless) return;
+        if (isMindustryXRuntime()) {
+            detachBundledOverlay();
+            setState(OverlayState.UNAVAILABLE_CLASS, "MindustryX runtime present; bridge stays dormant");
+            return;
+        }
+        if (mindustryXRuntime == null) {
+            Time.runTask(1f, () -> scheduleInit(source));
+            return;
+        }
         ensureKeybind();
         Time.runTask(1f, () -> initializeOverlay(source));
     }
@@ -118,8 +192,7 @@ public class OverlayCompatBridgeMod extends Mod {
     private void initializeOverlay(String source) {
         if (Vars.headless) return;
         if (isMindustryXRuntime()) {
-            // Reached only once the runtime is safe (scene/HUD ready), i.e. after every
-            // mod is registered, so a single permanent dormancy decision is sound here.
+            detachBundledOverlay();
             setState(OverlayState.UNAVAILABLE_CLASS, "MindustryX runtime present; bridge stays dormant");
             return;
         }

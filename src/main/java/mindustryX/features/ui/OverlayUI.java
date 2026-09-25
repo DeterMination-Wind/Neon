@@ -869,6 +869,13 @@ public class OverlayUI {
         return group.parent != null && group.getScene() != null;
     }
 
+    /** Remove the gear button this copy added. Used when a real MindustryX OverlayUI is already on screen. */
+    public void detach() {
+        if (group.parent != null) group.remove();
+        initialized = false;
+        open = false;
+    }
+
     public void toggle() {
         open = !open;
         for (Window window : getWindows()) {

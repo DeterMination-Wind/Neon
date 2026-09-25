@@ -25,14 +25,14 @@ main 入口 → vanillaOverlayUi()
 - `AutoDetectingOverlayUiBridge`（49 行）包装选型结果：探测到可用的 MDtX 就代理过去，否则落回 Neon 内嵌实现。
 - `MindustryXOverlayUiBridge.loadMindustryXClass()` 会依次尝试多个类加载器解析 MDtX 类（MDtX 的加载器与普通 mod 不同），全部失败才抛 `ClassNotFoundException`。**ocb bundled 后，Neon 自己的类加载器里就有 `mindustryX.features.ui.OverlayUI`（`LegacyMindustryXGuard` 把自身 loader 列为候选），因此原版环境必然在此步命中 ocb 副本**。
 - 已在 `mainX` 里时不用探测——入口构造函数已注入确定实现。
-- ocb 主类 `OverlayCompatBridgeMod`（BekToolsMod 初始化为首个基础设施模块）负责 OverlayUI 的初始化时机、`Z` 键与齿轮按钮；检测到真 MindustryX 运行时会自动休眠（`UNAVAILABLE_CLASS`），把控制权完整让给 MDtX。
+- ocb 主类 `OverlayCompatBridgeMod`（BekToolsMod 初始化为首个基础设施模块）负责 OverlayUI 的初始化时机、`Z` 键与齿轮按钮；检测到真 MindustryX 运行时会自动休眠（`UNAVAILABLE_CLASS`），把控制权完整让给 MDtX。MindustryX 是客户端而不是名为 `mindustryx`/`mdtx` 的模组，系统属性也经常不在，所以休眠判定必须包含标记类 `mindustryX.VarsX` / `mindustryX.loader.Main`。漏判时桥会再挂一颗齿轮，和 X 自带的 Overlay 按钮重叠。
 
 ## 守卫：LegacyMindustryXGuard
 
 定位：防止"旧版 MindustryX + 新版 Neon"这类半兼容组合静默出错。
 
 - 常量 `MINIMUM_VERSION = "2026.04.03.B439"`。
-- 判定运行环境的三条线索：系统属性 `mdtx.loader=1`、属性 `MDTX-loaded`、以及按 mod 名单（`mindustryx`/`mdtx`）和标记类（`mindustryX.VarsX`、`mindustryX.loader.Main`）探测。
+- `isMindustryXRuntime()`（`rejectLegacyMindustryX` 用它）只看系统属性 `mdtx.loader=1` 和 `MDTX-loaded`。不要把标记类并进这个判定：当前 MindustryX 走 `mainX`，误判会让仍调用 `rejectLegacyMindustryX` 的原版入口直接抛错。标记类只给类加载器排序，以及给 ocb 的休眠判定用。
 - 对旧版本的处理是**显式失败**：reject 时给出升级或回退指引，而不是当作单个模块初始化失败继续跑。
 
 ## 原版回退：neoncompat.overlay（已冻结）

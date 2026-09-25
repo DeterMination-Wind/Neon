@@ -24,11 +24,45 @@ Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号
    .\gradlew.bat clean deploy
    ```
    环境要求：`ANDROID_SDK_ROOT` 指向完整 SDK，且不再走工作区 `commandlinetools-win-*` 兜底路径；先跑一遍 `.\gradlew.bat test` 确认回归任务全绿。
-3. **拷贝并核实产物**
+3. **撰写 `RELEASE_NOTES.md`**：中英对照、只写当前版本，格式见下节「发布正文风格」；CI 直接把它作为 Release 正文。
+4. **拷贝并核实产物**
    - `dist/Neon.jar` → `../构建/Neon/Neon-v<标签>.jar`
    - `dist/Neon.zip` → `../构建/Neon/Neon-v<标签>.zip`
    
    核实两个文件都存在、大小合理；桌面 jar（不含 dex）不允许进入发布流程。
+
+## 发布正文风格（Release body）
+
+`RELEASE_NOTES.md` 就是 GitHub Release 的正文原文（CI 读取它，`generate_release_notes: false`），**只写当前版本**、中英对照。当前范式于 2026-09-25 定稿（出自 LogicSugar v5.3.1，用户改写）：
+
+````markdown
+> [!NOTE]
+> 需要 **Mindustry v160.1+**（桌面 / Android）
+> Requires **Mindustry v160.1+** (Desktop / Android)
+
+## 中文
+
+### 本次修复
+
+- **修复手机底栏按钮溢出屏幕**：手机上底栏七个操作按钮不再被挤成一行、不再左右溢出。最左的“返回”和最右的“添加”现在都完整可见、可点击。
+- **按真实屏幕宽度自动分行**：底栏现在会按 UI 缩放后的实际宽度分行。例如在 1260px / 2.5 倍缩放的手机上，按钮会排成 **3/3/2** 三行：返回·编辑·内置变量 / 函数库·撤销·重做 / 添加 + 指令预算标签。
+
+## English
+
+### Fixed
+
+- **Fixed the phone bottom bar overflowing the screen**: on phones, the seven bottom-bar buttons are no longer squeezed into one oversized row. The leftmost “back” and rightmost “add” buttons are now fully visible and tappable.
+- **Automatic wrapping by real screen width**: the bar now wraps using UI-scaled widths. On a 1260px / 2.5x phone, for example, it packs as **3/3/2** — back / edit / variables, function library / undo / redo, add + instruction-budget label.
+````
+
+写作规则：
+
+1. **结构固定**：顶部只有一个 `> [!NOTE]` 两行引用块（中文一行 + 英文一行）写版本要求，然后 `## 中文`、`## English`。不用 `> [!IMPORTANT]`，也不写构建命令、产物路径、测试数量与 commit 细节。
+2. **小节**：`### 本次新增` / `### 本次更新` / `### 本次修复` / `### 本次改动` / `### 已知问题`，英文对应 `### Added` / `### Updated` / `### Fixed` / `### Changed` / `### Known issues`；只保留本版真正涉及的小节，中英小节一一对应。
+3. **条目**：每条以 `**粗体短标题**：` 开头（英文 `**Bold lead-in**:`），一句话讲**用户能感知到的结果**；不写类名、方法名、测试名与内部实现——那些留在 commit message 与 `docs/`。
+4. **粒度**：一条一件事，同主题合并；宁可少写，也不堆细节。
+5. **语言**：中文用中文标点与引号，英文用半角标点；两边各自通顺，不逐字直译。
+6. **历史不回填**：新版本一律按本范式写；旧版本正文保持原样。
 
 ## 打包管线细节
 

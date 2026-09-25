@@ -1,39 +1,25 @@
-> [!IMPORTANT]
-> 最低要求 **Mindustry v160.1**（桌面 / Android）或对应的 MindustryX；服务器不需要安装。
-> 保存出去的逻辑程序仍是普通原版 mlog：没装模组的客户端能运行，联机不受影响。
->
-> Requires **Mindustry v160.1** (desktop / Android) or a matching MindustryX. Servers do not need it.
-> Saved logic programs stay plain vanilla mlog: they run on unmodded clients and multiplayer is unaffected.
-
 > [!NOTE]
-> 本版把内置的 LogicSugar 从 v5.2.0 升级到 **v5.3.0**：68 张数据运算卡收敛成 10 张（卡内切换运算、每个参数一个输入框）、新增编辑器归属四档与跨逻辑复制粘贴、产物带上「载体永不执行」的入口跳过，并修掉容量检查、变量查看器、函数库合并、卡内参数编辑与 Android 侧的缺陷。同时收窄了同步脚本对 LogicSugar 自有 bundle 键的豁免范围，避免它掩盖真实的跨子模组键冲突。
->
-> This release moves the bundled LogicSugar from v5.2.0 up to **v5.3.0**: 68 operation cards collapse into 10 (pick the operation inside the card, one input per parameter), four editor-ownership modes and cross-logic copy/paste, an entry skip that keeps the persistence carrier from ever executing, and fixes for the capacity check, the variable viewers, library merging, in-card argument editing and Android. It also narrows the sync script's exemption for LogicSugar's own bundle keys so a real cross-sub-mod key clash can no longer hide behind it.
+> 需要 **Mindustry v160.1+**（桌面 / Android）或对应的 MindustryX；服务器不需要安装。
+> Requires **Mindustry v160.1+** (desktop / Android) or a matching MindustryX. Servers do not need it.
 
 ## 中文
 
-* **数据运算卡改版：** 68 张运算卡收敛成 **10 张**（每个数据结构一张，同结构的卡在调色板里挨着）。运算用卡内按钮切换，实参改成**每个参数一个输入框**，编辑期参数无法编译时整卡标红；参数个数写错时直接报 `takes N argument(s) but got M`。载体格式一字不改，旧存档照常打开，运算名在打开时归一化。
-* **编辑器归属四档（`logicsugar.editorConflict`）：** `ask`（默认）/ `takeover` / `stepaside` / `coexist`。默认档改为**每次启动询问**，**点掉弹窗 = 让位**，设置值缺失或无法识别时一律回落 `ask`——旧默认档 `takeover` 会摘掉别的 mod 的逻辑编辑器界面，不该是默认。`coexist` 把 LogicSugar 画布跑在对方编辑器内部；装不上或对话框正开着时按既有约定回落接管档。
-* **跨逻辑复制粘贴：** 编辑菜单新增「复制选区 / 粘贴选区」，`Ctrl+C` / `Ctrl+V` 同一实现。剪贴板放的是**糖源码**而非编译后的 mlog，片段落地后仍可继续编辑；跨程序粘贴时 `jump` 的数字目标已失效，因此复制与粘贴**双侧拒绝**。
-* **入口跳过：** 产物 main 末尾统一多一条 `set @counter 0`，让几 KB 的持久化载体**永不执行**（否则 MDTX 逻辑面板的值列会把载体显示成一条运行中的赋值）。这条跳过是所存储糖源码的一部分，旧版本重编译能原样复现，存档与联机兼容性不变；代价是**有效指令上限变成 1000 − 1**，顶格程序会存不下并明确报错；源文本达到解析窗口（1000 条语句）导致跳过或糖语句被静默丢弃时也会拒绝保存并说明原因。
-* **修复 · 容量检查按真实链接解析：** 原先只按变量名猜容量，而原版给链接取名取方块名最后一个 `-` 之后的部分——**512 格的 world-cell 也被链接成 `cellN`**，于是 `cell` 前缀的声明都被按 64 格卡住、合法范围被误拒。现在优先取变量实际链接的方块的容量，且双向生效（既消除误拒也收紧误放）。
-* **修复 · 两个变量查看器都过滤隐藏变量：** 原先只过滤 MindustryX 浮层，`__ls_*` 与 `_0/_1` 临时变量在原版 `@variables` 对话框与 MindustryX 处理器配置面板里仍可见。现在 `vars` 也在三条护栏下过滤：**联机会话完全不动它**（它是 `sync` 的索引空间）、会话开始时撤销单机遗留过滤、**写存档期间恢复完整数组**（隐藏状态仍能持久化）。
-* **修复 · 函数库合并后追加的函数被静默丢弃：** 本地库文件比处理器嵌入子集多出函数时，追加切片的 `destIndex` 未按前缀语句数平移，导致每个追加函数都指回前缀、被判损坏并从有效库中消失。
-* **修复 · 卡内参数输入框逐键丢字：** 「拼回」与「拆分」不是互逆映射，某一格里打顶层逗号会让文字**逐键累积**（连打 `a,b,c,d` 会滚成 36 字符的实参串）。槽位现在派生一次即缓存，绕过本类的写入自动失效，`copy()` 带着槽位布局走；未闭合的 `(` / `"` 也不再吞掉后面那一格。
-* **界面：** tooltip 改为提前把文字折行（比屏幕宽的容器不再两边溢出）；两个固定宽底栏按钮移入编辑菜单；运算卡的**栏位**与**分组**分开（数组/矩阵运算卡回到声明卡旁）；断言/日志卡改为每行独立子表格、字段不再被推到中间；悬停文案与教程统一改用卡面短名，并删掉三族无代码路径可取的历史 bundle 键。
-* **Android：** 修复汉化不加载（`Locale.toString()` 拼出的文件名带 ICU script，Arc 只按 `language_country` 找文件）；把 `Map/List/Set.of`、`List.copyOf`、`String.isBlank`、`java.util.function.*` 等 API 24–33 的硬崩点换成 API 21 等价物。
-* **聚合层修正：** 收窄同步脚本 `child_owns_key` 对 LogicSugar 的豁免（原先整命名空间豁免 `la.`，会把它与 `../logic-assist` 等真实冲突一起吞掉，现在只豁免它确有的 `lcategory.*` 与 `la.err.*`，`instruction.*` 保持受检）；并在 Neon 文档里记录「聚合设置页必须与独立设置页对齐」这条要求——本版修的 `editorConflict` 聚合行缺失就是这条规则要防的 bug。
+### 本次更新
+
+- **内置 LogicSugar 升级到 v5.3.1**：本次只带上这一项底栏修复，其余功能与 B14.1 相同。
+
+### 本次修复
+
+- **修复手机底栏按钮溢出屏幕**：手机上底栏七个操作按钮不再被挤成一行、不再左右溢出，最左的“返回”和最右的“添加”都完整可见、可点击。
+- **按真实屏幕宽度自动分行**：底栏现在按 UI 缩放后的实际宽度分行。例如在 1260px / 2.5 倍缩放的手机上，按钮排成 **3/3/2** 三行：返回·编辑·内置变量 / 函数库·撤销·重做 / 添加 + 指令预算标签。
 
 ## English
 
-* **Data-operation cards reworked:** 68 operation cards collapse into **10** (one per structure, grouped next to their declaration). The operation is picked with in-card buttons, arguments became **one input field per parameter**, a card whose arguments cannot compile is marked red while editing, and a wrong argument count reports `takes N argument(s) but got M`. The carrier format is unchanged: old saves open as before and operation names are canonicalized on load.
-* **Four editor-ownership modes (`logicsugar.editorConflict`):** `ask` (default) / `takeover` / `stepaside` / `coexist`. The default is now **ask once per launch**, **dismissing the prompt means stepping aside**, and a missing or unrecognized value always falls back to `ask` - the old `takeover` default detaches another mod's logic-editor UI and must not be the default. `coexist` runs the LogicSugar canvas inside the other mod's editor and falls back to takeover by the existing convention when it cannot install or the dialog is open.
-* **Copy and paste across logic blocks:** the edit menu gains "copy selection / paste selection", sharing one implementation with `Ctrl+C` / `Ctrl+V`. The clipboard holds **sugar source** rather than compiled mlog, so a pasted fragment stays editable; a `jump`'s numeric target is meaningless in another program, so copying and pasting **refuse jumps on both sides**.
-* **Entry skip:** the compiled main body always ends with one `set @counter 0` that keeps the multi-KB persistence carrier from ever **executing** (otherwise MindustryX's logic panel shows the carrier as a running assignment). The skip is part of the stored sugar source, so older builds recompiling the same text reproduce it and saves stay compatible; the cost is that the **effective instruction ceiling becomes 1000 - 1**, so a program that exactly filled it now refuses to save with an explicit error. Reaching the parser window (1000 statements) is also a hard, explained error when it would silently drop the skip or the sugar itself.
-* **Fixed - capacity resolved from the real link:** the check used to guess from the variable name, and vanilla names a link after the last `-` of the block name - a **512-slot world-cell is linked as `cellN`** - so `cell`-prefixed declarations were capped at 64 and valid ranges were rejected. The capacity now comes from the block the variable is actually linked to, applying in both directions (removing false rejections and tightening false acceptances).
-* **Fixed - hidden variables in both viewers:** only MindustryX's floating panel was filtered, so `__ls_*` and `_0/_1` temporaries stayed visible in the vanilla `@variables` dialog and MindustryX's processor config panel. `vars` is now filtered too, under three guards: **networked sessions leave it untouched** (it is the `sync` index space), a single-player filter is undone when a session starts, and the **full array is restored while saving** so hidden state still persists.
-* **Fixed - functions appended during a library merge were dropped silently:** when the local library file has extra functions, the appended slice's `destIndex` values were not shifted by the prefix length, so every appended function pointed back into the prefix, was rejected as damaged, and vanished from the effective library.
-* **Fixed - per-keystroke loss in the in-card argument fields:** joining and splitting are not inverse, so a top-level comma inside one slot made the text **accumulate per keystroke** (typing `a,b,c,d` ballooned to a 36-character argument string). Slot boundaries are now derived once and cached, any write bypassing the class invalidates the cache, `copy()` carries the layout, and an unclosed `(` or `"` no longer swallows the slot behind it.
-* **Interface:** tooltips wrap their text up front (a container wider than the screen no longer overflows on both sides); the two fixed-width bottom-bar buttons moved into the edit menu; an operation card's **palette column** is now separate from its group (array/matrix cards return next to their declarations); assertion and log cards lay out one sub-table per row so their fields stop sliding into the middle; hover text and tutorials use the short on-card names, and three families of unreachable historical bundle keys were deleted.
-* **Android:** fixed the translation not loading (`Locale.toString()` produced a file name carrying the ICU script, while Arc looks bundles up by `language_country`), and replaced the hard crashes at API 24-33 (`Map/List/Set.of`, `List.copyOf`, `String.isBlank`, `java.util.function.*`) with API-21 equivalents.
-* **Aggregate-side fix:** narrowed the sync script's `child_owns_key` exemption for LogicSugar (the whole `la.` namespace was exempted and would have swallowed real clashes with e.g. `../logic-assist`; now only its own `lcategory.*` and `la.err.*` are, while `instruction.*` stays checked), and recorded in Neon's docs that the aggregate settings page must mirror the standalone one - the missing `editorConflict` row this release fixes is exactly what that rule guards against.
+### Updated
+
+- **Bundled LogicSugar is now v5.3.1**: this build carries that bottom-bar fix and nothing else; every other behaviour is the same as B14.1.
+
+### Fixed
+
+- **Fixed the phone bottom bar overflowing the screen**: on phones the seven bottom-bar buttons are no longer squeezed into one oversized row, so the leftmost “back” and rightmost “add” buttons stay fully visible and tappable.
+- **Automatic wrapping by real screen width**: the bar now wraps using UI-scaled widths. On a 1260px / 2.5x phone, for example, it packs as **3/3/2** — back / edit / variables, function library / undo / redo, add + instruction-budget label.

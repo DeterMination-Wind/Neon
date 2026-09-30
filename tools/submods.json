@@ -307,6 +307,16 @@
       "bundlesDir": "src/main/resources/bundles",
       "sourceBundlesDir": "assets/bundles",
       "injectBekHooks": false
+    },
+    {
+      "id": "bx",
+      "name": "Build X-ray",
+      "localPath": "../BuildXray",
+      "trackUpstream": false,
+      "javaPackageDir": "src/main/java/buildxray",
+      "mainClassFile": "BuildXrayMod.java",
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
     }
   ]
 }

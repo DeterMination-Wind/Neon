@@ -365,6 +365,19 @@
       "repoUrl": null,
       "branch": null,
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\OverlayCompatBridge"
+    },
+    "bx": {
+      "sourceKind": "git",
+      "syncedHead": "568230371b2dbe5ebb3cf4d3d9f243693d4b21cf",
+      "workspaceHeadAtSync": "568230371b2dbe5ebb3cf4d3d9f243693d4b21cf",
+      "workspaceDirtyAtSync": false,
+      "upstreamRef": null,
+      "upstreamHeadAtSync": null,
+      "aheadOfUpstreamAtSync": null,
+      "behindUpstreamAtSync": null,
+      "repoUrl": null,
+      "branch": null,
+      "localPath": "C:\\Users\\华硕\\Documents\\codex\\BuildXray"
     }
   }
 }

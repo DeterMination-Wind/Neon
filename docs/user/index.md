@@ -7,7 +7,7 @@ Neon 是纯客户端辅助模组。本指南按使用场景分类介绍功能的
 | 场景 | 页面 | 覆盖的功能 |
 | --- | --- | --- |
 | 战场观察 | [battlefield-awareness.md](battlefield-awareness.md) | 电网小地图、偷袭小道、增强小地图、投影叠加、物流速率、地理围栏、锁定攻击 |
-| 建造与操控 | [building-and-control.md](building-and-control.md) | 圆盘建造、RTS 编队、取消巡逻、Poly 辅助、智能放置/拆除、快捷键增强 |
+| 建造与操控 | [building-and-control.md](building-and-control.md) | 圆盘建造、RTS 编队、取消巡逻、Poly 辅助、智能放置/拆除、快捷键增强、建造透视 |
 | 地图与逻辑 | [maps-and-logic.md](maps-and-logic.md) | 地图编辑、高级替换、地形生成、LogicSugar、逻辑反查、补丁查看、隐藏处理器 |
 | 联机与信息 | [multiplayer-and-info.md](multiplayer-and-info.md) | 玩家数据库、自定义标记、外语翻译、更新中心、拼音搜索 |
 | 个性化与趣味 | [personalization.md](personalization.md) | Random 随机化、导管染色、高清截图 |

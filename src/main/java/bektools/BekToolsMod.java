@@ -32,6 +32,7 @@ import betterpolyai.BetterPolyAiMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterterraingen.v2.BetterTerrainGenV2Mod;
 import betterscreenshot.features.BetterScreenShotFeature;
+import buildxray.BuildXrayMod;
 import colortheducts.ColorTheDuctsMod;
 import custommarker.features.CustomMarkerFeature;
 import foreignservertranslator.ForeignServerTranslatorMod;
@@ -104,6 +105,7 @@ public class BekToolsMod extends Mod{
     private static final String moduleAdvancedReplace = "ar";
     private static final String moduleRandom = "random";
     private static final String moduleLockAttack = "la";
+    private static final String moduleBuildXray = "bx";
     private static final String moduleOverlayCompatBridge = "ocb";
     private static final String moduleProfiler = "profiler";
     private static final String moduleUsageReporter = "usage-reporter";
@@ -137,6 +139,7 @@ public class BekToolsMod extends Mod{
     private final AdvancedReplaceMod advancedReplace;
     private final RandomMod random;
     private final LockAttackMod lockAttack;
+    private final BuildXrayMod buildXray;
     private final OverlayCompatBridgeMod overlayCompatBridge;
     private final PostHogUsageReporter postHogUsageReporter;
     private boolean settingsRegistered;
@@ -196,6 +199,7 @@ public class BekToolsMod extends Mod{
         markBundled(moduleAdvancedReplace, () -> AdvancedReplaceMod.bekBundled = true);
         markBundled(moduleRandom, () -> RandomMod.bekBundled = true);
         markBundled(moduleLockAttack, () -> LockAttackMod.bekBundled = true);
+        markBundled(moduleBuildXray, () -> BuildXrayMod.bekBundled = true);
 
         // Infrastructure: provides mindustryX.features.ui.OverlayUI on vanilla clients;
         // stays dormant when a real MindustryX runtime is present.
@@ -304,6 +308,11 @@ public class BekToolsMod extends Mod{
         });
         lockAttack = initializeModule(moduleLockAttack, () -> {
             LockAttackMod mod = new LockAttackMod();
+            mod.init();
+            return mod;
+        });
+        buildXray = initializeModule(moduleBuildXray, () -> {
+            BuildXrayMod mod = new BuildXrayMod();
             mod.init();
             return mod;
         });
@@ -425,6 +434,7 @@ public class BekToolsMod extends Mod{
         addSubmodState(states, "高级替换", moduleAdvancedReplace, advancedReplace != null, true);
         addSubmodState(states, "随机化", moduleRandom, random != null, false);
         addSubmodState(states, "锁定攻击", moduleLockAttack, lockAttack != null, false);
+        addSubmodState(states, "建造透视", moduleBuildXray, buildXray != null, buildXray != null && Core.settings.getBool("bx-enabled", true));
         addSubmodState(states, "OverlayUI 兼容层", moduleOverlayCompatBridge, overlayCompatBridge != null, false);
         return states;
     }
@@ -500,6 +510,7 @@ public class BekToolsMod extends Mod{
         entries.add(new ModuleEntry(moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, "bpa-enabled", false, st -> betterPolyAi.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, null, false, st -> advancedReplace.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleLockAttack, lockAttack != null, Core.bundle.get("bektools.section.la", "Lock Attack"), Icon.lock, null, false, st -> lockAttack.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleBuildXray, buildXray != null, Core.bundle.get("bektools.section.bx", "Build X-ray (by Miner)"), Icon.eyeSmall, "bx-enabled", true, st -> buildXray.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleOverlayCompatBridge, overlayCompatBridge != null, Core.bundle.get("bektools.section.ocb", "OverlayCompatBridge"), Icon.layers, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
         entries.add(new ModuleEntry(moduleProfiler, !isModuleFailed(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, "neon-profiler-enabled", false, NeonProfilerFeature::buildSettings));
         return entries;

@@ -1,6 +1,6 @@
 # 子系统：聚合核心（bektools）
 
-`bektools` 包是 Neon 的壳：它不实现具体玩法功能，而是负责装载 29 个功能模块、收口设置、隔离故障、注册指令。相关页面：[架构总览](../architecture.md)、[开发指南的接入清单](../development.md)。
+`bektools` 包是 Neon 的壳：它不实现具体玩法功能，而是负责装载 30 个功能模块、收口设置、隔离故障、注册指令。相关页面：[架构总览](../architecture.md)、[开发指南的接入清单](../development.md)。
 
 ## 入口与构造
 

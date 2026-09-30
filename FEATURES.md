@@ -294,6 +294,17 @@ Neon 聚合版没有单独设置组。想体验时，在主菜单点击“千万
 - 右键指挥选中单位时自动清除巡逻状态。
 - 中键排队和设置巡逻路线不受影响。
 
+### 30. 建造透视（Build X-ray）
+
+建造透视让建造预览遮住的部分变透明，方便看清要放置或拆除的位置。
+
+- 正在建造、拆除、框选蓝图或拖拽重建选择时，被预览遮住的单位、子弹与特效渐隐，停止操作后渐显恢复。
+- 鼠标周围有一块始终透明的圆形区域，半径 8–64 格可调。
+- 「透视遮罩的透明度」0%–100% 可调；默认 80%、半径 32 格。
+- 只影响客户端渲染，不改变建造合法性、不发送任何网络请求。
+
+来源说明：玩法逻辑来自 Miner 的脚本模组 build-xray（原始 JS 实现随 Neon 子仓库保存），Neon 负责 Java 移植、设置接入与聚合。
+
 ## 术语与实现说明
 
 ### CIEDE2000 是什么？
@@ -523,6 +534,17 @@ Two independent keybinds hide world processor effects and dynamic markers. This 
 ### 29. Patrol Cancel
 
 Patrol Cancel clears patrol stance when a selected command unit receives a right-click command, allowing movement or attack orders to take effect immediately. Middle-click queued commands remain available for patrol routes.
+
+### 30. Build X-ray
+
+Build X-ray fades out what the build preview covers, so the target area stays readable while building or breaking.
+
+- Units, bullets and effects behind the preview fade out while placing, breaking, box-selecting a schematic, or drag-selecting for rebuild, and fade back in afterwards.
+- A circular area around the cursor stays transparent; its radius is configurable from 8 to 64 tiles.
+- Mask transparency is configurable from 0% to 100%; defaults are 80% and a 32-tile radius.
+- Rendering only: placement validity is unchanged and nothing is sent over the network.
+
+Credits: the gameplay logic comes from Miner's script mod build-xray (the original JavaScript is kept in the sub-repository); Neon provides the Java port, settings integration and bundling.
 
 ### Terminology
 

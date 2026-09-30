@@ -24,6 +24,7 @@ docs/
 |-- glossary.md                术语表
 |-- subsystems/                子系统详解（写给开发者）
 |   |-- bektools-core.md       聚合核心：模块注册、故障隔离、指令注册
+|   |-- build-xray.md          建造透视：原始脚本来源、透明合成三阶段、聚合契约
 |   |-- overlay-compat.md      Overlay 兼容层：桥接口、原生回退、旧版守卫
 |   `-- modupdater.md          更新中心：状态机、镜像、历史版本兼容
 `-- user/                      用户指南（写给玩家）
@@ -37,7 +38,7 @@ docs/
 
 ## 相关文件
 
-- [FEATURES.md](../FEATURES.md)：按功能的完整说明（29 个功能逐条介绍 + 术语解释）。
+- [FEATURES.md](../FEATURES.md)：按功能的完整说明（30 个功能逐条介绍 + 术语解释）。
 - [AGENTS.md](../AGENTS.md)：仓库维护约束（版本号规则、设置接入规范、子模组同步）。
 - [README.md](../README.md)：项目主页。
 

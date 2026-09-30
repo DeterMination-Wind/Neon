@@ -13,9 +13,11 @@ import mindustry.logic.SugarLogicDialog;
 import mindustry.logic.SugarStatements.ArrayInitStatement;
 import mindustry.logic.SugarStatements.ArrayStatement;
 import mindustry.logic.SugarStatements.MatrixStatement;
+import mindustry.logic.SugarStatements.SpanStatement;
 import mindustry.world.blocks.logic.MemoryBlock;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -111,8 +113,82 @@ public final class ArrayRegistry{
         }
     }
 
+    /**
+     * 无头、且没有任何已链接方块时，{@code cellN} 成员按每格这个容量计算。
+     * 真实链接打开时不用这个数：world-cell 的变量名也是 {@code cellN}，容量是链接上的
+     * {@code memoryCapacity}（512），不是 64。{@code bankN}/{@code worldN} 由
+     * {@link #memoryCapacity} 给出 512（与数组侧同一口径）。
+     */
+    public static final int HEADLESS_CELL_CAPACITY = 64;
+
+    /** 一个 span：若干等容量内存块拼成的逻辑地址空间，容量 {@code N * C}。 */
+    public static final class SpanInfo{
+        public final String name;
+        public final String[] members;
+        public final int cellCapacity;
+        public final int logicalCapacity;
+
+        SpanInfo(String name, String[] members, int cellCapacity){
+            this.name = name;
+            this.members = members;
+            this.cellCapacity = cellCapacity;
+            this.logicalCapacity = members.length * cellCapacity;
+        }
+
+        /** @return 成员在地址顺序里的序号；不是本 span 的成员时返回 -1。 */
+        public int indexOfMember(String member){
+            if(member == null) return -1;
+            for(int i = 0; i < members.length; i++){
+                if(member.equals(members[i])) return i;
+            }
+            return -1;
+        }
+
+        /** @return 成员序列与每格容量是否完全一致（展开折叠反查用）。 */
+        public boolean matchesShape(List<String> candidate, int cellCapacity){
+            if(candidate == null || candidate.size() != members.length || this.cellCapacity != cellCapacity){
+                return false;
+            }
+            for(int i = 0; i < members.length; i++){
+                if(!members[i].equals(candidate.get(i))) return false;
+            }
+            return true;
+        }
+    }
+
     private final Map<String, ArrayInfo> byName = new LinkedHashMap<>();
     private final Map<String, MatrixInfo> matrices = new LinkedHashMap<>();
+    private final Map<String, SpanInfo> spans = new LinkedHashMap<>();
+
+    /** @return 按声明名查找的 span，未声明时为 null。 */
+    public SpanInfo span(String name){
+        return name == null ? null : spans.get(name);
+    }
+
+    /**
+     * 反查：以 {@code member} 为成员的 span（按声明顺序；同一内存块可以出现在多条 span 里）。
+     * 展开折叠要把「物理成员 + 格内地址」还原成「span 别名 + 逻辑地址」，这是唯一入口。
+     */
+    public List<SpanInfo> spansByMember(String member){
+        List<SpanInfo> result = new ArrayList<>();
+        if(member != null){
+            for(SpanInfo info : spans.values()){
+                if(info.indexOfMember(member) >= 0) result.add(info);
+            }
+        }
+        return result;
+    }
+
+    /** @return 成员序列与每格容量完全一致的那条 span；形状重复（无法判定是哪一条）时 null。 */
+    public SpanInfo spanByShape(List<String> members, int cellCapacity){
+        SpanInfo found = null;
+        for(SpanInfo info : spans.values()){
+            if(!info.matchesShape(members, cellCapacity)) continue;
+            if(found != null) return null;
+            found = info;
+        }
+        return found;
+    }
 
     /** @return 按声明名查找的数组，未声明时为 null。 */
     public ArrayInfo get(String name){
@@ -174,9 +250,25 @@ public final class ArrayRegistry{
      */
     public static ArrayRegistry compileRegistry(Seq<LStatement> statements, Set<String> functionNames){
         ArrayRegistry registry = new ArrayRegistry();
+        ArrayRegistry previousCompiling = compiling;
+        compiling = registry;
+        try{
+            return compileRegistryInto(registry, statements, functionNames);
+        }finally{
+            compiling = previousCompiling;
+        }
+    }
+
+    private static ArrayRegistry compileRegistryInto(ArrayRegistry registry, Seq<LStatement> statements, Set<String> functionNames){
         // 同一内存块上已声明的区间（用于重叠校验）
         Map<String, List<long[]>> spans = new LinkedHashMap<>();
         Set<String> names = new HashSet<>();
+        // span 先于 array：capacityOf(span 名) 必须在数组容量检查时已经是 N*C，
+        // 声明写在数组后面也一样（注册表是程序级的）。
+        for(int i = 0; i < statements.size; i++){
+            if(!(statements.get(i) instanceof SpanStatement card)) continue;
+            registry.addSpan(card, i, names, functionNames);
+        }
         for(int i = 0; i < statements.size; i++){
             LStatement statement = statements.get(i);
             if(statement instanceof ArrayStatement card){
@@ -248,6 +340,124 @@ public final class ArrayRegistry{
         return registry;
     }
 
+    /** 严格登记一张 span 卡。失败抛 {@link IllegalArgumentException}。 */
+    private void addSpan(SpanStatement card, int index, Set<String> names, Set<String> functionNames){
+        String name = card.name == null ? "" : card.name.trim();
+        validateName(index, "span", name, names, functionNames);
+        if(isCellLink(name) || isStorageLink(name)){
+            throw error("span", index, "name '" + name + "' is a memory-link name; a span must not shadow a real link such as cell1");
+        }
+        List<String> members;
+        try{
+            members = SpanStatement.membersOf(card.expr);
+        }catch(IllegalArgumentException e){
+            throw error("span", index, "'" + name + "' " + e.getMessage());
+        }
+        for(String raw : members){
+            if(raw.equals(name)){
+                throw error("span", index, "member '" + raw + "' is the span name; a span must not shadow its own link");
+            }
+        }
+        if(members.size() < 2){
+            throw error("span", index, "'" + name + "' needs at least two cells");
+        }
+        Set<String> distinct = new HashSet<>();
+        for(String member : members){
+            if(!distinct.add(member)){
+                throw error("span", index, "'" + name + "' repeats member '" + member + "'");
+            }
+            if(spans.containsKey(member)){
+                throw error("span", index, "member '" + member + "' is itself a span");
+            }
+        }
+        int cellCapacity = sharedCapacity(index, name, members);
+        if(cellCapacity < 1){
+            throw error("span", index, "'" + name + "' has no positive cell capacity");
+        }
+        long logical = (long)members.size() * cellCapacity;
+        if(logical > Integer.MAX_VALUE){
+            throw error("span", index, "'" + name + "' logical capacity is too large (" + logical + ")");
+        }
+        names.add(name);
+        spans.put(name, new SpanInfo(name, members.toArray(new String[0]), cellCapacity));
+    }
+
+    /**
+     * 成员共享容量。已链接的方块用它自己的 {@code memoryCapacity}，混合容量直接拒绝；
+     * 特权内存块（world-cell）在非特权处理器上拒绝。
+     *
+     * <p>解析不到链接的成员与数组侧同一口径：回落 {@link #memoryCapacity} 的名字启发式
+     * （{@code cellN}=64、{@code bankN}/{@code worldN}=512，大小写不敏感），猜不出来
+     * （既没链接、名字也不是这三种链接名）仍然是编译错误——span 的 {@code idiv}/{@code mod}
+     * 需要一个确定的每格容量，不能像数组容量检查那样“不限制”。</p>
+     *
+     * <p>2026-09 复核修正：这里原来只接受全 {@code cellN}，于是共享/换图后未链接的
+     * {@code bank1 + bank2} 直接编译失败；而载体验证失败会让编辑器回落 vanilla 视图，
+     * 用户下次保存就会丢掉只存在于载体里的 span/array 卡。对齐数组侧的猜测口径后，
+     * 这类程序仍能编译（容量标为 inferred，错误信息会说来自变量名）。</p>
+     */
+    private static int sharedCapacity(int index, String name, List<String> members){
+        LinkResolver resolver = linkResolver();
+        int capacity = -1;
+        boolean[] known = new boolean[members.size()];
+        if(resolver != null){
+            for(int m = 0; m < members.size(); m++){
+                String member = members.get(m);
+                int resolved = resolver.capacity(member);
+                if(resolved > 0){
+                    known[m] = true;
+                    if(resolver.privilegedMemory(member) && !resolver.processorPrivileged()){
+                        throw error("span", index, "'" + name + "' member '" + member
+                            + "' is a privileged memory block on a non-privileged processor");
+                    }
+                    capacity = mergeCapacity(index, name, member, capacity, resolved, "linked", false);
+                }else if(resolved == 0){
+                    throw error("span", index, "'" + name + "' member '" + member + "' is not a linked memory block");
+                }
+            }
+        }
+        for(int m = 0; m < members.size(); m++){
+            if(known[m]) continue;
+            String member = members.get(m);
+            int guessed = memoryCapacity(member);
+            if(guessed <= 0){
+                throw error("span", index, "'" + name + "' capacity is unknown for member '" + member
+                    + "': it is not a linked memory block and not a cellN/bankN/worldN link name");
+            }
+            capacity = mergeCapacity(index, name, member, capacity, guessed, "inferred from the variable name", true);
+        }
+        return capacity;
+    }
+
+    /**
+     * 合并一个成员的容量：与已确定值不同就是混合容量错误（也包括一个来自链接、另一个来自
+     * 名字猜测的情况——span 的每次访问都要除以同一个 C）。{@code source} 只影响错误措辞。
+     */
+    private static int mergeCapacity(int index, String name, String member, int current, int value,
+                                     String source, boolean guessed){
+        if(current < 0) return value;
+        if(current == value) return current;
+        throw error("span", index, "'" + name + "' members have mixed capacities: " + current + " and "
+            + value + " for '" + member + "'" + (guessed ? " (" + source + ")" : "")
+            + "; every member of a span must address the same number of slots");
+    }
+
+    /** {@code cellN}：链接名模式（world-cell 的变量名也是它）。span 的逻辑名不得与真实链接重名。 */
+    private static boolean isCellLink(String memory){
+        return prefixedDigits(memory, "cell");
+    }
+
+    /** bankN / worldN / memoryN：同样是链接名，不能拿来当 span 的逻辑名。 */
+    private static boolean isStorageLink(String memory){
+        return prefixedDigits(memory, "bank") || prefixedDigits(memory, "world") || prefixedDigits(memory, "memory");
+    }
+
+    private static boolean prefixedDigits(String memory, String prefix){
+        if(memory == null) return false;
+        String link = memory.trim().toLowerCase(Locale.ROOT);
+        return link.startsWith(prefix) && digitsOnly(link.substring(prefix.length()));
+    }
+
     private static void validateName(int index, String card, String name, Set<String> names, Set<String> functionNames){
         if(name.isEmpty()) throw error(card, index, "name must not be empty");
         if(!isIdentifier(name)) throw error(card, index, "name '" + name + "' must match [A-Za-z_][A-Za-z0-9_]*");
@@ -291,7 +501,7 @@ public final class ArrayRegistry{
     public static int memoryCapacity(String memory){
         if(memory == null) return -1;
         String name = memory.trim().toLowerCase(Locale.ROOT);
-        if(name.startsWith("cell")) return digitsOnly(name.substring(4)) ? 64 : -1;
+        if(name.startsWith("cell")) return digitsOnly(name.substring(4)) ? HEADLESS_CELL_CAPACITY : -1;
         if(name.startsWith("bank")) return digitsOnly(name.substring(4)) ? 512 : -1;
         if(name.startsWith("world")) return digitsOnly(name.substring(5)) ? 512 : -1;
         return -1;
@@ -324,6 +534,16 @@ public final class ArrayRegistry{
          * </ul>
          */
         int capacity(String memory);
+
+        /** 该链接是特权内存块（world-cell）时为 true。默认不是。 */
+        default boolean privilegedMemory(String memory){
+            return false;
+        }
+
+        /** 当前处理器能否读特权内存块。没有处理器上下文时按特权处理，避免无头路径误拒。 */
+        default boolean processorPrivileged(){
+            return true;
+        }
 
         /** 延迟提供解析器：提交/渲染时按需取当前会话的处理器，取不到就是"没有上下文"。 */
         interface Provider{
@@ -386,18 +606,67 @@ public final class ArrayRegistry{
      * 猜的数字去拒绝一个确定的非内存目标；只有完全解析不到（-1）才用名字兜底。
      */
     public static int capacityOf(String memory){
+        SpanInfo span = findSpan(memory);
+        if(span != null) return span.logicalCapacity;
         int resolved = resolvedCapacity(memory);
         if(resolved > 0) return resolved;
         if(resolved == 0) return 0;
         return memoryCapacity(memory);
     }
 
+    /** 编译中的注册表优先，其次是已 enter 的上下文，最后才是画布。 */
+    public static SpanInfo findSpan(String memory){
+        if(memory == null) return null;
+        ArrayRegistry registry = contextRegistry();
+        return registry == null ? null : registry.spans.get(memory);
+    }
+
+    /**
+     * 反查：成员名 → 拥有该成员的 span（展开折叠用；取不到上下文时为空表）。
+     * 返回多条时调用方必须按「不可判定」处理——多条 span 能解释同一段展开时
+     * 折回哪一个别名并不唯一（最终仍有重编译比对兜底）。
+     */
+    public static List<SpanInfo> findSpansByMember(String member){
+        if(member == null) return Collections.emptyList();
+        ArrayRegistry registry = contextRegistry();
+        return registry == null ? Collections.emptyList() : registry.spansByMember(member);
+    }
+
+    /** 反查：成员序列 + 每格容量 → span（展开折叠用；形状重复或没有上下文时 null）。 */
+    public static SpanInfo findSpanByShape(List<String> members, int cellCapacity){
+        ArrayRegistry registry = contextRegistry();
+        return registry == null ? null : registry.spanByShape(members, cellCapacity);
+    }
+
+    /** 编译中 → 已 enter → 画布探测；都取不到返回 null。 */
+    private static ArrayRegistry contextRegistry(){
+        ArrayRegistry registry = compiling != null ? compiling : current;
+        return registry != null ? registry : canvasRegistry();
+    }
+
     /** {@link #capacityOf} 的数值来源。 */
     public static CapacitySource capacitySource(String memory){
+        SpanInfo span = findSpan(memory);
+        if(span != null){
+            LinkResolver resolver = linkResolver();
+            if(resolver != null && allMembersLinked(resolver, span)){
+                return CapacitySource.linked;
+            }
+            // 自测/无链接上下文、或只有部分成员能解析时，容量可能来自名字启发式：
+            // 宁可按“推断值”报，也不要让用户以为它是链接上读到的真实容量
+            return CapacitySource.inferred;
+        }
         int resolved = resolvedCapacity(memory);
         if(resolved > 0) return CapacitySource.linked;
         if(resolved == 0) return CapacitySource.notMemory;
         return memoryCapacity(memory) > 0 ? CapacitySource.inferred : CapacitySource.unknown;
+    }
+
+    private static boolean allMembersLinked(LinkResolver resolver, SpanInfo span){
+        for(String member : span.members){
+            if(resolver.capacity(member) <= 0) return false;
+        }
+        return span.members.length > 0;
     }
 
     /** 容量越界错误：解析到真实链接就直说，猜的要标明是推断值。 */
@@ -454,6 +723,17 @@ public final class ArrayRegistry{
             capacities.put(memory, capacity);
             return capacity;
         }
+
+        @Override
+        public boolean privilegedMemory(String memory){
+            Building building = linkedBuilding(memory);
+            return building != null && building.block != null && building.block.privileged;
+        }
+
+        @Override
+        public boolean processorPrivileged(){
+            return executor.privileged;
+        }
     }
 
     private static boolean digitsOnly(String value){
@@ -493,6 +773,16 @@ public final class ArrayRegistry{
             ArrayRegistry registry = new ArrayRegistry();
             for(Element child : canvas.statements.getChildren()){
                 if(!(child instanceof LCanvas.StatementElem elem)) continue;
+                if(elem.st instanceof SpanStatement card){
+                    try{
+                        registry.addSpan(card, 0, new HashSet<>(), null);
+                    }catch(RuntimeException ignored){
+                        // 宽松口径：不合法的 span 留给标红，不进入容量表
+                    }
+                }
+            }
+            for(Element child : canvas.statements.getChildren()){
+                if(!(child instanceof LCanvas.StatementElem elem)) continue;
                 if(elem.st instanceof ArrayStatement card){
                     String name = card.array == null ? "" : card.array.trim();
                     String memory = card.memory == null ? "" : card.memory.trim();
@@ -501,7 +791,8 @@ public final class ArrayRegistry{
                     // 宽松口径：名字合法、未被占用、内存块非空、区间字面量合法才登记；
                     // 其余问题（重叠、与函数重名等）留给编译期严格校验与编辑期标红
                     if(!isIdentifier(name) || name.startsWith("__ls_")) continue;
-                    if(memory.isEmpty() || registry.byName.containsKey(name) || registry.matrices.containsKey(name)) continue;
+                    if(memory.isEmpty() || registry.byName.containsKey(name) || registry.matrices.containsKey(name)
+                        || registry.spans.containsKey(name)) continue;
                     if(base == null || size == null || base < 0 || base > Integer.MAX_VALUE
                         || size < 1 || size > Integer.MAX_VALUE) continue;
                     registry.byName.put(name, new ArrayInfo(name, memory, (int)(long)base, (int)(long)size));
@@ -512,7 +803,8 @@ public final class ArrayRegistry{
                     Long rows = parseIntLiteral(card.rows);
                     Long cols = parseIntLiteral(card.cols);
                     if(!isIdentifier(name) || name.startsWith("__ls_")) continue;
-                    if(memory.isEmpty() || registry.byName.containsKey(name) || registry.matrices.containsKey(name)) continue;
+                    if(memory.isEmpty() || registry.byName.containsKey(name) || registry.matrices.containsKey(name)
+                        || registry.spans.containsKey(name)) continue;
                     if(base == null || rows == null || cols == null || base < 0 || base > Integer.MAX_VALUE
                         || rows < 1 || rows > Integer.MAX_VALUE || cols < 1 || cols > Integer.MAX_VALUE) continue;
                     registry.matrices.put(name, new MatrixInfo(name, memory, (int)(long)base, (int)(long)rows, (int)(long)cols));
@@ -542,6 +834,18 @@ public final class ArrayRegistry{
         Set<String> names = new HashSet<>();
         Map<String, List<long[]>> spans = new LinkedHashMap<>();
         Map<String, ArrayInfo> validArrays = new LinkedHashMap<>();
+        ArrayRegistry scratch = new ArrayRegistry();
+        for(int i = 0; i < statements.size; i++){
+            if(!(statements.get(i) instanceof SpanStatement card)) continue;
+            try{
+                scratch.addSpan(card, i, names, functionNames);
+            }catch(RuntimeException ignored){
+                invalid[i] = true;
+            }
+        }
+        ArrayRegistry previousCompiling = compiling;
+        compiling = scratch;
+        try{
         for(int i = 0; i < statements.size; i++){
             LStatement statement = statements.get(i);
             if(statement instanceof ArrayStatement card){
@@ -620,11 +924,16 @@ public final class ArrayRegistry{
             }
             if(bad) invalid[i] = true;
         }
+        }finally{
+            compiling = previousCompiling;
+        }
     }
 
     // ===== 静态编译期上下文 =====
 
     private static ArrayRegistry current;
+    /** {@link #compileRegistry} / {@link #markInvalidStatements} 建表期间，capacityOf 要看见尚未 enter 的 span。 */
+    private static ArrayRegistry compiling;
 
     /** 进入编译期上下文，返回先前的注册表供 {@link #restore} 恢复（须 try/finally 配对）。 */
     public static ArrayRegistry enter(ArrayRegistry registry){

@@ -41,7 +41,7 @@ import logicsugar.assist.data.RecordModule;
 import logicsugar.assist.data.SetModule;
 import logicsugar.assist.expr.ArrayRegistry;
 import logicsugar.assist.expr.ExprHook;
-
+import logicsugar.assist.expr.ExprIntrinsics;
 import static arc.Events.on;
 
 public class LogicSugarMod extends Mod{
@@ -509,6 +509,10 @@ public class LogicSugarMod extends Mod{
         registered = true;
 
         LogicIO.allStatements.add(SugarStatements.ForBeginStatement::new);
+        LogicIO.allStatements.add(SugarStatements.UnitBindStatement::new);
+        LogicIO.allStatements.add(SugarStatements.UnitNextStatement::new);
+        LogicIO.allStatements.add(SugarStatements.UnitForBeginStatement::new);
+        LogicIO.allStatements.add(SugarStatements.UnitFreeStatement::new);
         LogicIO.allStatements.add(SugarStatements.WhileBeginStatement::new);
         LogicIO.allStatements.add(SugarStatements.SwitchBeginStatement::new);
         LogicIO.allStatements.add(SugarStatements.IfBeginStatement::new);
@@ -524,6 +528,7 @@ public class LogicSugarMod extends Mod{
         LogicIO.allStatements.add(SugarStatements.ReturnStatement::new);
         LogicIO.allStatements.add(SugarStatements.ArrayStatement::new);
         LogicIO.allStatements.add(SugarStatements.MatrixStatement::new);
+        LogicIO.allStatements.add(SugarStatements.SpanStatement::new);
         // The old eight-slot arrayinit card remains parser-compatible for existing carriers,
         // but new programs use the array module's fill(buf, value) operation card instead.
 

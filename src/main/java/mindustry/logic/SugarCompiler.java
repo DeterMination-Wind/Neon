@@ -19,12 +19,13 @@ import mindustry.logic.SugarStatements.FuncDefStatement;
 import mindustry.logic.SugarStatements.IfBeginStatement;
 import mindustry.logic.SugarStatements.ReturnStatement;
 import mindustry.logic.SugarStatements.SwitchBeginStatement;
+import mindustry.logic.SugarStatements.UnitForBeginStatement;
 import mindustry.logic.SugarStatements.WhileBeginStatement;
 import logicsugar.assist.data.DataModules;
 import logicsugar.assist.expr.ArrayRegistry;
 import logicsugar.assist.expr.ExprCompiler;
 import logicsugar.assist.expr.ExprIntrinsics;
-
+import logicsugar.assist.expr.SpanAccess;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -618,7 +619,12 @@ public final class SugarCompiler{
         boolean previousPrivilegedSensors = ExprCompiler.enterPrivilegedSensors(privileged);
         // F2: 数据模块注入的内置函数库并入本次编译使用的 LibraryIndex（只影响本次编译；
         // extractLibrarySource 仍只作用于纯用户库文本，内置函数不会进入 __ls_lib 载体）。
-        SugarFunctions.LibraryIndex compileLibrary = SugarFunctions.withBuiltins(library, DataModules.builtinSugar());
+        // Span addressing builtins are new functions. Existing __ls_builtin_* bodies stay
+        // byte-identical; a call that still names a span is a compile error in SugarFunctions.
+        java.util.List<String> builtinSugar = new java.util.ArrayList<>(DataModules.builtinSugar());
+        builtinSugar.add(logicsugar.assist.expr.SpanAccess.readBuiltin());
+        builtinSugar.add(logicsugar.assist.expr.SpanAccess.writeBuiltin());
+        SugarFunctions.LibraryIndex compileLibrary = SugarFunctions.withBuiltins(library, builtinSugar);
         // analyze 之前安装轻量声明表：collectCalls 需要按声明类型把方法/下标糖解析成 intrinsic
         //（包含注入函数可达性登记），而 DataModules.collectAll 要等 analyze 之后才执行。
         java.util.List<LStatement> statementList = new java.util.ArrayList<>(statements.size);
@@ -1186,8 +1192,10 @@ public final class SugarCompiler{
             if(statement instanceof FuncDefStatement def) local.add(def.name);
         }
         SugarFunctions.LibraryIndex library = SugarFunctions.library();
-        // F2: 数据模块注入的内置函数名（编辑器里对内置 funccall 不标红）
-        Set<String> builtinNames = DataModules.builtinFunctionNames();
+        // F2: 注入的内置函数名（数据模块 + span 寻址），编辑器里对内置 funccall 不标红。
+        // span 的两个函数不参与发射，但会并进本次编译的函数库，编辑器判“未定义”必须同口径。
+        Set<String> builtinNames = new HashSet<>(DataModules.builtinFunctionNames());
+        builtinNames.addAll(SpanAccess.builtinFunctionNames());
         for(int i = 0; i < statements.size; i++){
             if(statements.get(i) instanceof FuncCallStatement call){
                 if(!local.contains(call.name)
@@ -1428,7 +1436,7 @@ public final class SugarCompiler{
             while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
             if(statements.get(i) instanceof WhileBeginStatement || statements.get(i) instanceof SwitchBeginStatement
-                || statements.get(i) instanceof ForBeginStatement) stack.push(i);
+                || statements.get(i) instanceof ForBeginStatement || statements.get(i) instanceof UnitForBeginStatement) stack.push(i);
         }
         return result;
     }
@@ -1441,7 +1449,8 @@ public final class SugarCompiler{
         for(int i = 0; i < statements.size; i++){
             while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
-            if(statements.get(i) instanceof WhileBeginStatement || statements.get(i) instanceof ForBeginStatement) stack.push(i);
+            if(statements.get(i) instanceof WhileBeginStatement || statements.get(i) instanceof ForBeginStatement
+                || statements.get(i) instanceof UnitForBeginStatement) stack.push(i);
         }
         return result;
     }

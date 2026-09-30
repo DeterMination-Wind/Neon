@@ -8,6 +8,7 @@ import logicsugar.assist.expr.ArrayRegistry;
 import logicsugar.assist.expr.ExprCompiler;
 import logicsugar.assist.expr.ExprIntrinsics;
 import logicsugar.assist.expr.ShortCircuitCompiler;
+import logicsugar.assist.expr.SpanAccess;
 import mindustry.logic.LStatements.GetLinkStatement;
 import mindustry.logic.LStatements.InvalidStatement;
 import mindustry.logic.LStatements.JumpStatement;
@@ -16,6 +17,7 @@ import mindustry.logic.LStatements.PackColorStatement;
 import mindustry.logic.LStatements.ReadStatement;
 import mindustry.logic.LStatements.SensorStatement;
 import mindustry.logic.LStatements.SetStatement;
+import mindustry.logic.LStatements.WriteStatement;
 import mindustry.logic.SugarCompiler.FuncMode;
 import mindustry.logic.SugarStatements.BeginStatement;
 import mindustry.logic.SugarStatements.BlockEndStatement;
@@ -25,6 +27,10 @@ import mindustry.logic.SugarStatements.CaseStatement;
 import mindustry.logic.SugarStatements.ElseIfStatement;
 import mindustry.logic.SugarStatements.ElseStatement;
 import mindustry.logic.SugarStatements.ForBeginStatement;
+import mindustry.logic.SugarStatements.UnitBindStatement;
+import mindustry.logic.SugarStatements.UnitForBeginStatement;
+import mindustry.logic.SugarStatements.UnitFreeStatement;
+import mindustry.logic.SugarStatements.UnitNextStatement;
 import mindustry.logic.SugarStatements.FuncCallStatement;
 import mindustry.logic.SugarStatements.FuncDefStatement;
 import mindustry.logic.SugarStatements.IfBeginStatement;
@@ -229,6 +235,9 @@ public final class SugarFunctions{
         public boolean damaged;
         /** Problems that were repaired while loading a damaged library file. */
         public List<String> warnings = new ArrayList<>();
+        /** True when no user library source existed at all: the index holds injected builtins
+         *  only. An unresolved call must then blame the missing file instead of the call. */
+        public boolean userMissing;
     }
 
     /** Local functions plus the resolved main statement list. */
@@ -717,6 +726,12 @@ public final class SugarFunctions{
             merged.functions.putAll(user.functions);
             merged.damaged = user.damaged;
             merged.warnings = new ArrayList<>(user.warnings);
+            merged.userMissing = user.userMissing;
+        }else{
+            // The injected builtins must not turn "no library file" into "library is fine":
+            // otherwise a program that calls a user function would report a plain
+            // "undefined function" and never point at Settings -> Function Library.
+            merged.userMissing = true;
         }
         for(String part : builtinSugar){
             if(part == null || part.trim().isEmpty()) continue;
@@ -1278,7 +1293,7 @@ public final class SugarFunctions{
      *  An otherwise-valid library keeps the plain message (a function really does not
      *  exist); a missing or damaged library points the user at the repair path. */
     private static String libraryProblemHint(LibraryIndex library){
-        if(library == null){
+        if(library == null || library.userMissing){
             return ". The global function library is unavailable; check Settings -> Function Library";
         }
         if(library.damaged){
@@ -1550,6 +1565,14 @@ public final class SugarFunctions{
                 if(!call.destination.isEmpty()) result.add(call.destination);
             }else if(statement instanceof ForBeginStatement forBegin){
                 result.add(forBegin.variable);
+            }else if(statement instanceof UnitBindStatement bind){
+                result.add(bind.variable);
+            }else if(statement instanceof UnitNextStatement next){
+                result.add(next.variable);
+            }else if(statement instanceof UnitForBeginStatement loop){
+                result.add(loop.variable);
+            }else if(statement instanceof UnitFreeStatement free){
+                result.add(free.variable);
             }
         }
         return result;
@@ -1816,7 +1839,15 @@ public final class SugarFunctions{
             }
             LStatement statement = statements.get(i);
 
-            if(statement instanceof ForBeginStatement begin){
+            if(statement instanceof UnitBindStatement bind){
+                emitUnitBind(bind, prefix, i, out);
+            }else if(statement instanceof UnitNextStatement next){
+                emitUnitNext(next, prefix, i, out);
+            }else if(statement instanceof UnitForBeginStatement begin){
+                emitUnitFor(begin, prefix, i, out);
+            }else if(statement instanceof UnitFreeStatement free){
+                emitUnitFree(free, prefix, i, out);
+            }else if(statement instanceof ForBeginStatement begin){
                 if(!begin.initial.isEmpty()) out.append("set ").append(begin.variable).append(' ').append(begin.initial).append('\n');
                 out.append(label(prefix, "for_check_", i)).append(":\n");
                 if(begin.expressionMode){
@@ -1917,6 +1948,8 @@ public final class SugarFunctions{
                 LStatement ownerStmt = statements.get(owner);
                 if(ownerStmt instanceof ForBeginStatement){
                     out.append("jump ").append(label(prefix, "for_continue_", owner)).append(" always x false\n");
+                }else if(ownerStmt instanceof UnitForBeginStatement){
+                    out.append("jump ").append(label(prefix, "ub_step_", owner)).append(" always x false\n");
                 }else if(ownerStmt instanceof WhileBeginStatement){
                     out.append("jump ").append(label(prefix, "stmt_", owner)).append(" always x false\n");
                 }
@@ -1931,6 +1964,13 @@ public final class SugarFunctions{
                     }
                     if(!begin.step.isEmpty()) out.append("op add ").append(begin.variable).append(' ').append(begin.variable).append(' ').append(begin.step).append('\n');
                     out.append("jump ").append(label(prefix, "for_check_", beginIndex)).append(" always x false\n");
+                }else if(owner instanceof UnitForBeginStatement){
+                    if(loopHasContinue(statements, beginIndex, continueOwner)){
+                        out.append(label(prefix, "ub_step_", beginIndex)).append(":\n");
+                    }
+                    out.append("op add ").append(ub(prefix, "n", beginIndex)).append(' ')
+                        .append(ub(prefix, "n", beginIndex)).append(" 1\n");
+                    out.append("jump ").append(label(prefix, "ub_scan_", beginIndex)).append(" always x false\n");
                 }else if(owner instanceof WhileBeginStatement){
                     out.append("jump ").append(label(prefix, "stmt_", beginIndex)).append(" always x false\n");
                 }
@@ -1966,6 +2006,12 @@ public final class SugarFunctions{
             }else if(statement instanceof logicsugar.assist.data.DataDeclaration){
                 // F2: 数据子系统的声明卡（record/stack/queue/...）是纯编译期元数据：
                 // 不产出任何 mlog 行，注册表元数据由 DataModules.collectAll 在 lower 前建立
+            }else if(statement instanceof SugarStatements.SpanStatement){
+                // span 声明卡同样不产指令。读写在下面的 read/write 分支和表达式发射点展开。
+            }else if(statement instanceof ReadStatement read && SpanAccess.isSpan(read.target)){
+                SpanAccess.appendRead(out, read.output, read.target, read.address);
+            }else if(statement instanceof WriteStatement write && SpanAccess.isSpan(write.target)){
+                SpanAccess.appendWrite(out, write.input, write.target, write.address);
             }else if(statement instanceof SugarAsserts.AssertCard){
                 // debug builds (emit) pass assertion instructions through as real custom
                 // instructions; the default (strip) compiles them away so the saved mlog
@@ -2058,6 +2104,8 @@ public final class SugarFunctions{
             }else if(line instanceof ExprCompiler.CopyLine copy){
                 out.append("set ").append(renameDataTemp(copy.dest, prefix)).append(' ')
                     .append(renameDataTemp(copy.src, prefix)).append('\n');
+            }else if(line instanceof ExprCompiler.SelectLine sel){
+                out.append(sel.rename(token -> renameDataTemp(token, prefix)).toText()).append('\n');
             }else if(line instanceof ExprCompiler.RawLine raw){
                 out.append(raw.toText()).append('\n');
             }else if(line instanceof ExprCompiler.SensorLine sensor){
@@ -2065,13 +2113,11 @@ public final class SugarFunctions{
                     .append(renameDataTemp(sensor.a, prefix)).append(' ')
                     .append(renameDataTemp(sensor.b, prefix)).append('\n');
             }else if(line instanceof ExprCompiler.ReadLine read){
-                out.append("read ").append(renameDataTemp(read.dest, prefix)).append(' ')
-                    .append(renameDataTemp(read.a, prefix)).append(' ')
-                    .append(renameDataTemp(read.b, prefix)).append('\n');
+                SpanAccess.appendRead(out, renameDataTemp(read.dest, prefix),
+                    renameDataTemp(read.a, prefix), renameDataTemp(read.b, prefix));
             }else if(line instanceof ExprCompiler.WriteLine write){
-                out.append("write ").append(renameDataTemp(write.value, prefix)).append(' ')
-                    .append(renameDataTemp(write.memory, prefix)).append(' ')
-                    .append(renameDataTemp(write.address, prefix)).append('\n');
+                SpanAccess.appendWrite(out, renameDataTemp(write.value, prefix),
+                    renameDataTemp(write.memory, prefix), renameDataTemp(write.address, prefix));
             }else{
                 ExprCompiler.OpLine op = (ExprCompiler.OpLine)line;
                 out.append("op ").append(op.op).append(' ')
@@ -2108,7 +2154,7 @@ public final class SugarFunctions{
         for(int k = 0; k < init.values.length; k++){
             String value = init.values[k];
             if(value == null || value.isEmpty() || value.equals("~")) continue;
-            out.append("write ").append(value).append(' ').append(info.memory).append(' ').append((long)info.base + k).append('\n');
+            SpanAccess.appendWrite(out, value, info.memory, Long.toString((long)info.base + k));
         }
     }
 
@@ -2146,11 +2192,13 @@ public final class SugarFunctions{
                 out.append("sensor ").append(d).append(' ').append(a).append(' ').append(b).append('\n');
             }else if(line instanceof ExprCompiler.ReadLine read){
                 // 数组下标读：read 是 3 操作数指令（不是 op），dest 与地址里的 temp
-                // 都要进入条件命名空间（memory 变量名不重命名）
+                // 都要进入条件命名空间（memory 变量名不重命名）。span 在改名之后展开。
                 String a = renameConditionTemp(read.a, prefix, statementIndex);
                 String b = renameConditionTemp(read.b, prefix, statementIndex);
                 String d = renameConditionTemp(read.dest, prefix, statementIndex);
-                out.append("read ").append(d).append(' ').append(a).append(' ').append(b).append('\n');
+                SpanAccess.appendRead(out, d, a, b);
+            }else if(line instanceof ExprCompiler.SelectLine sel){
+                out.append(sel.rename(token -> renameConditionTemp(token, prefix, statementIndex)).toText()).append('\n');
             }else if(line instanceof ExprCompiler.CallLine call){
                 // 函数调用展开：实参与结果 temp 都要进入条件命名空间
                 FuncCallStatement stmt = new FuncCallStatement();
@@ -2216,9 +2264,10 @@ public final class SugarFunctions{
                             .append(renameReturnTemp(sensor.b, funcName)).append('\n');
                     }else if(line instanceof ExprCompiler.ReadLine read){
                         // 数组下标读是 3 操作数指令（不是 op）：dest/地址 temp 进入函数命名空间
-                        out.append("read ").append(renameReturnTemp(read.dest, funcName)).append(' ')
-                            .append(renameReturnTemp(read.a, funcName)).append(' ')
-                            .append(renameReturnTemp(read.b, funcName)).append('\n');
+                        SpanAccess.appendRead(out, renameReturnTemp(read.dest, funcName),
+                            renameReturnTemp(read.a, funcName), renameReturnTemp(read.b, funcName));
+                    }else if(line instanceof ExprCompiler.SelectLine sel){
+                        out.append(sel.rename(token -> renameReturnTemp(token, funcName)).toText()).append('\n');
                     }else if(line instanceof ExprCompiler.AssertBoundsLine bounds){
                         // emit 调试构建的越界断言：断言操作数同样进入函数临时变量命名空间
                         out.append(bounds.withValue(renameReturnTemp(bounds.value, funcName)).toText()).append('\n');
@@ -2267,6 +2316,7 @@ public final class SugarFunctions{
             throw new IllegalArgumentException("call to undefined function '" + call.name + "'");
         }
         List<String> args = splitArgs(call.args);
+        rejectSpanBuiltin(call.name, args);
         if(mode == FuncMode.inline){
             int id = ids.next();
             String prefix = "i_" + id + "_";
@@ -2292,6 +2342,23 @@ public final class SugarFunctions{
             // stale value; only value-returning functions hand something back.
             if(!call.result.isEmpty() && target.hasValueReturn){
                 out.append("set ").append(call.result).append(' ').append(target.resultName()).append('\n');
+            }
+        }
+    }
+
+    /**
+     * 旧内置函数体只对一块内存做 read/write。参数里出现 span 名时不能静默打到第一格。
+     * spanread/spanwrite 自己就是跨格展开，不在此列。
+     */
+    private static void rejectSpanBuiltin(String name, List<String> args){
+        if(name == null || !name.startsWith("__ls_builtin_") || SpanAccess.isSpanBuiltin(name)) return;
+        if(args == null) return;
+        for(String arg : args){
+            if(arg == null) continue;
+            String token = arg.trim();
+            if(SpanAccess.isSpan(token)){
+                throw new IllegalArgumentException("builtin '" + name
+                    + "' would read only the first cell of span '" + token + "'");
             }
         }
     }
@@ -2330,6 +2397,10 @@ public final class SugarFunctions{
         for(ExprCompiler.Line line : ops){
             if(line instanceof ExprCompiler.CallLine call){
                 expandCallLine(call, functions, mode, out, ids, strategy, assertEmit);
+            }else if(line instanceof ExprCompiler.ReadLine read){
+                SpanAccess.appendRead(out, read.dest, read.a, read.b);
+            }else if(line instanceof ExprCompiler.WriteLine write){
+                SpanAccess.appendWrite(out, write.value, write.memory, write.address);
             }else{
                 out.append(line.toText()).append('\n');
             }
@@ -2783,13 +2854,15 @@ public final class SugarFunctions{
         for(int i = 0; i < statements.size; i++){
             while(!stack.isEmpty() && ((BeginStatement)statements.get(stack.peek())).destIndex < i) stack.pop();
             if(!stack.isEmpty()) result[i] = stack.peek();
-            if(statements.get(i) instanceof ForBeginStatement || statements.get(i) instanceof WhileBeginStatement) stack.push(i);
+            if(statements.get(i) instanceof ForBeginStatement || statements.get(i) instanceof WhileBeginStatement
+                || statements.get(i) instanceof UnitForBeginStatement) stack.push(i);
         }
         return result;
     }
 
     private static boolean isBreakable(LStatement statement){
-        return statement instanceof ForBeginStatement || statement instanceof WhileBeginStatement || statement instanceof SwitchBeginStatement;
+        return statement instanceof ForBeginStatement || statement instanceof WhileBeginStatement
+            || statement instanceof UnitForBeginStatement || statement instanceof SwitchBeginStatement;
     }
 
     /** Marks only labels that are actual jump destinations; the remaining labels add no control-flow value. */
@@ -3004,6 +3077,220 @@ public final class SugarFunctions{
             this.dest = dest;
             this.removable = removable;
         }
+    }
+
+    /**
+     * Processor-owned unit flag: tile position, never 0, exact in a double.
+     * Every unit-control card on one processor shares this value, so they are one fleet.
+     */
+    private static void emitUnitId(StringBuilder out){
+        out.append("op mul __ls_ub_uid @thisx 100000\n");
+        out.append("op add __ls_ub_uid __ls_ub_uid @thisy\n");
+        out.append("op add __ls_ub_uid __ls_ub_uid 1\n");
+    }
+
+    /**
+     * Yields long enough that a peer processor which observed flag 0 just before our write
+     * still performs its own write before we read the flag back. {@code ipt} may be 1, so
+     * each {@code end} is one tick of every other processor. The gap matches the instructions
+     * between a fresh flag read and {@code ucontrol flag} in {@link #emitClaim}.
+     */
+    private static void emitClaimYield(StringBuilder out){
+        out.append("end\nend\nend\nend\n");
+    }
+
+    private static String ub(String prefix, String kind, int index){
+        return "__ls_ub_" + kind + "_" + prefix + index;
+    }
+
+    /** Writes the flag, yields, and jumps to {@code reject} unless the flag is still ours. */
+    private static void emitClaim(String prefix, int index, String reject, StringBuilder out){
+        String hold = ub(prefix, "h", index);
+        String flag = ub(prefix, "f", index);
+        out.append("set ").append(hold).append(" @unit\n");
+        out.append("ucontrol flag __ls_ub_uid 0 0 0 0\n");
+        emitClaimYield(out);
+        out.append("ubind ").append(hold).append('\n');
+        out.append("jump ").append(reject).append(" equal @unit null\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(reject).append(" notEqual ").append(flag).append(" __ls_ub_uid\n");
+    }
+
+    private static void emitUnitBind(UnitBindStatement bind, String prefix, int index, StringBuilder out){
+        String hold = ub(prefix, "h", index);
+        String flag = ub(prefix, "f", index);
+        String dead = ub(prefix, "d", index);
+        String ctrl = ub(prefix, "c", index);
+        String anchor = ub(prefix, "a", index);
+        String steps = ub(prefix, "s", index);
+        String scan = label(prefix, "ub_scan_", index);
+        String keep = label(prefix, "ub_keep_", index);
+        String take = label(prefix, "ub_take_", index);
+        String lost = label(prefix, "ub_lost_", index);
+        String fail = label(prefix, "ub_fail_", index);
+        String ok = label(prefix, "ub_ok_", index);
+        emitUnitId(out);
+        out.append("jump ").append(scan).append(" equal ").append(hold).append(" null\n");
+        out.append("ubind ").append(hold).append('\n');
+        out.append("jump ").append(lost).append(" equal @unit null\n");
+        out.append("sensor ").append(dead).append(" @unit @dead\n");
+        out.append("jump ").append(lost).append(" notEqual ").append(dead).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(take).append(" equal ").append(flag).append(" __ls_ub_uid\n");
+        out.append(lost).append(":\n");
+        out.append("set ").append(hold).append(" null\n");
+        out.append(scan).append(":\n");
+        out.append("set ").append(steps).append(" 0\n");
+        out.append("set ").append(anchor).append(" null\n");
+        out.append(label(prefix, "ub_loop_", index)).append(":\n");
+        out.append("op add ").append(steps).append(' ').append(steps).append(" 1\n");
+        out.append("jump ").append(fail).append(" greaterThan ").append(steps).append(" 8192\n");
+        out.append("ubind ").append(bind.type).append('\n');
+        out.append("jump ").append(fail).append(" equal @unit null\n");
+        out.append("jump ").append(fail).append(" equal @unit ").append(anchor).append('\n');
+        out.append("jump ").append(keep).append(" notEqual ").append(anchor).append(" null\n");
+        out.append("set ").append(anchor).append(" @unit\n");
+        out.append(keep).append(":\n");
+        out.append("sensor ").append(dead).append(" @unit @dead\n");
+        out.append("jump ").append(label(prefix, "ub_loop_", index)).append(" notEqual ").append(dead).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(take).append(" equal ").append(flag).append(" __ls_ub_uid\n");
+        out.append("jump ").append(label(prefix, "ub_loop_", index)).append(" notEqual ").append(flag).append(" 0\n");
+        out.append("sensor ").append(ctrl).append(" @unit @controlled\n");
+        out.append("jump ").append(label(prefix, "ub_loop_", index)).append(" notEqual ").append(ctrl).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(label(prefix, "ub_loop_", index)).append(" notEqual ").append(flag).append(" 0\n");
+        emitClaim(prefix, index, label(prefix, "ub_loop_", index), out);
+        out.append(take).append(":\n");
+        out.append("set ").append(bind.variable).append(" @unit\n");
+        out.append("set ").append(hold).append(" @unit\n");
+        out.append("jump ").append(ok).append(" always x false\n");
+        out.append(fail).append(":\n");
+        out.append("set ").append(bind.variable).append(" null\n");
+        out.append("set ").append(hold).append(" null\n");
+        out.append(ok).append(":\n");
+    }
+
+    private static void emitUnitNext(UnitNextStatement next, String prefix, int index, StringBuilder out){
+        String flag = ub(prefix, "f", index);
+        String dead = ub(prefix, "d", index);
+        String ctrl = ub(prefix, "c", index);
+        String anchor = ub(prefix, "a", index);
+        String steps = ub(prefix, "s", index);
+        String loop = label(prefix, "ub_loop_", index);
+        String keep = label(prefix, "ub_keep_", index);
+        String fail = label(prefix, "ub_fail_", index);
+        String ok = label(prefix, "ub_ok_", index);
+        emitUnitId(out);
+        out.append("set ").append(steps).append(" 0\n");
+        out.append("set ").append(anchor).append(" null\n");
+        out.append(loop).append(":\n");
+        out.append("op add ").append(steps).append(' ').append(steps).append(" 1\n");
+        out.append("jump ").append(fail).append(" greaterThan ").append(steps).append(" 8192\n");
+        out.append("ubind ").append(next.type).append('\n');
+        out.append("jump ").append(fail).append(" equal @unit null\n");
+        out.append("jump ").append(fail).append(" equal @unit ").append(anchor).append('\n');
+        out.append("jump ").append(keep).append(" notEqual ").append(anchor).append(" null\n");
+        out.append("set ").append(anchor).append(" @unit\n");
+        out.append(keep).append(":\n");
+        out.append("sensor ").append(dead).append(" @unit @dead\n");
+        out.append("jump ").append(loop).append(" notEqual ").append(dead).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(loop).append(" notEqual ").append(flag).append(" 0\n");
+        out.append("sensor ").append(ctrl).append(" @unit @controlled\n");
+        out.append("jump ").append(loop).append(" notEqual ").append(ctrl).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(loop).append(" notEqual ").append(flag).append(" 0\n");
+        emitClaim(prefix, index, loop, out);
+        out.append("set ").append(next.variable).append(" @unit\n");
+        out.append("jump ").append(ok).append(" always x false\n");
+        out.append(fail).append(":\n");
+        out.append("set ").append(next.variable).append(" null\n");
+        out.append(ok).append(":\n");
+    }
+
+    private static void emitUnitFree(UnitFreeStatement free, String prefix, int index, StringBuilder out){
+        String skip = label(prefix, "ub_free_", index);
+        String dead = ub(prefix, "d", index);
+        String flag = ub(prefix, "f", index);
+        emitUnitId(out);
+        out.append("ubind ").append(free.variable).append('\n');
+        out.append("jump ").append(skip).append(" equal @unit null\n");
+        out.append("sensor ").append(dead).append(" @unit @dead\n");
+        out.append("jump ").append(skip).append(" notEqual ").append(dead).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(skip).append(" notEqual ").append(flag).append(" __ls_ub_uid\n");
+        out.append("ucontrol flag 0 0 0 0 0\n");
+        out.append("ucontrol unbind 0 0 0 0 0\n");
+        out.append("set ").append(free.variable).append(" null\n");
+        out.append(skip).append(":\n");
+    }
+
+    private static void emitUnitFor(UnitForBeginStatement begin, String prefix, int index, StringBuilder out){
+        String seen = ub(prefix, "n", index);
+        String phase = ub(prefix, "p", index);
+        String owned = ub(prefix, "o", index);
+        String room = ub(prefix, "r", index);
+        String anchor = ub(prefix, "a", index);
+        String steps = ub(prefix, "s", index);
+        String flag = ub(prefix, "f", index);
+        String dead = ub(prefix, "d", index);
+        String ctrl = ub(prefix, "c", index);
+        String scan = label(prefix, "ub_scan_", index);
+        String keep = label(prefix, "ub_keep_", index);
+        String ours = label(prefix, "ub_ours_", index);
+        String deliver = label(prefix, "ub_give_", index);
+        String wrap = label(prefix, "ub_wrap_", index);
+        String after = label(prefix, "stmt_", begin.destIndex + 1);
+        emitUnitId(out);
+        out.append("set ").append(seen).append(" 0\n");
+        out.append("set ").append(phase).append(" 0\n");
+        out.append("set ").append(owned).append(" 0\n");
+        out.append("set ").append(anchor).append(" null\n");
+        out.append("set ").append(steps).append(" 0\n");
+        out.append(scan).append(":\n");
+        out.append("op add ").append(steps).append(' ').append(steps).append(" 1\n");
+        out.append("jump ").append(after).append(" greaterThan ").append(steps).append(" 8192\n");
+        out.append("ubind ").append(begin.type).append('\n');
+        out.append("jump ").append(wrap).append(" equal @unit null\n");
+        out.append("jump ").append(label(prefix, "ub_mark_", index)).append(" equal ").append(anchor).append(" null\n");
+        out.append("jump ").append(wrap).append(" equal @unit ").append(anchor).append('\n');
+        out.append("jump ").append(keep).append(" always x false\n");
+        out.append(label(prefix, "ub_mark_", index)).append(":\n");
+        out.append("set ").append(anchor).append(" @unit\n");
+        out.append(keep).append(":\n");
+        out.append("sensor ").append(dead).append(" @unit @dead\n");
+        out.append("jump ").append(scan).append(" notEqual ").append(dead).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(ours).append(" equal ").append(flag).append(" __ls_ub_uid\n");
+        out.append("jump ").append(scan).append(" equal ").append(phase).append(" 0\n");
+        out.append("jump ").append(scan).append(" notEqual ").append(flag).append(" 0\n");
+        out.append("sensor ").append(ctrl).append(" @unit @controlled\n");
+        out.append("jump ").append(scan).append(" notEqual ").append(ctrl).append(" 0\n");
+        out.append("sensor ").append(flag).append(" @unit @flag\n");
+        out.append("jump ").append(scan).append(" notEqual ").append(flag).append(" 0\n");
+        out.append("jump ").append(scan).append(" greaterThanEq ").append(seen).append(' ').append(begin.count).append('\n');
+        out.append("jump ").append(scan).append(" lessThanEq ").append(room).append(" 0\n");
+        emitClaim(prefix, index, scan, out);
+        out.append("op sub ").append(room).append(' ').append(room).append(" 1\n");
+        out.append("jump ").append(deliver).append(" always x false\n");
+        out.append(ours).append(":\n");
+        out.append("jump ").append(label(prefix, "ub_count_", index)).append(" equal ").append(phase).append(" 0\n");
+        out.append("jump ").append(scan).append(" greaterThanEq ").append(seen).append(' ').append(begin.count).append('\n');
+        out.append("jump ").append(deliver).append(" always x false\n");
+        out.append(label(prefix, "ub_count_", index)).append(":\n");
+        out.append("op add ").append(owned).append(' ').append(owned).append(" 1\n");
+        out.append("jump ").append(scan).append(" always x false\n");
+        out.append(wrap).append(":\n");
+        out.append("jump ").append(after).append(" notEqual ").append(phase).append(" 0\n");
+        out.append("set ").append(phase).append(" 1\n");
+        out.append("set ").append(seen).append(" 0\n");
+        out.append("set ").append(steps).append(" 0\n");
+        out.append("op sub ").append(room).append(' ').append(begin.count).append(' ').append(owned).append('\n');
+        out.append("jump ").append(scan).append(" equal @unit null\n");
+        out.append("jump ").append(keep).append(" always x false\n");
+        out.append(deliver).append(":\n");
+        out.append("set ").append(begin.variable).append(" @unit\n");
     }
 
     private static int findOwner(Seq<LStatement> statements, int end){

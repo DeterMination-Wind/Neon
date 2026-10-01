@@ -65,6 +65,11 @@ public final class ProcessorStatus{
     public static volatile boolean disableBreakpoints = false;
     /** Failed assertions pause the game at the failing instruction instead of looping. */
     public static volatile boolean assertsAreBreakpoints = false;
+    /** 断言失败时自动创建一份孤立快照（设置项 {@code logicsugar.snapshotOnAssertion}）。
+     *  快照是纯客户端数据，联机下也允许——上游 v0.11 的开关。 */
+    public static volatile boolean snapshotOnAssertion = false;
+    /** 断点命中时自动创建一份连通快照（设置项 {@code logicsugar.snapshotOnBreakpoint}）。 */
+    public static volatile boolean snapshotOnBreakpoint = false;
     /** Center the camera on the processor and temporarily detach it when a breakpoint hits. */
     public static volatile boolean detachCameraOnBreakpoint = true;
 
@@ -118,6 +123,8 @@ public final class ProcessorStatus{
         warnEffectFrequency = Core.settings.getInt("logicsugar.warnEffect", warnEffectFrequency);
         disableBreakpoints = Core.settings.getBool("logicsugar.disableBreakpoints", false);
         assertsAreBreakpoints = Core.settings.getBool("logicsugar.assertsAreBreakpoints", false);
+        snapshotOnAssertion = Core.settings.getBool("logicsugar.snapshotOnAssertion", false);
+        snapshotOnBreakpoint = Core.settings.getBool("logicsugar.snapshotOnBreakpoint", false);
         detachCameraOnBreakpoint = Core.settings.getBool("logicsugar.detachCameraOnBreakpoint", true);
     }
 
@@ -231,6 +238,11 @@ public final class ProcessorStatus{
      *  being cleared, so a user who runs with the camera detached keeps that preference.</p> */
     public static void breakpoint(LogicBuild processor, String message){
         if(disableBreakpoints) return;
+        // Upstream v0.10 refuses to pause in multiplayer, and the multiplayer floor requires
+        // it here as well: pausing freezes every processor's accumulator for a frame, which
+        // is a single-player debugging act with no meaning across clients. The processor
+        // simply keeps running.
+        if(Vars.net != null && Vars.net.active()) return;
 
         Vars.state.set(GameState.State.paused);
 

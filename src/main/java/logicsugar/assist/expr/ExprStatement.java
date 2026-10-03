@@ -88,8 +88,7 @@ public class ExprStatement extends LStatement{
         // 普通积木。多行卡片由 foldAll 的 >= 2 门槛折回，不需要标记（那会改变语句条数）；
         // 单行 read/write 由 foldAll 的数组门槛折回，也不加标记。
         if(ExprHook.keepsCard(lines) && !ExprHook.foldsBackAlone(lines) && dest != null){
-            builder.append('\n').append(cardMarkerPrefix).append(dest).append(' ')
-                .append('"').append(SugarStatements.escapeQuoted(expr == null ? "" : expr)).append('"');
+            builder.append('\n').append(ExprTextImport.cardMarker(dest, expr));
         }
     }
 
@@ -366,9 +365,10 @@ public class ExprStatement extends LStatement{
 
     @Override
     public LInstruction build(LAssembler builder){
-        // 正常流程下不会走到这里：LogicCanvas.save() 会先 unfoldAll()，
-        // ExprStatement 会被替换为 OperationStatement。
-        // 但如果代码通过 customParsers 加载后直接执行（不经过编辑器 save），
+        // 正常流程下不会走到这里：ExprStatement 只由编辑器造出来（文本里的表达式行由
+        // ExprTextImport 换成哨兵后再换回卡片），而交给 LAssembler 的文本永远是展开态
+        // （save() 的 unfoldedText / 载体的展开文本）——解析出一条 ExprStatement 是不可能的。
+        // 但如果代码通过 customParsers 加载后直接执行（不经过编辑器），
         // 返回一个 no-op 指令防止静默跳过。
         List<ExprCompiler.Line> ops;
         try{

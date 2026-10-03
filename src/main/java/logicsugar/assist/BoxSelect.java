@@ -26,6 +26,9 @@ import mindustry.logic.SugarStatements.BlockEndStatement;
 import mindustry.ui.*;
 import mindustry.ui.dialogs.*;
 
+import logicsugar.assist.expr.ExprHook;
+import logicsugar.assist.expr.ExprTextImport;
+
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -45,7 +48,8 @@ import java.util.*;
  *   2. 释放 → 选中积木高亮，显示工具栏，积木按钮被接管
  *   3. 拖动选中积木 → 积木/半透明预览跟随鼠标，显示插入指示器
  *   4. 松手 → 积木移动/复制到新位置
- *   5. 普通单积木拖动在移动端需长按后移动超过固定 slop，桌面端移动超过 slop 即可
+ *   5. 普通单积木拖动：位移 ≥ 立即阈值（移动端 Scl.scl(16f)、桌面 8px slop）即可拖动；
+ *      移动端小于该阈值的位移仍需长按 430ms 后超过 8px（精准微调通道）
  *   6. Ctrl+点击单积木 → 选中并复制拖动
  *   7. Delete/Backspace → 快速删除选中积木
  *   8. 右键/Esc → 取消拖动
@@ -145,6 +149,119 @@ public class BoxSelect{
      *  导致非紧凑模式关掉开关后拖一下又被重置成紧凑。 */
     private static float idleLayoutSpace(){
         return SugarCanvas.currentIdleSpace();
+    }
+
+    // ===== 拖动诊断日志 =====
+
+    /**
+     * 拖动路径上会静默失效的判断，全部留一行可见日志（与 {@code CounterJumpOverlay.noteOnce}
+     * 同一哲学：屏幕上看不见、日志里也没有的失败只能靠猜——2026-09 的"重复积木"报告就是这样
+     * 查了两轮）。每类每场最多一行（按 key 去重，几何类按变化后的内容去重），纯 {@code Log.info}
+     * 加字符串拼接，不影响拖动行为。
+     */
+    private static final Set<String> reportedDragNotes = new HashSet<>();
+    /** 本次拖动序号：让"每次拖动一次"的日志既每拖都出现，又不至于每帧刷屏。 */
+    private static int dragSequence = 0;
+    /** 本次拖动是否已经报过重绘偏移来源。 */
+    private static boolean dragRedrawSourceReported = false;
+    /** 上一次体检看到的卡结构（元素 → children 数），避免每帧拼字符串。 */
+    private static final Map<StatementElem, Integer> cardShapeCache = new IdentityHashMap<>();
+
+    /** 上一次几何基准（children 数 / 可见数 / getPrefHeight() 之和），见 {@link #reportGeometryChange}。 */
+    private static String dragGeometryBaseline = null;
+
+    private static void dragNoteOnce(String key, String message){
+        if(!reportedDragNotes.add(key)) return;
+        Log.info("[LogicSugar] drag " + message);
+    }
+
+    /** 一个元素的可诊断身份：identity hash（同一场里唯一）+ 可见性 + 是否还挂在画布上 + 偏移。 */
+    private static String describeElement(StatementElem elem, LCanvas canvas){
+        if(elem == null) return "none";
+        boolean attached = canvas != null && canvas.statements != null && elem.parent == canvas.statements;
+        return "#" + Integer.toHexString(System.identityHashCode(elem))
+            + " visible=" + elem.visible
+            + " attached=" + attached
+            + " translation=(" + elem.translation.x + "," + elem.translation.y + ")";
+    }
+
+    /** children 数 / 可见元素数 / getPrefHeight() 之和 —— 拖动期间任何一项变化都说明有人跑了 layout。 */
+    private static String geometrySummary(LCanvas canvas){
+        Seq<Element> children = canvas.statements.getChildren();
+        int visible = 0;
+        float heightSum = 0f;
+        for(Element child : children){
+            if(child.visible) visible++;
+            heightSum += child.getPrefHeight();
+        }
+        return "children=" + children.size + " visible=" + visible
+            + " heightSum=" + (Math.round(heightSum * 100f) / 100f);
+    }
+
+    private static void seedGeometryBaseline(LCanvas canvas){
+        dragGeometryBaseline = canvas == null || canvas.statements == null ? null : geometrySummary(canvas);
+    }
+
+    /** (e) 拖动中几何变化：layout 一跑，dragBaseYs 基准就过期了，这是"积木错位/重复"的候选机制。 */
+    private static void reportGeometryChange(LCanvas canvas, String stage){
+        if(canvas == null || canvas.statements == null) return;
+        String now = geometrySummary(canvas);
+        if(now.equals(dragGeometryBaseline)) return;
+        dragNoteOnce("geometry|" + stage + "|" + now, "geometry changed at " + stage + ": "
+            + (dragGeometryBaseline == null ? "(no baseline)" : dragGeometryBaseline) + " -> " + now);
+        dragGeometryBaseline = now;
+    }
+
+    /** (f) 拖动结束的重复检查：children 里的语句元素数 ≠ 不同的语句对象数 ⇒ 真的多了一份元素。 */
+    /**
+     * 卡内部体检：一个 {@code StatementElem} 的内容结构是「卡头表 + 内容表」（MindustryX 的
+     * 构造函数里两次 {@code table(...)}），所以 {@code getChildren().size} 正常就是 2。
+     *
+     * <p>"拖动出现重复积木"在语句层已排除（children/statements/distinctSt 相等、无几何变化、
+     * 偏移来源正常），剩下的可能是卡自己内部多了一套内容（构造路径跑两次）或某个子控件被画两遍
+     * —— 这两种都只在元素树内部，语句层计数天然看不见，所以把真实数字打出来，按结构变化去重。</p>
+     */
+    private static void diagnoseStatementCards(LCanvas canvas){
+        if(canvas == null || canvas.statements == null) return;
+        for(Element child : canvas.statements.getChildren()){
+            if(!(child instanceof StatementElem elem) || elem.st == null) continue;
+            int children = elem.getChildren().size;
+            // 每帧只做一次 map 查找与一次装箱（Integer 小值有缓存）——空闲态也要跑，不能有分配。
+            Integer previous = cardShapeCache.put(elem, children);
+            if(previous != null && previous == children) continue;
+            StringBuilder sb = new StringBuilder("card #")
+                .append(Integer.toHexString(System.identityHashCode(elem)))
+                .append(" st=").append(elem.st.getClass().getSimpleName())
+                .append(" children=").append(children)
+                .append(" cells=").append(elem.getCells().size);
+            for(int i = 0; i < elem.getChildren().size; i++){
+                Element sub = elem.getChildren().get(i);
+                sb.append(" | sub").append(i).append('=').append(sub.getClass().getSimpleName());
+                if(sub instanceof Group group) sb.append('(').append(group.getChildren().size).append(')');
+            }
+            Log.info("[LogicSugar] drag " + sb);
+        }
+    }
+
+    private static void reportDuplicateCheck(LCanvas canvas, String stage){
+        if(canvas == null || canvas.statements == null) return;
+        Seq<Element> children = canvas.statements.getChildren();
+        Set<LStatement> distinct = Collections.newSetFromMap(new IdentityHashMap<>());
+        int statements = 0;
+        for(Element child : children){
+            if(child instanceof StatementElem elem){
+                statements++;
+                distinct.add(elem.st);
+            }
+        }
+        String detail = "end " + stage + ": children=" + children.size + " statements=" + statements
+            + " distinctSt=" + distinct.size();
+        if(statements != distinct.size()){
+            // 真重复：同一个语句对象被挂在两个元素上，屏幕上是两张一模一样的积木。
+            Log.warn("[LogicSugar] drag DUPLICATE statement objects detected: " + detail);
+        }else{
+            dragNoteOnce("end|" + stage + "|" + dragSequence, detail);
+        }
     }
 
     // ===== 状态 =====
@@ -329,6 +446,10 @@ public class BoxSelect{
                             autoScroll(c);
                         }
                     }
+                }else{
+                    // 空闲/选中态也要体检：若"重复积木"松手后仍然可见，拖动路径就不是源头，
+                    // 这一行会给出卡内部的真实结构（正常卡 = 卡头表 + 内容表，children=2）。
+                    diagnoseStatementCards(getCanvas());
                 }
             });
         }
@@ -828,8 +949,11 @@ public class BoxSelect{
         }
         int copySize = copies.size;
 
-        if(children.size + copySize + copiedBlockEndCount(copySources) > LExecutor.maxInstructions){
-            Log.debug("[LogicAssist] Duplicate aborted: would exceed maxInstructions");
+        int generatedEnds = copiedBlockEndCount(copySources);
+        if(children.size + copySize + generatedEnds > LExecutor.maxInstructions){
+            dragNoteOnce("abort|duplicate", "duplicate aborted: would exceed maxInstructions (children="
+                + children.size + " copies=" + copySize + " ends=" + generatedEnds
+                + " limit=" + LExecutor.maxInstructions + ")");
             return;
         }
 
@@ -950,13 +1074,21 @@ public class BoxSelect{
         pendingSingleDragKeepsSelection = false;
     }
 
-    /** Require a deliberate long press and movement before taking over vanilla dragging. */
+    /** Minimum movement that starts a single-statement drag without waiting for a long press.
+     *  Mobile scales the policy constant with the UI scale, so the gesture matches what the user
+     *  sees; desktop passes the small slop and keeps the pre-existing slop-only behaviour. */
+    private static float singleDragImmediateSlop(){
+        return Vars.mobile ? Scl.scl(BoxSelectDragPolicy.IMMEDIATE_SLOP) : BoxSelectDragPolicy.SLOP;
+    }
+
+    /** Require a deliberate long press and movement before taking over vanilla dragging,
+     *  unless the finger already travelled far enough for the swipe to be unambiguous. */
     private static boolean singleDragThresholdReached(float mx, float my){
         if(pendingSingleDrag == null) return false;
         long elapsed = Time.nanos() - pendingSingleDragStartedNanos;
         float dx = mx - pendingSingleDragX;
         float dy = my - pendingSingleDragY;
-        return BoxSelectDragPolicy.singleDragReady(elapsed, dx, dy, Vars.mobile);
+        return BoxSelectDragPolicy.singleDragReady(elapsed, dx, dy, Vars.mobile, singleDragImmediateSlop());
     }
 
     private static void finishSingleStatementDrag(){
@@ -1009,10 +1141,18 @@ public class BoxSelect{
         // 先清除原版 dragging 字段，避免任何残留影响本次判定
         clearDraggingField(canvas);
 
+        State entryState = state;
+        Seq<Element> children = canvas.statements.getChildren();
+        dragSequence++;
+        dragRedrawSourceReported = false;
+        seedGeometryBaseline(canvas);
+
         // 方案B：拒绝拖拽"部分选中"的结构块。若选中集含孤立的 begin 或 end
         // （配对端不在选中集内），拖动会把结构撕裂（body 悬空），这里直接不进入拖拽态。
         if(isStructureSelectionIncomplete(canvas)){
-            Log.debug("[LogicAssist] Blocked drag: incomplete structure selection");
+            // 这条门以前只在 debug 日志里可见，用户看到的只是"按下去没反应"，正是最难诊断的一类报告。
+            dragNoteOnce("blocked|incomplete", "startDrag blocked: incomplete structure selection selected="
+                + selected.size() + " dragMode=" + dragMode);
             return;
         }
         dragStartMouseX = mx;
@@ -1023,7 +1163,6 @@ public class BoxSelect{
         dragInsertPos = -1;
         dragMoved = false;
 
-        Seq<Element> children = canvas.statements.getChildren();
         dragAnchorOffset = 0f;
         dragYOffsets = null;
 
@@ -1102,6 +1241,16 @@ public class BoxSelect{
         }else{
             state = State.DRAGGING_MOVE;
         }
+
+        // (c) 入口快照：手机报"拖动出现重复积木"时，这一行决定后面往哪个机制上查。
+        StatementElem firstSelected = selected.isEmpty() ? null : selected.iterator().next();
+        dragNoteOnce("startDrag|" + dragSequence, "startDrag seq=" + dragSequence
+            + " entryState=" + entryState + " finalState=" + state
+            + " selected=" + selected.size() + " children=" + children.size
+            + " statementsHeight=" + canvas.statements.getHeight()
+            + " dragMode=" + dragMode + " anchorOffset=" + dragAnchorOffset
+            + " expandSpacing=" + spaceSwitchedDuringDrag
+            + " first=" + describeElement(firstSelected, canvas));
     }
 
     /** 拖动期间每帧更新 translation 和插入位置。
@@ -1173,6 +1322,9 @@ public class BoxSelect{
         // 腾位后更新跳转线位置——此时 translation 已反映腾位，JumpCurve 能正确定位
         SugarCanvas.refreshJumpLayer(canvas);
         updateIndicatorGeometry(canvas);
+
+        // (e) 每帧比对几何基准：layout 一跑，dragBaseYs/紧凑排布的基准就过期了
+        reportGeometryChange(canvas, "updateDrag");
 
         if(Core.input.keyTap(KeyCode.mouseRight) || Core.input.keyTap(KeyCode.escape)){
             cancelDrag(canvas);
@@ -1741,6 +1893,21 @@ public class BoxSelect{
         if(selected.isEmpty()) return;
         // 所有选中积木共享相同的 translation（在 updateDrag 中统一设置）
         StatementElem first = selected.iterator().next();
+        // (d) 偏移来源每场报一次：首个选中积木若不可见/已脱离画布，它的 translation 就不再是
+        // 这一组的偏移（重绘位置错位，视觉上像"多了一块"），这条日志直接把那件事摊开。
+        if(!dragRedrawSourceReported){
+            dragRedrawSourceReported = true;
+            boolean detachedSeen = false;
+            for(StatementElem elem : selected){
+                if(canvas.statements == null || elem.parent != canvas.statements){
+                    detachedSeen = true;
+                    break;
+                }
+            }
+            dragNoteOnce("redrawOffset|" + dragSequence, "redraw offset seq=" + dragSequence
+                + " source=" + describeElement(first, canvas) + " detachedSeen=" + detachedSeen
+                + " selected=" + selected.size());
+        }
         drawElementsWithOffset(canvas, first.translation.x, first.translation.y, 1f);
     }
 
@@ -1779,6 +1946,19 @@ public class BoxSelect{
                 // 跳过隐藏折叠 body（visible=false，负高度）：它们不可见，重画/预览时不应
                 // 绘制，否则拖折叠块会渲染出异常的虚拟块（负高度导致高度异常）。
                 if(!elem.visible) continue;
+                // 重画偏移必须与 vanilla 的 translation 一致，否则原位置会留下一份"拖不走的
+                // 积木"。这一行把两个数以及该元素的实际 stage 坐标摆出来对比（每拖每元素一行）。
+                if(dragSequence > 0 && reportedDragNotes.add("redraw|" + dragSequence
+                    + "|" + Integer.toHexString(System.identityHashCode(elem)))){
+                    Vec2 vanilla = elem.localToStageCoordinates(Tmp.v1.set(0, 0));
+                    Log.info("[LogicSugar] drag redraw elem=#"
+                        + Integer.toHexString(System.identityHashCode(elem))
+                        + " x=" + elem.x + " y=" + elem.y
+                        + " translation=(" + elem.translation.x + "," + elem.translation.y + ")"
+                        + " dx=" + dx + " dy=" + dy
+                        + " stageWithTranslation=(" + vanilla.x + "," + vanilla.y + ")"
+                        + " children=" + elem.getChildren().size);
+                }
                 boolean oldCullable = elem.cullable;
                 elem.cullable = false;
                 elem.x += dx;
@@ -1839,6 +2019,7 @@ public class BoxSelect{
         reselectRange(canvas, actualInsert, count);
         enterSelectedState(canvas);
         Log.debug("[LogicAssist] Drag-moved " + count + " blocks to position " + actualInsert);
+        reportDuplicateCheck(canvas, "move");
     }
 
     // ===== 拖动复制 =====
@@ -1880,9 +2061,13 @@ public class BoxSelect{
         }
 
         int currentSize = canvas.statements.getChildren().size;
-        if(currentSize + clipboardSize + copiedBlockEndCount(clipboardSources) > LExecutor.maxInstructions){
-            Log.debug("[LogicAssist] Copy aborted: would exceed maxInstructions");
+        int generatedEnds = copiedBlockEndCount(clipboardSources);
+        if(currentSize + clipboardSize + generatedEnds > LExecutor.maxInstructions){
+            // 静默拒绝复制在用户看来只是"拖了没反应"，留一行可见日志。
+            dragNoteOnce("abort|copy", "copy aborted: would exceed maxInstructions (children=" + currentSize
+                + " copies=" + clipboardSize + " ends=" + generatedEnds + " limit=" + LExecutor.maxInstructions + ")");
             enterSelectedState(canvas);
+            reportDuplicateCheck(canvas, "copy-aborted");
             return;
         }
 
@@ -1915,6 +2100,7 @@ public class BoxSelect{
 
         enterSelectedState(canvas);
         Log.debug("[LogicAssist] Drag-copied " + copies.size + " blocks to position " + insertPos);
+        reportDuplicateCheck(canvas, "copy");
     }
 
     private static void cancelDrag(LCanvas canvas){
@@ -1934,6 +2120,7 @@ public class BoxSelect{
         dragInsertPos = -1;
         state = State.SELECTED;
         Log.debug("[LogicAssist] Drag cancelled.");
+        reportDuplicateCheck(canvas, "cancel");
     }
 
     /** Delete 键快速删除选中积木 */
@@ -2077,6 +2264,18 @@ public class BoxSelect{
         updateSelectedButtonIcons(canvas);
     }
 
+    /** 重新选中“本次插入产生的积木”（插入前的元素身份集合之外的元素）：表达式卡在插入后被
+     *  折叠成一张新元素，按条数算选中范围会多杠一张卡，按身份取差集不会。 */
+    private static void reselectInserted(LCanvas canvas, Set<Element> existing){
+        selected.clear();
+        for(Element child : canvas.statements.getChildren()){
+            if(child instanceof StatementElem elem && !existing.contains(child)){
+                selected.add(elem);
+            }
+        }
+        updateSelectedButtonIcons(canvas);
+    }
+
     /** 双重 invalidate + validate，处理高度变化后的布局稳定 */
     private static void finalizeLayout(LCanvas canvas){
         SugarCanvas.markJumpHeightsDirty(canvas);
@@ -2207,13 +2406,20 @@ public class BoxSelect{
         if(canvas == null || canvas.statements == null) return StatementClipboard.Result.EMPTY;
 
         String text = Core.app.getClipboardText();
+        // 表达式卡的标记行与单行表达式（`x = buf[3]`）在这里先换成哨兵，与
+        // {@code SugarCanvas.load} 同一口径：下面的“能不能解析”与空载荷判定看到的是标准
+        // {@code set} 语句，粘贴进来的表达式行才不会被当成无效语句拒掉。
+        ExprTextImport.Plan importPlan = ExprTextImport.plan(text);
         // 我们自己的载荷是原样复刻的（源画布上本来就有的无效卡也要照搬）；外来文本则要求
         // 每一条都解析成功，否则一段散文会变成一堆静默的无效卡。判定只有这一个实现 —— 轮询
         // 的 Ctrl+V 也问它，各自写一份迟早会漂。
-        if(!StatementClipboard.isAcceptable(text)) return StatementClipboard.Result.NOT_LOGIC;
+        if(!StatementClipboard.isAcceptable(importPlan.text())) return StatementClipboard.Result.NOT_LOGIC;
 
-        Seq<LStatement> incoming = StatementClipboard.parse(text);
+        Seq<LStatement> incoming = StatementClipboard.parse(importPlan.text());
         if(incoming == null) return StatementClipboard.Result.NOT_LOGIC;
+        // 哨兵原位换回表达式卡：一对一替换，语句条数不变，片段内的 jump 相对下标不受影响。
+        // 否则“复制一张 Expr 卡再粘贴”会变成一叠普通 op/set 积木（2026-10 报告）。
+        ExprTextImport.applyToStatements(incoming, importPlan);
 
         if(StatementClipboard.countEscapingJumps(incoming) > 0){
             return StatementClipboard.Result.ESCAPING_JUMP;
@@ -2233,7 +2439,14 @@ public class BoxSelect{
             return StatementClipboard.Result.INCOMPLETE_STRUCTURE;
         }
 
+        // 插入前的元素身份：折叠会重建元素，选中范围按“插入前不存在的元素”取差集重算，
+        // 而不是按条数（多行表达式卡粘贴后会折成一张卡）。
+        Set<Element> existing = Collections.newSetFromMap(new IdentityHashMap<>());
+        for(Element child : canvas.statements.getChildren()) existing.add(child);
+
         insertPastedStatements(canvas, insertPos, incoming);
+        // 外来 op 链（旧载荷 / 纯 mlog 片段）按重开处理器的同一口径折回表达式卡；折不动就原样留着。
+        ExprHook.foldAll(canvas);
 
         finalizeLayout(canvas);
         // 插入改变了所有下标，跳转层与结构引导线都要跟着重算
@@ -2241,11 +2454,11 @@ public class BoxSelect{
         SugarCanvas.refreshJumpLayer(canvas);
         refreshStructureLayout(canvas);
         restoreButtonIcons(canvas);
-        reselectRange(canvas, insertPos, incoming.size);
+        reselectInserted(canvas, existing);
         enterSelectedState(canvas);
 
-        lastPasteCount = incoming.size;
-        Log.debug("[LogicAssist] Pasted @ statements at @.", incoming.size, insertPos);
+        lastPasteCount = selected.size();
+        Log.debug("[LogicAssist] Pasted @ statements at @.", lastPasteCount, insertPos);
         return StatementClipboard.Result.OK;
     }
 

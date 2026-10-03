@@ -36,6 +36,8 @@ public class PolyAiFeature {
     private static final MindustryXBuilderAiProbe xBuilderAiProbe = new MindustryXBuilderAiProbe();
 
     private static RuntimeState runtimeState = RuntimeState.normal;
+    private static Unit pausedUnit;
+    private static float pausedUnitX, pausedUnitY;
 
     enum RuntimeState {
         normal,
@@ -127,8 +129,19 @@ public class PolyAiFeature {
         // AIController.updateUnit() also updates visual flight behavior. Do not run it
         // while the game is paused, but keep the builder's queue and manual-pause
         // state intact so normal processing resumes with the game.
-        if (!state.isPaused() && runtimeState != RuntimeState.yieldToX) {
-            builderAI.updateUnit();
+        if (state.isPaused()) {
+            // Other drivers (e.g. MindustryX AuxiliaryTools) keep calling
+            // AIController.updateUnit() while paused. Its updateVisuals() then calls
+            // Unit.wobble(), which adds sin/cos(Time.time) * Time.delta * elevation to
+            // x/y every frame; with Time frozen that offset stops oscillating and turns
+            // into a constant push, so the unit slowly drifts. Pin it to its
+            // pause-time position until the game resumes.
+            holdPausedUnit(unit);
+        } else {
+            releasePausedUnit();
+            if (runtimeState != RuntimeState.yieldToX) {
+                builderAI.updateUnit();
+            }
         }
         player.boosting = unit.isShooting;
     }
@@ -162,7 +175,22 @@ public class PolyAiFeature {
 
     private static void resetRuntimeState() {
         runtimeState = RuntimeState.normal;
+        releasePausedUnit();
         builderAI.resetAutonomyState();
+    }
+
+    private static void holdPausedUnit(Unit unit) {
+        if (pausedUnit != unit) {
+            pausedUnit = unit;
+            pausedUnitX = unit.x;
+            pausedUnitY = unit.y;
+        }
+        unit.x = pausedUnitX;
+        unit.y = pausedUnitY;
+    }
+
+    private static void releasePausedUnit() {
+        pausedUnit = null;
     }
 
     private static void showToast(String key) {

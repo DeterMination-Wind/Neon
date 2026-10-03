@@ -59,8 +59,10 @@ import tripwire.TripwireInput;
 import whousesthisbuilding.WhoUsesThisBuildingMod;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 
 import static mindustry.Vars.ui;
 
@@ -110,7 +112,71 @@ public class BekToolsMod extends Mod{
     private static final String moduleProfiler = "profiler";
     private static final String moduleUsageReporter = "usage-reporter";
 
+    /**
+     * Load-time master switches. A module whose key reads false at startup is never
+     * constructed, so a switched-off sub-mod is completely absent until the game is
+     * restarted with the switch on. {@code neonSwitch} marks modules that have no
+     * switch of their own (or none at all): Neon renders that master-switch row in the
+     * module group. Infrastructure (ocb, usage-reporter) has no gate and always loads.
+     */
+    private static final class ModuleGate{
+        final String key;
+        final boolean def;
+        final boolean neonSwitch;
+
+        ModuleGate(String key, boolean def, boolean neonSwitch){
+            this.key = key;
+            this.def = def;
+            this.neonSwitch = neonSwitch;
+        }
+    }
+
+    private static final Map<String, ModuleGate> moduleGates = new LinkedHashMap<>();
+
+    static{
+        moduleGates.put(modulePgmm, new ModuleGate("pgmm-enabled", true, false));
+        moduleGates.put(moduleStealthPath, new ModuleGate("sp-enabled", true, false));
+        moduleGates.put(moduleCustomMarker, new ModuleGate("cm-enabled", true, false));
+        moduleGates.put(moduleScreenshot, new ModuleGate("bss-enabled", true, false));
+        moduleGates.put(moduleRadialBuildMenu, new ModuleGate("rbm-enabled", true, false));
+        moduleGates.put(moduleBetterRtsFormation, new ModuleGate("brf-enabled", true, false));
+        moduleGates.put(moduleSmartPlacement, new ModuleGate("smp-enabled", true, true));
+        moduleGates.put(moduleHideWhatProcessorsShow, new ModuleGate("hwps-enabled", true, true));
+        moduleGates.put(modulePatrolCancel, new ModuleGate("pc-enabled", true, true));
+        moduleGates.put(moduleBetterTerrainGen, new ModuleGate("btg-enabled", true, true));
+        moduleGates.put(moduleAutoPruner, new ModuleGate("ap-enabled", false, false));
+        moduleGates.put(moduleColorTheDucts, new ModuleGate("ctd-enabled", false, false));
+        moduleGates.put(moduleLogicSugar, new ModuleGate("ls-enabled", true, true));
+        moduleGates.put(moduleBetterMiniMap, new ModuleGate("mmplus-enabled", false, false));
+        moduleGates.put(moduleServerPlayerDatabase, new ModuleGate("spdb-enabled", true, true));
+        moduleGates.put(moduleBetterMapEditor, new ModuleGate("bme-enabled", true, true));
+        moduleGates.put(moduleBetterProjectorOverlay, new ModuleGate("bpo-enabled", true, false));
+        moduleGates.put(moduleBetterLogisticsSpeed, new ModuleGate("bls-enabled", true, false));
+        moduleGates.put(moduleBetterHotKey, new ModuleGate("bhk-enabled", true, false));
+        moduleGates.put(moduleModUpdater, new ModuleGate("mu-enabled", true, false));
+        moduleGates.put(moduleWhoUsesThisBuilding, new ModuleGate("wutb-enabled", true, false));
+        moduleGates.put(modulePatchViewer, new ModuleGate("patchviewer-enabled", true, false));
+        moduleGates.put(modulePinyinSearchSupport, new ModuleGate("pss-enabled", true, false));
+        moduleGates.put(moduleForeignServerTranslator, new ModuleGate("fst-enabled", true, true));
+        moduleGates.put(moduleTripwire, new ModuleGate("tw-enabled", true, true));
+        moduleGates.put(moduleBetterPolyAi, new ModuleGate("bpa-enabled", false, false));
+        moduleGates.put(moduleAdvancedReplace, new ModuleGate("ar-enabled", true, true));
+        moduleGates.put(moduleRandom, new ModuleGate("random-enabled", true, true));
+        moduleGates.put(moduleLockAttack, new ModuleGate("lockattack-enabled", true, true));
+        moduleGates.put(moduleBuildXray, new ModuleGate("bx-enabled", true, false));
+        moduleGates.put(moduleProfiler, new ModuleGate("neon-profiler-enabled", false, false));
+    }
+
+    private static boolean moduleEnabled(String moduleId){
+        ModuleGate gate = moduleGates.get(moduleId);
+        // No gate = infrastructure that must always load. A missing settings backend
+        // (unusual hosts/tests) falls back to the historical always-load behavior.
+        if(gate == null || Core.settings == null) return true;
+        return Core.settings.getBool(gate.key, gate.def);
+    }
+
     private final Map<String, Throwable> moduleFailures = new LinkedHashMap<>();
+    private final Set<String> gatedModules = new LinkedHashSet<>();
 
     private final PowerGridMinimapMod pgmm;
     private final StealthPathMod stealthPath;
@@ -367,7 +433,7 @@ public class BekToolsMod extends Mod{
     }
 
     private void markBundled(String moduleId, Runnable action){
-        if(isModuleFailed(moduleId)) return;
+        if(isModuleGatedOut(moduleId) || isModuleFailed(moduleId)) return;
         try{
             action.run();
         }catch(Throwable t){
@@ -376,7 +442,7 @@ public class BekToolsMod extends Mod{
     }
 
     private <T> T initializeModule(String moduleId, ModSupplier<T> initializer){
-        if(isModuleFailed(moduleId)) return null;
+        if(isModuleGatedOut(moduleId) || isModuleFailed(moduleId)) return null;
         try{
             T module = initializer.get();
             if(module == null){
@@ -390,12 +456,27 @@ public class BekToolsMod extends Mod{
     }
 
     private void initializeFeature(String moduleId, Runnable initializer){
-        if(isModuleFailed(moduleId)) return;
+        if(isModuleGatedOut(moduleId) || isModuleFailed(moduleId)) return;
         try{
             initializer.run();
         }catch(Throwable t){
             recordModuleFailure(moduleId, t);
         }
+    }
+
+    /**
+     * Load-time gate. {@code true} when the module's master switch is off; the id is
+     * remembered so the settings page and the telemetry snapshot can tell "switched
+     * off" apart from "failed" and from "loaded".
+     */
+    private boolean isModuleGatedOut(String moduleId){
+        if(moduleEnabled(moduleId)) return false;
+        gatedModules.add(moduleId);
+        return true;
+    }
+
+    private boolean isModuleGated(String moduleId){
+        return gatedModules.contains(moduleId);
     }
 
     private void recordModuleFailure(String moduleId, Throwable failure){
@@ -440,7 +521,13 @@ public class BekToolsMod extends Mod{
     }
 
     private void addSubmodState(Map<String, Boolean> states, String name, String moduleId, boolean available, boolean enabled){
-        if(available && !isModuleFailed(moduleId)) states.put(name, enabled);
+        if(isModuleFailed(moduleId)) return;
+        if(available){
+            states.put(name, enabled);
+        }else if(isModuleGated(moduleId)){
+            // Loaded out by its master switch: report it as disabled instead of dropping it.
+            states.put(name, false);
+        }
     }
 
     private void registerModuleCommands(String moduleId, boolean available, Runnable registration){
@@ -473,46 +560,49 @@ public class BekToolsMod extends Mod{
     }
 
     private Seq<ModuleEntry> buildModuleEntries(){
-        // Master switches were verified against each module's settings builder:
-        // pgmm/sp/cm/bss/rbm/brf/bpo/bls/bhk/mu/wutb/pv/pss default true;
-        // ap/ctd default !bekBundled (false when bundled); bmm/bpa/profiler default false.
+        // Each entry's master switch comes from moduleGates (see there for keys/defaults);
+        // modules without a switch UI of their own get their row rendered by Neon.
         Seq<ModuleEntry> entries = new Seq<>();
-        entries.add(new ModuleEntry(modulePgmm, pgmm != null, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, "pgmm-enabled", true, st -> pgmm.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleStealthPath, stealthPath != null, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, "sp-enabled", true, st -> stealthPath.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleCustomMarker, !isModuleFailed(moduleCustomMarker), Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, "cm-enabled", true, CustomMarkerFeature::buildSettings));
-        entries.add(new ModuleEntry(moduleScreenshot, !isModuleFailed(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, "bss-enabled", true, BetterScreenShotFeature::buildSettings));
-        entries.add(new ModuleEntry(moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, "rbm-enabled", true, st -> radialBuildMenu.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterRtsFormation, betterRtsFormation != null, Core.bundle.get("bektools.section.brf", "Better RTS Formation"), Icon.commandRally, "brf-enabled", true, st -> betterRtsFormation.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleSmartPlacement, smartPlacement != null, Core.bundle.get("bektools.section.smp", "Smart Placement"), Icon.rightOpen, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
-        entries.add(new ModuleEntry(moduleHideWhatProcessorsShow, hideWhatProcessorsShow != null, Core.bundle.get("bektools.section.hwps", "Hide What Processors Show"), Icon.logic, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hwps.none"))));
-        entries.add(new ModuleEntry(modulePatrolCancel, patrolCancel != null, Core.bundle.get("bektools.section.pc", "Patrol Cancel"), Icon.commandRally, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.pc.none"))));
-        entries.add(new ModuleEntry(moduleBetterTerrainGen, betterTerrainGen != null, Core.bundle.get("bektools.section.btg", "Better Terrain Gen V2"), Icon.map, null, false, st -> {
+        entries.add(new ModuleEntry(modulePgmm, pgmm != null, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, st -> pgmm.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleStealthPath, stealthPath != null, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, st -> stealthPath.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleCustomMarker, !isModuleFailed(moduleCustomMarker) && !isModuleGated(moduleCustomMarker), Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings));
+        entries.add(new ModuleEntry(moduleScreenshot, !isModuleFailed(moduleScreenshot) && !isModuleGated(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings));
+        entries.add(new ModuleEntry(moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, st -> radialBuildMenu.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleBetterRtsFormation, betterRtsFormation != null, Core.bundle.get("bektools.section.brf", "Better RTS Formation"), Icon.commandRally, st -> betterRtsFormation.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleSmartPlacement, smartPlacement != null, Core.bundle.get("bektools.section.smp", "Smart Placement"), Icon.rightOpen, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
+        entries.add(new ModuleEntry(moduleHideWhatProcessorsShow, hideWhatProcessorsShow != null, Core.bundle.get("bektools.section.hwps", "Hide What Processors Show"), Icon.logic, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hwps.none"))));
+        entries.add(new ModuleEntry(modulePatrolCancel, patrolCancel != null, Core.bundle.get("bektools.section.pc", "Patrol Cancel"), Icon.commandRally, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.pc.none"))));
+        entries.add(new ModuleEntry(moduleBetterTerrainGen, betterTerrainGen != null, Core.bundle.get("bektools.section.btg", "Better Terrain Gen V2"), Icon.map, st -> {
             betterTerrainGen.bekBuildSettings(st);
             st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.btg.none"));
         }));
-        entries.add(new ModuleEntry(moduleAutoPruner, autoPruner != null, Core.bundle.get("bektools.section.ap", "Auto Pruner"), Icon.trash, "ap-enabled", !AutoPrunerMod.bekBundled, st -> autoPruner.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleColorTheDucts, colorTheDucts != null, Core.bundle.get("bektools.section.ctd", "Color-the-ducts"), Icon.imageSmall, "ctd-enabled", !ColorTheDuctsMod.bekBundled, st -> colorTheDucts.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleLogicSugar, logicSugar != null, Core.bundle.get("bektools.section.ls", "LogicSugar"), Icon.edit, null, false, st -> logicSugar.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterMiniMap, betterMiniMap != null, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, "mmplus-enabled", false, BetterMiniMapMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleServerPlayerDatabase, serverPlayerDataBase != null, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, null, false, st -> serverPlayerDataBase.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterMapEditor, betterMapEditor != null, Core.bundle.get("bektools.section.bme", "Better Map Editor"), Icon.map, null, false, st -> {
+        entries.add(new ModuleEntry(moduleAutoPruner, autoPruner != null, Core.bundle.get("bektools.section.ap", "Auto Pruner"), Icon.trash, st -> autoPruner.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleColorTheDucts, colorTheDucts != null, Core.bundle.get("bektools.section.ctd", "Color-the-ducts"), Icon.imageSmall, st -> colorTheDucts.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleLogicSugar, logicSugar != null, Core.bundle.get("bektools.section.ls", "LogicSugar"), Icon.edit, st -> logicSugar.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleBetterMiniMap, betterMiniMap != null, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings));
+        entries.add(new ModuleEntry(moduleServerPlayerDatabase, serverPlayerDataBase != null, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, st -> serverPlayerDataBase.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleBetterMapEditor, betterMapEditor != null, Core.bundle.get("bektools.section.bme", "Better Map Editor"), Icon.map, st -> {
             st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.bme.none"));
         }));
-        entries.add(new ModuleEntry(moduleBetterProjectorOverlay, betterProjectorOverlay != null, Core.bundle.get("bektools.section.bpo", "Better Projector Overlay"), Icon.power, "bpo-enabled", true, BetterProjectorOverlayMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleBetterLogisticsSpeed, betterLogisticsSpeed != null, Core.bundle.get("bektools.section.bls", "Better Logistics Speed"), Icon.rightOpen, "bls-enabled", true, BetterLogisticsSpeedMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleBetterHotKey, betterHotKey != null, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, "bhk-enabled", true, st -> betterHotKey.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleModUpdater, modUpdater != null, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, "mu-enabled", true, ModUpdaterMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleWhoUsesThisBuilding, whoUsesThisBuilding != null, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, "wutb-enabled", true, st -> whoUsesThisBuilding.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(modulePatchViewer, patchViewer != null, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, "patchviewer-enabled", true, st -> patchViewer.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(modulePinyinSearchSupport, pinyinSearchSupport != null, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, "pss-enabled", true, st -> pinyinSearchSupport.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleForeignServerTranslator, foreignServerTranslator != null, Core.bundle.get("bektools.section.fst", "Foreign Server Translator"), Icon.chat, null, false, st -> foreignServerTranslator.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleTripwire, tripwire != null, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, null, false, st -> tripwire.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, "bpa-enabled", false, st -> betterPolyAi.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, null, false, st -> advancedReplace.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleLockAttack, lockAttack != null, Core.bundle.get("bektools.section.la", "Lock Attack"), Icon.lock, null, false, st -> lockAttack.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBuildXray, buildXray != null, Core.bundle.get("bektools.section.bx", "Build X-ray (by Miner)"), Icon.eyeSmall, "bx-enabled", true, st -> buildXray.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleOverlayCompatBridge, overlayCompatBridge != null, Core.bundle.get("bektools.section.ocb", "OverlayCompatBridge"), Icon.layers, null, false, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
-        entries.add(new ModuleEntry(moduleProfiler, !isModuleFailed(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, "neon-profiler-enabled", false, NeonProfilerFeature::buildSettings));
+        entries.add(new ModuleEntry(moduleBetterProjectorOverlay, betterProjectorOverlay != null, Core.bundle.get("bektools.section.bpo", "Better Projector Overlay"), Icon.power, BetterProjectorOverlayMod::bekBuildSettings));
+        entries.add(new ModuleEntry(moduleBetterLogisticsSpeed, betterLogisticsSpeed != null, Core.bundle.get("bektools.section.bls", "Better Logistics Speed"), Icon.rightOpen, BetterLogisticsSpeedMod::bekBuildSettings));
+        entries.add(new ModuleEntry(moduleBetterHotKey, betterHotKey != null, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, st -> betterHotKey.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleModUpdater, modUpdater != null, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings));
+        entries.add(new ModuleEntry(moduleWhoUsesThisBuilding, whoUsesThisBuilding != null, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, st -> whoUsesThisBuilding.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(modulePatchViewer, patchViewer != null, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, st -> patchViewer.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(modulePinyinSearchSupport, pinyinSearchSupport != null, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, st -> pinyinSearchSupport.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleForeignServerTranslator, foreignServerTranslator != null, Core.bundle.get("bektools.section.fst", "Foreign Server Translator"), Icon.chat, st -> foreignServerTranslator.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleTripwire, tripwire != null, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, st -> tripwire.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, st -> betterPolyAi.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, st -> advancedReplace.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleRandom, random != null, Core.bundle.get("bektools.section.random", "Random"), Icon.effect, st -> {
+            random.bekBuildSettings(st);
+            st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.random.none"));
+        }));
+        entries.add(new ModuleEntry(moduleLockAttack, lockAttack != null, Core.bundle.get("bektools.section.la", "Lock Attack"), Icon.lock, st -> lockAttack.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleBuildXray, buildXray != null, Core.bundle.get("bektools.section.bx", "Build X-ray (by Miner)"), Icon.eyeSmall, st -> buildXray.bekBuildSettings(st)));
+        entries.add(new ModuleEntry(moduleOverlayCompatBridge, overlayCompatBridge != null, Core.bundle.get("bektools.section.ocb", "OverlayCompatBridge"), Icon.layers, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.ocb.none"))));
+        entries.add(new ModuleEntry(moduleProfiler, !isModuleFailed(moduleProfiler) && !isModuleGated(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings));
         return entries;
     }
 
@@ -549,15 +639,18 @@ public class BekToolsMod extends Mod{
         final Drawable icon;
         final String enableKey; // null when the module has no master switch
         final boolean enableDefault;
+        final boolean neonSwitch; // true when Neon renders the master switch (module has no switch UI of its own)
         final Cons<SettingsMenuDialog.SettingsTable> builder;
 
-        ModuleEntry(String moduleId, boolean available, String title, Drawable icon, String enableKey, boolean enableDefault, Cons<SettingsMenuDialog.SettingsTable> builder){
+        ModuleEntry(String moduleId, boolean available, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){
             this.moduleId = moduleId;
             this.available = available;
             this.title = title;
             this.icon = icon;
-            this.enableKey = enableKey;
-            this.enableDefault = enableDefault;
+            ModuleGate gate = moduleGates.get(moduleId);
+            this.enableKey = gate == null ? null : gate.key;
+            this.enableDefault = gate != null && gate.def;
+            this.neonSwitch = gate != null && gate.neonSwitch;
             this.builder = builder;
         }
     }
@@ -578,13 +671,15 @@ public class BekToolsMod extends Mod{
         public void add(SettingsMenuDialog.SettingsTable table){
             Seq<ModuleEntry> disabled = new Seq<>();
             for(ModuleEntry entry : entries){
-                if(!entry.available || mod.isModuleFailed(entry.moduleId)){
-                    // Failed modules stay in the main list as failure placeholders.
-                    addModuleGroup(table, entry);
-                }else if(entry.enableKey == null || Core.settings.getBool(entry.enableKey, entry.enableDefault)){
-                    addModuleGroup(table, entry);
-                }else{
+                boolean switchedOn = entry.enableKey == null || Core.settings.getBool(entry.enableKey, entry.enableDefault);
+                if(!switchedOn && !mod.isModuleFailed(entry.moduleId)){
+                    // Master switch off: collect into the collapsed "disabled" section. This
+                    // includes modules that were gated out before construction.
                     disabled.add(entry);
+                }else{
+                    // Loaded modules render their own settings; failed modules and modules
+                    // that are on but were gated out render a placeholder instead.
+                    addModuleGroup(table, entry);
                 }
             }
 
@@ -611,7 +706,7 @@ public class BekToolsMod extends Mod{
         }
 
         private void addModuleGroup(SettingsMenuDialog.SettingsTable table, ModuleEntry entry){
-            if(!entry.available || mod.isModuleFailed(entry.moduleId)){
+            if(mod.isModuleFailed(entry.moduleId)){
                 addGroup(table, entry.title, entry.icon, mod::addFailurePlaceholder);
                 return;
             }
@@ -621,7 +716,14 @@ public class BekToolsMod extends Mod{
                     mod.addFailurePlaceholder(nested);
                     return;
                 }
+                if(!entry.available){
+                    // Gated out at startup (or re-enabled this session): no module code is
+                    // loaded, so only the master switch and a restart note can be rendered.
+                    mod.addUnloadedPlaceholder(nested, entry);
+                    return;
+                }
                 try{
+                    mod.addNeonMasterSwitch(nested, entry);
                     entry.builder.get(nested);
                 }catch(Throwable t){
                     mod.recordModuleFailure(entry.moduleId, t);
@@ -635,7 +737,7 @@ public class BekToolsMod extends Mod{
             // finishBuild() clears children and replays only pref'd settings, so direct
             // add() rendering would be wiped. Its suppressRebuild flag keeps pref() from
             // re-triggering a rebuild while the body is being mounted.
-            if(!entry.available || mod.isModuleFailed(entry.moduleId)){
+            if(mod.isModuleFailed(entry.moduleId)){
                 nested.pref(new CollapsibleGroupSetting(entry.title, entry.icon, 24f, mod::addFailurePlaceholder));
                 nested.pref(new RbmStyle.SpacerSetting(4f));
                 return;
@@ -646,7 +748,12 @@ public class BekToolsMod extends Mod{
                     mod.addFailurePlaceholder(inner);
                     return;
                 }
+                if(!entry.available){
+                    mod.addUnloadedPlaceholder(inner, entry);
+                    return;
+                }
                 try{
+                    mod.addNeonMasterSwitch(inner, entry);
                     entry.builder.get(inner);
                 }catch(Throwable t){
                     mod.recordModuleFailure(entry.moduleId, t);
@@ -710,6 +817,29 @@ public class BekToolsMod extends Mod{
 
     private void addFailurePlaceholder(SettingsMenuDialog.SettingsTable table){
         table.pref(new RbmStyle.SubHeaderSetting(moduleFailureMessage));
+    }
+
+    /** Renders the master-switch row for modules whose own settings UI has none. */
+    private void addNeonMasterSwitch(SettingsMenuDialog.SettingsTable table, ModuleEntry entry){
+        if(entry.neonSwitch && entry.enableKey != null && !isModuleFailed(entry.moduleId)){
+            table.pref(new RbmStyle.IconCheckSetting(entry.enableKey, Core.bundle.get("bektools.module.switch", "Master switch"), entry.enableDefault, Icon.power, null));
+        }
+    }
+
+    /**
+     * Placeholder for a module that was gated out before construction. Its code is not
+     * loaded, so instead of the module's settings only the master switch and the
+     * restart requirement are shown.
+     */
+    private void addUnloadedPlaceholder(SettingsMenuDialog.SettingsTable table, ModuleEntry entry){
+        if(entry.enableKey == null){
+            // Only switch-free infrastructure modules reach this path, and they always load.
+            addFailurePlaceholder(table);
+            return;
+        }
+        table.pref(new RbmStyle.IconCheckSetting(entry.enableKey, Core.bundle.get("bektools.module.switch", "Master switch"), entry.enableDefault, Icon.power, null));
+        boolean enabled = Core.settings.getBool(entry.enableKey, entry.enableDefault);
+        table.pref(new RbmStyle.SubHeaderSetting(enabled ? "@bektools.module.restart" : "@bektools.module.disabled"));
     }
 
     private static void addGroup(SettingsMenuDialog.SettingsTable table, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){

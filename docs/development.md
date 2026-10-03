@@ -56,7 +56,7 @@
    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table)
    ```
 3. **守卫存量设置**：原有 `ui.settings.addCategory(...)` 必须包进 `if(!bekBundled)`；如模块自带 `registerSettings()`，开头 `if(bekBundled) return;`。
-4. **接入总入口**：在 `bektools.BekToolsMod` 增加 moduleId 常量与字段，经 `initializeFeature(moduleId, initializer)` 初始化；在 `registerSettings()` 里用 `addGroup(...)` 挂分组，样式走 `RbmStyle`。
+4. **接入总入口**：在 `bektools.BekToolsMod` 增加 moduleId 常量与字段，经 `initializeFeature(moduleId, initializer)` 初始化；在 `moduleGates` 登记加载门（`<id>-enabled`、默认值、开关行是否由 Neon 渲染），并在 `buildModuleEntries()` 里挂 `ModuleEntry`（分组、图标、设置 builder），样式走 `RbmStyle`。
 5. **占位分组**：没有独立设置项也要放说明占位（bundle key `bektools.section.<id>.none`）。
 6. **补文案**：新 bundle key 同步写入 `tools/bektools-bundles/bundle.properties` 和 `bundle_zh_CN.properties` 两份，确认合并后的 `src/main/resources/bundles/bundle*.properties` 可用。
 7. **环境差异**：需要在 MindustryX 下换行为的模块，写 `<Name>ModX` 子类/变体并在 `BekToolsModX` 构造函数中替换工厂；Overlay 能力一律通过桥接口取，不直接 import MDtX 类。

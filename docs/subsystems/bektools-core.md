@@ -17,12 +17,21 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 
 ## 启动时序
 
-构造阶段按序做四类事情，全部包裹故障隔离：
+构造阶段按序做四类事情，全部包裹故障隔离；每一项都先过加载门（见下）：
 
 1. `DataImagePackerCompat.installHooks()` 安装数据图兼容钩子。
 2. `markBundled(moduleId, …)`：把每个模块主类的静态 `bekBundled` 置 `true`；个别模块附带一次性配置（如 `BetterRTSFormationSettings.configure()`）。
 3. `initializeModule(moduleId, supplier)`：实例化各模块对象并存为字段。工厂返回 `null` 视为失败。字段可能为 `null`，后续使用前都要判空。
 4. `initializeFeature(moduleId, runnable)`：执行无对象产物的初始化（customMarker / bss / profiler），此时 OverlayUi 桥已就绪，可传入 `configureCompat/configureOverlayUi`。
+
+### 加载门（总开关）
+
+`moduleGates` 是每个模块的加载期总开关（moduleId → 开关键、默认值、开关行是否由 Neon 渲染）：
+
+- `markBundled` / `initializeModule` / `initializeFeature` 入口先查 `isModuleGatedOut(moduleId)`：开关关闭时直接短路，不构造对象、不 `init()`、不注册任何钩子/监听器，并记入 `gatedModules`。它与 `moduleFailures` 是两个集合：前者是用户主动关闭，后者是初始化失败。
+- 语义是**重启生效**：Java 类无法卸载，所以关闭开关只保证“下次启动不加载”；本次运行仍靠模块自己的运行期检查（如果它实现了）停止行为。
+- `ocb`（OverlayUI 兼容层）与 usage-reporter 没有 gate，属于基础设施，始终加载；`ocb` 在原生客户端为其它模块绑定 `mindustryX.features.ui.OverlayUI`。
+- 没有自带开关（或完全没有设置项）的模块由 `ModuleEntry.neonSwitch` 标记，Neon 用 `RbmStyle.IconCheckSetting` 在分组首行渲染总开关；键沿用各模块自身的设置前缀（多为 `<prefix>-enabled`，如 `smp-enabled`、`ls-enabled`、`random-enabled`、`lockattack-enabled`）。
 
 之后在 `ClientLoadEvent` 中：
 
@@ -41,6 +50,7 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 
 关键语义：
 
+- 加载门先于失败判定：开关关闭的模块不会进入原语，也不会被记成失败（见上文的 `gatedModules`）。
 - `isModuleFailed(moduleId)` 为真时，后续针对同一模块的所有初始化/注册调用**直接短路**——第一个异常是唯一被记录的。
 - `recordModuleFailure` 保证每个模块只记第一次异常，并打日志 `"failed; continuing without it"`。
 - 使用顺序敏感的资源时要小心：profiler 窗口必须在 customMarker/bss 之后初始化或同等隔离，避免"后续模块失败留下幽灵窗口"（源码注释明确点名了这个坑）。
@@ -52,7 +62,8 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 
 1. 收集各模块状态做诊断快照 `snapshotSubmodStates()`（模块可用性 + 当前启用与否，供设置页状态展示；像"偷袭小道默认关"、"翻译未标记服务器则视为未启用"这类动态值在这里计算）。
 2. 按 module id 逐个把模块的 `bekBuildSettings(SettingsTable)` 内容加进统一分组；分组标题与说明走 bundle key（无设置项的模块用 `bektools.section.<id>.none` 占位），样式统一 `bektools.ui.RbmStyle`（子标题、缩进、间距组件，见 `bektools/ui/VscodeSettingsStyle.java` 等）。
-3. 失败模块追加错误分组。
+3. 启动时被加载门短路（`gatedModules`）的模块不调用它的 builder：改由 `addUnloadedPlaceholder` 渲染 Neon 自绘的总开关加 `@bektools.module.disabled` / `@bektools.module.restart` 说明；`neonSwitch` 模块在正常分组首行也由 Neon 渲染开关。
+4. 失败模块追加错误分组。
 
 ## 客户端指令
 

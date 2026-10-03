@@ -25,7 +25,7 @@ Mindustry 只会加载 `mod.json` 里 `main` 指向的类；MindustryX 类加载
 
 核心流程都在 `BekToolsMod` 中（见 [subsystems/bektools-core.md](subsystems/bektools-core.md) 的逐段说明）：
 
-1. **构造**：基类接收 `OverlayUiBridge` 与 `MarkerBridge` 实例和一组"默认模块工厂"，X 入口可以按位替换其中的工厂。
+1. **构造**：基类接收 `OverlayUiBridge` 与 `MarkerBridge` 实例和一组"默认模块工厂"，X 入口可以按位替换其中的工厂。每个模块先查加载期总开关（`moduleGates`，重启后生效）：关闭的模块不构造、不初始化、不注册钩子。
 2. **初始化**：每个模块经 `initializeFeature(moduleId, initializer)` 包装执行。任何 `Throwable` 都会被捕获并记入 `moduleFailures`（`LinkedHashMap<moduleId, Throwable>`），不会向上传播。
 3. **注册设置**：在 `ClientLoadEvent` 中调用 `registerSettings()`，把各模块的 `bekBuildSettings(SettingsTable)` 汇总进统一分组；失败的模块会在设置页尾追加 `@bektools.module.failed` 错误分组，而不是静默消失。
 4. **注册指令**：`registerClientCommands()` 对每个带客户端指令的模块做同样的"是否失败"守卫后逐一挂载（profiler / pgmm / sp / rbm / spdb）。

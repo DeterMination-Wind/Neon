@@ -724,6 +724,7 @@ def inject_stealthpath_overlay_hooks(java_src: str) -> str:
         "import arc.util.Time;\n",
         "import arc.util.Time;\n"
         "import mdtxcompat.LegacyMindustryXGuard;\n"
+        "import mdtxcompat.OverlaySettingsCompat;\n"
         "import mdtxcompat.OverlayUiBridge;\n",
         1,
     )
@@ -789,22 +790,38 @@ def inject_stealthpath_overlay_hooks(java_src: str) -> str:
         )
 
     java_src = java_src.replace("if(xOverlayUi.isInstalled())", "if(xOverlayUi.isSupported())")
-    java_src = java_src.replace('"stealthpath-mode",', "overlayWindowModeName,")
-    java_src = java_src.replace('"stealthpath-damage",', "overlayWindowDamageName,")
-    java_src = java_src.replace('"stealthpath-controls",', "overlayWindowControlsName,")
-    java_src = java_src.replace('"stealthpath-hoverdps",', "overlayWindowHoverDpsName,")
-
-    for window, enabled in (
-        ("xModeWindow", "enabled && showMode"),
-        ("xDamageWindow", "enabled && showDamage"),
-        ("xControlsWindow", "enabled && showControls"),
-        ("xHoverDpsWindow", "enabled && showHoverDps"),
+    for constant in (
+        "overlayWindowModeName,",
+        "overlayWindowDamageName,",
+        "overlayWindowControlsName,",
+        "overlayWindowHoverDpsName,",
     ):
-        java_src = java_src.replace(
-            f"xOverlayUi.tryConfigureWindow({window}, false, true);\n"
-            f"                    if({enabled}) xOverlayUi.setEnabledAndPinned({window}, true, false);",
-            f"configureOverlayWindow({window}, {enabled});",
+        if constant not in java_src:
+            raise ValueError(
+                "[sp] StealthPath registerWindow name shape changed; update "
+                "inject_stealthpath_overlay_hooks()."
+            )
+
+    java_src = java_src.replace(
+        "xOverlayUi.hasWindowState(", "OverlaySettingsCompat.hasStoredWindowState("
+    )
+
+    for window, seed in (
+        ("xModeWindow", "seedMode"),
+        ("xDamageWindow", "seedDamage"),
+        ("xControlsWindow", "seedControls"),
+        ("xHoverDpsWindow", "seedHoverDps"),
+    ):
+        old = (
+            f"                    xOverlayUi.tryConfigureWindow({window}, false, true);\n"
+            f"                    if({seed}) xOverlayUi.setEnabledAndPinned({window}, true, false);"
         )
+        if old not in java_src:
+            raise ValueError(
+                "[sp] StealthPath OverlayUI seeding shape changed; update "
+                "inject_stealthpath_overlay_hooks()."
+            )
+        java_src = java_src.replace(old, f"                    configureOverlayWindow({window}, {seed});")
 
     fallback_marker = "    private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){"
     if "private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window" not in java_src:
@@ -812,12 +829,15 @@ def inject_stealthpath_overlay_hooks(java_src: str) -> str:
             raise ValueError("[sp] Could not find StealthPath fallback insertion point.")
         java_src = java_src.replace(
             fallback_marker,
-            "    private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window, boolean enabled){\n"
+            "    /** Applies the shared overlay window shape; only a first-ever registration may seed enabled/pinned. */\n"
+            "    private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window, boolean seedEnabled){\n"
             "        if(window == null || window.asElement() == null){\n"
             "            throw new IllegalStateException(\"OverlayUI returned no window handle\");\n"
             "        }\n"
             "        window.configure(false, true);\n"
-            "        if(enabled) window.setEnabledAndPinned(true, false);\n"
+            "        //OverlayUI persists `overlayUI.<name>` the first time the player touches a window (eye / lock / X),\n"
+            "        //so re-seeding on later launches would resurrect windows the player closed on purpose.\n"
+            "        if(seedEnabled) window.setEnabledAndPinned(true, false);\n"
             "    }\n\n"
             + fallback_marker,
             1,
@@ -834,6 +854,16 @@ def inject_stealthpath_overlay_hooks(java_src: str) -> str:
     if "MindustryXOverlayUI" in java_src or "xOverlayUi.isInstalled()" in java_src:
         raise ValueError(
             "[sp] StealthPath OverlayUI adapter normalization was incomplete; update "
+            "inject_stealthpath_overlay_hooks()."
+        )
+    if "OverlaySettingsCompat.hasStoredWindowState" not in java_src:
+        raise ValueError(
+            "[sp] StealthPath OverlayUI state seeding was not redirected to OverlaySettingsCompat; update "
+            "inject_stealthpath_overlay_hooks()."
+        )
+    if "xOverlayUi.hasWindowState(" in java_src:
+        raise ValueError(
+            "[sp] StealthPath OverlayUI adapter still references hasWindowState after normalization; update "
             "inject_stealthpath_overlay_hooks()."
         )
     return java_src

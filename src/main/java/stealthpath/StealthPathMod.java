@@ -32,6 +32,7 @@ import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
 import mdtxcompat.LegacyMindustryXGuard;
+import mdtxcompat.OverlaySettingsCompat;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.game.EventType.*;
 import mindustry.game.Team;
@@ -89,16 +90,16 @@ public class StealthPathMod extends mindustry.mod.Mod{
     /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
 
-    private static final String overlayWindowModeName = "stealthpath-mode";
-    private static final String overlayWindowDamageName = "stealthpath-damage";
-    private static final String overlayWindowControlsName = "stealthpath-controls";
-    private static final String overlayWindowHoverDpsName = "stealthpath-hoverdps";
 
     private static final String keyEnabled = "sp-enabled";
     private static final String keyProMode = "sp-pro-mode";
     private static final String keyOverlayWindowMode = "sp-ov-window-mode";
     private static final String keyOverlayWindowDamage = "sp-ov-window-damage";
     private static final String keyOverlayWindowControls = "sp-ov-window-controls";
+    private static final String overlayWindowModeName = "stealthpath-mode";
+    private static final String overlayWindowDamageName = "stealthpath-damage";
+    private static final String overlayWindowControlsName = "stealthpath-controls";
+    private static final String overlayWindowHoverDpsName = "stealthpath-hoverdps";
     private static final String keyTargetMode = "sp-target-mode";
     private static final String keyTargetBlock = "sp-target-block";
     private static final String keyGoalInputSource = "sp-goal-input-source";
@@ -5285,39 +5286,47 @@ public class StealthPathMod extends mindustry.mod.Mod{
                 // When hosted by OverlayUI, do not manage position/size ourselves.
                 if(xModeWindow == null){
                     try{ overlayModeContent.remove(); }catch(Throwable ignored){}
+                    // Only seed on first-ever registration; re-seeding every launch would resurrect a window the player closed (X writes overlayUI.<name>).
+                    boolean seedMode = enabled && showMode && !OverlaySettingsCompat.hasStoredWindowState(overlayWindowModeName);
                     xModeWindow = xOverlayUi.registerWindow(
                         overlayWindowModeName,
                         overlayModeContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowMode, true)
                     );
-                    configureOverlayWindow(xModeWindow, enabled && showMode);
+                    configureOverlayWindow(xModeWindow, seedMode);
                 }
                 if(xDamageWindow == null){
                     try{ overlayDamageContent.remove(); }catch(Throwable ignored){}
+                    // Only seed on first-ever registration; re-seeding every launch would resurrect a window the player closed (X writes overlayUI.<name>).
+                    boolean seedDamage = enabled && showDamage && !OverlaySettingsCompat.hasStoredWindowState(overlayWindowDamageName);
                     xDamageWindow = xOverlayUi.registerWindow(
                         overlayWindowDamageName,
                         overlayDamageContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowDamage, true)
                     );
-                    configureOverlayWindow(xDamageWindow, enabled && showDamage);
+                    configureOverlayWindow(xDamageWindow, seedDamage);
                 }
                 if(xControlsWindow == null){
                     try{ overlayControlsContent.remove(); }catch(Throwable ignored){}
+                    // Only seed on first-ever registration; re-seeding every launch would resurrect a window the player closed (X writes overlayUI.<name>).
+                    boolean seedControls = enabled && showControls && !OverlaySettingsCompat.hasStoredWindowState(overlayWindowControlsName);
                     xControlsWindow = xOverlayUi.registerWindow(
                         overlayWindowControlsName,
                         overlayControlsContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyOverlayWindowControls, true)
                     );
-                    configureOverlayWindow(xControlsWindow, enabled && showControls);
+                    configureOverlayWindow(xControlsWindow, seedControls);
                 }
                 if(xHoverDpsWindow == null){
                     try{ overlayHoverDpsContent.remove(); }catch(Throwable ignored){}
+                    // Only seed on first-ever registration; re-seeding every launch would resurrect a window the player closed (X writes overlayUI.<name>).
+                    boolean seedHoverDps = enabled && showHoverDps && !OverlaySettingsCompat.hasStoredWindowState(overlayWindowHoverDpsName);
                     xHoverDpsWindow = xOverlayUi.registerWindow(
                         overlayWindowHoverDpsName,
                         overlayHoverDpsContent,
                         () -> state != null && state.isGame() && Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyDebugHoverTurretDps, false)
                     );
-                    configureOverlayWindow(xHoverDpsWindow, enabled && showHoverDps);
+                    configureOverlayWindow(xHoverDpsWindow, seedHoverDps);
                 }
                 return;
             }catch(Throwable ignored){
@@ -5335,12 +5344,15 @@ public class StealthPathMod extends mindustry.mod.Mod{
         syncFallbackHudRight(overlayHoverDpsContent, "sp-ov-hover", -8f, -8f, enabled && showHoverDps);
     }
 
-    private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window, boolean enabled){
+    /** Applies the shared overlay window shape; only a first-ever registration may seed enabled/pinned. */
+    private void configureOverlayWindow(OverlayUiBridge.OverlayWindowHandle window, boolean seedEnabled){
         if(window == null || window.asElement() == null){
             throw new IllegalStateException("OverlayUI returned no window handle");
         }
         window.configure(false, true);
-        if(enabled) window.setEnabledAndPinned(true, false);
+        //OverlayUI persists `overlayUI.<name>` the first time the player touches a window (eye / lock / X),
+        //so re-seeding on later launches would resurrect windows the player closed on purpose.
+        if(seedEnabled) window.setEnabledAndPinned(true, false);
     }
 
     private void syncFallbackHud(Table content, String name, float x, float yFromTop, boolean visible){

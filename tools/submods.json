@@ -112,7 +112,13 @@
       "mainClassFile": "LogicSugarMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "sourceBundlesDir": "assets/bundles",
-      "injectBekHooks": false
+      "injectBekHooks": false,
+      "extraResourceDirs": [
+        "src/main/resources/sprites/ui"
+      ],
+      "sourceExtraResourceDirs": [
+        "assets/sprites/ui"
+      ]
     },
     {
       "id": "bmm",

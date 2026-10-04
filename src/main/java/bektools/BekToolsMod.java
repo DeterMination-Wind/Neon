@@ -117,7 +117,9 @@ public class BekToolsMod extends Mod{
      * constructed, so a switched-off sub-mod is completely absent until the game is
      * restarted with the switch on. {@code neonSwitch} marks modules that have no
      * switch of their own (or none at all): Neon renders that master-switch row in the
-     * module group. Infrastructure (ocb, usage-reporter) has no gate and always loads.
+     * module group. Only the usage reporter is gate-free infrastructure and always loads;
+     * {@code ocb} has a switch like every other sub-mod (while it is off, the overlay falls
+     * back to the frozen embedded copy, see {@link #vanillaOverlayUi()}).
      */
     private static final class ModuleGate{
         final String key;
@@ -164,6 +166,7 @@ public class BekToolsMod extends Mod{
         moduleGates.put(moduleRandom, new ModuleGate("random-enabled", true, true));
         moduleGates.put(moduleLockAttack, new ModuleGate("lockattack-enabled", true, true));
         moduleGates.put(moduleBuildXray, new ModuleGate("bx-enabled", true, false));
+        moduleGates.put(moduleOverlayCompatBridge, new ModuleGate("ocb-enabled", true, true));
         moduleGates.put(moduleProfiler, new ModuleGate("neon-profiler-enabled", false, false));
     }
 
@@ -267,8 +270,10 @@ public class BekToolsMod extends Mod{
         markBundled(moduleLockAttack, () -> LockAttackMod.bekBundled = true);
         markBundled(moduleBuildXray, () -> BuildXrayMod.bekBundled = true);
 
-        // Infrastructure: provides mindustryX.features.ui.OverlayUI on vanilla clients;
-        // stays dormant when a real MindustryX runtime is present.
+        // Bundled OverlayUI copy for vanilla clients; it carries MindustryX's FQCN and stays
+        // dormant when a real MindustryX runtime is present. Switchable like the other sub-mods:
+        // while the master switch is off the overlay falls back to the frozen embedded copy, so
+        // the bridge probe is told about it in vanillaOverlayUi().
         overlayCompatBridge = initializeModule(moduleOverlayCompatBridge, OverlayCompatBridgeMod::new);
         pgmm = initializeModule(modulePgmm, pgmmSupplier);
         stealthPath = initializeModule(moduleStealthPath, stealthPathSupplier);
@@ -424,6 +429,12 @@ public class BekToolsMod extends Mod{
         // the vanilla main class, keep the original upgrade/backtrack error instead of
         // swallowing it as an individual bundled-module failure.
         LegacyMindustryXGuard.rejectLegacyMindustryX("Neon");
+        // The bundled OverlayUI copy (ocb) shares MindustryX's FQCN and always sits in Neon's
+        // jar, so class presence cannot tell it apart from a real MindustryX - and with its
+        // master switch off nothing installs its gear button / Z key / manager, which would
+        // leave consumer modules registering windows nobody can open. Tell the probe before it
+        // locks its delegate; the frozen embedded copy then serves the overlay this session.
+        OverlayUiBridge.setBundledOverlayActive(moduleEnabled(moduleOverlayCompatBridge));
         return OverlayUiBridge.autoDetect();
     }
 

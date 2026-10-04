@@ -19,6 +19,21 @@ public final class LegacyMindustryXGuard {
         return System.getProperty("MDTX-loaded") != null;
     }
 
+    /**
+     * Whether any candidate class loader exposes MindustryX's marker classes, i.e. a real
+     * MindustryX runtime is present. The system properties read by
+     * {@link #isMindustryXRuntime()} are often absent on current builds, so this is the reliable
+     * signal — the same one the bundled overlay copy uses to go dormant, and what tells a real
+     * MindustryX apart from Neon's own same-FQCN copy when the {@code ocb} module is switched off
+     * ({@link mdtxcompat.OverlayUiBridge#setBundledOverlayActive}).
+     */
+    public static boolean hasMindustryXRuntimeMarkers() {
+        for (ClassLoader loader : overlayUiClassLoaders()) {
+            if (hasMindustryXMarker(loader)) return true;
+        }
+        return false;
+    }
+
     public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
         ClassNotFoundException last = null;
         Iterable<ClassLoader> loaders = compatibleMindustryXClassLoaders();

@@ -6,28 +6,28 @@
 
 ### 本次新增
 
-- **内置 LogicSugar 升级到 v5.7.0**，逻辑编辑器新增下面这项能力。
-- **支持从原版 Mlog 重建「控制多个单位」「控制一个单位」等单位控制积木**
-- **每个子模块都能在设置里单独开关**（关掉的模块在下次启动前完全不加载）
+- **内置 LogicSugar 升级到 v5.7.1**（下面的修复与改动都来自它）
+- **OverlayUI 兼容层有了独立总开关**（和其它子模块一样，重启生效；关掉后本次会话由内置兜底实现接管）
 
 ### 本次修复
 
-- **表达式卡在编辑、复制与重开时不再闪烁、丢焦点或退化成普通积木**
-- **FuncDef 的「返回」框填错值后逻辑编辑器不再打不开**（现在会标红）
-- **移动端拖动不再需要先长按**（快速滑动即可拖动，小位移仍用长按微调）
-- **在逻辑文本里写 `@counter = 0` 不再落成无效积木**
+- **表达式卡里的数据 getter 与跨格内存下标保存、重开后不再退化成裸指令**（`stack.top()`、`queue.front()`、`deque.back()`、`x = buf[i]` 这类写法现在原样回来）
+
+### 本次改动
+
+- **移除 `@counter` 指示线**（写 `@counter` 的积木不再显示跳转徽标与候选目标幻影线）
 
 ## English
 
 ### Added
 
-- **Bundled LogicSugar is now v5.7.0**, adding the capability below to the logic editor.
-- **Rebuild LogicSugar's unit-control blocks ("Control Units", "Control One Unit") from vanilla mlog**
-- **Every sub-module has its own master switch in the settings** (a module switched off is not loaded at all until the next restart)
+- **Bundled LogicSugar is now v5.7.1** (the fix and the change below come from it)
+- **The OverlayUI compat layer has its own master switch** (like every other sub-module; restart to apply, and while it is off the built-in fallback serves the overlay for that session)
 
 ### Fixed
 
-- **Expression cards no longer flicker, lose focus, or degrade into plain blocks while editing, copying, or reopening**
-- **The logic editor no longer becomes unopenable after a wrong value in a FuncDef's return field** (it is marked red now)
-- **Mobile drag no longer requires a long press first** (a quick swipe starts the drag; small movements still use the long-press fine adjustment)
-- **`@counter = 0` written in the logic text view no longer ends up as an invalid block**
+- **Data-structure getters and multi-cell span subscripts in expression cards no longer degrade into raw instructions after saving and reopening** (`stack.top()`, `queue.front()`, `deque.back()`, `x = buf[i]` now come back as written)
+
+### Changed
+
+- **Removed the `@counter` indicator line** (cards that write `@counter` no longer show a jump badge or candidate-target phantom lines)

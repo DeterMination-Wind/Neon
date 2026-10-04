@@ -25,7 +25,14 @@ main 入口 → vanillaOverlayUi()
 - `AutoDetectingOverlayUiBridge`（49 行）包装选型结果：探测到可用的 MDtX 就代理过去，否则落回 Neon 内嵌实现。
 - `MindustryXOverlayUiBridge.loadMindustryXClass()` 会依次尝试多个类加载器解析 MDtX 类（MDtX 的加载器与普通 mod 不同），全部失败才抛 `ClassNotFoundException`。**ocb bundled 后，Neon 自己的类加载器里就有 `mindustryX.features.ui.OverlayUI`（`LegacyMindustryXGuard` 把自身 loader 列为候选），因此原版环境必然在此步命中 ocb 副本**。
 - 已在 `mainX` 里时不用探测——入口构造函数已注入确定实现。
-- ocb 主类 `OverlayCompatBridgeMod`（BekToolsMod 初始化为首个基础设施模块）负责 OverlayUI 的初始化时机、`Z` 键与齿轮按钮；检测到真 MindustryX 运行时会自动休眠（`UNAVAILABLE_CLASS`），把控制权完整让给 MDtX。MindustryX 是客户端而不是名为 `mindustryx`/`mdtx` 的模组，系统属性也经常不在，所以休眠判定必须包含标记类 `mindustryX.VarsX` / `mindustryX.loader.Main`。漏判时桥会再挂一颗齿轮，和 X 自带的 Overlay 按钮重叠。
+- ocb 主类 `OverlayCompatBridgeMod`（BekToolsMod 初始化的首个模块）负责 OverlayUI 的初始化时机、`Z` 键与齿轮按钮；检测到真 MindustryX 运行时会自动休眠（`UNAVAILABLE_CLASS`），把控制权完整让给 MDtX。MindustryX 是客户端而不是名为 `mindustryx`/`mdtx` 的模组，系统属性也经常不在，所以休眠判定必须包含标记类 `mindustryX.VarsX` / `mindustryX.loader.Main`。漏判时桥会再挂一颗齿轮，和 X 自带的 Overlay 按钮重叠。
+
+## ocb 的总开关（`ocb-enabled`）
+
+ocb 与其它子模组一样有加载期总开关（默认开，重启生效）。关闭时它不会被构造/初始化，本次会话的 Overlay 改由冻结副本 `neoncompat.overlay` 提供。两个必须成对的前提：
+
+1. **选型必须知道开关状态**：ocb 的 `mindustryX.features.ui.OverlayUI` 与 MindustryX 同 FQCN 且始终在 Neon 的 jar 里，光靠「类能不能解析出来」分不出「真 MindustryX」和「我们那份没初始化的副本」；后者没有齿轮按钮 / `Z` 键 / 管理器，消费模块会注册一批没人打得开的窗口。所以入口在探测前调 `OverlayUiBridge.setBundledOverlayActive(moduleEnabled("ocb"))`（`BekToolsMod.vanillaOverlayUi()`，即 `AUTO_DETECT` 锁存代理之前）。真 MindustryX 仍然优先：判定用标记类 `mindustryX.VarsX` / `mindustryX.loader.Main`（`LegacyMindustryXGuard.hasMindustryXRuntimeMarkers()`），不依赖经常缺失的系统属性。
+2. **兜底副本自己能初始化**：`NeonEmbeddedOverlayUiBridge` 在首次注册窗口时调 `NeonOverlayBootstrap.ensureInitialized()`，不依赖 ocb 主类，所以关掉 ocb 的会话仍然有齿轮 / `Z` 键 / 管理器（内容为冻结快照，比真源旧）。
 
 ## 守卫：LegacyMindustryXGuard
 
@@ -37,7 +44,7 @@ main 入口 → vanillaOverlayUi()
 
 ## 原版回退：neoncompat.overlay（已冻结）
 
-`neoncompat.overlay` 是 ocb 真源并入前的**手工改包副本**（`OverlayUI`/`AdsorptionSystem`/`NeonOverlayBootstrap`）。ocb 子模块就位后，正常路径不会再选中它（`AutoDetectingOverlayUiBridge` 总能经 Guard 命中 ocb 副本），它仅作为「ocb 模块初始化失败」时的兜底保留。
+`neoncompat.overlay` 是 ocb 真源并入前的**手工改包副本**（`OverlayUI`/`AdsorptionSystem`/`NeonOverlayBootstrap`）。ocb 子模块就位后，正常路径不会再选中它（`AutoDetectingOverlayUiBridge` 总能经 Guard 命中 ocb 副本），它承担两个兜底场合：「ocb 模块初始化失败」和「ocb 总开关关闭」（见上节）。
 
 | 类 | 状态 |
 | --- | --- |

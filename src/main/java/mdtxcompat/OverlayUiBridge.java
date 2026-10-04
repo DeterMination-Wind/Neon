@@ -16,6 +16,20 @@ public interface OverlayUiBridge {
         return AUTO_DETECT;
     }
 
+    /**
+     * Tells the auto-detecting bridge whether Neon's bundled OverlayUI copy (the {@code ocb}
+     * sub-module) is active in this session.
+     *
+     * <p>The copy carries MindustryX's FQCN and always sits in Neon's jar, so a successful
+     * reflective probe is not proof that a real MindustryX is running: with the module switched
+     * off the class exists but was never initialized (no gear button, no {@code Z} key, no
+     * manager). The entry point that owns the master switch calls this before the first probe
+     * locks the delegate; a real MindustryX runtime still wins through its marker classes.</p>
+     */
+    static void setBundledOverlayActive(boolean active){
+        AutoDetectingOverlayUiBridge.setBundledOverlayActive(active);
+    }
+
     boolean isSupported();
 
     OverlayWindowHandle registerWindow(String name, Table table, Prov<Boolean> availability);

@@ -334,7 +334,7 @@ datapatch 可以修改游戏数据库中的对象或属性。PatchViewer 把修�
 
 ### OverlayUI
 
-OverlayUI 是用于管理游戏内悬浮窗口的界面层。Neon 在原版客户端提供兼容的窗口入口；在 MindustryX 或兼容桥接环境中，支持的模块可以接入外部 OverlayUI。Overlay 窗口不是服务器界面，其他玩家不会因为你打开本地窗口而看到相同内容。
+OverlayUI 是用于管理游戏内悬浮窗口的界面层。Neon 在原版客户端提供兼容的窗口入口；在 MindustryX 或兼容桥接环境中，支持的模块可以接入外部 OverlayUI。Overlay 窗口不是服务器界面，其他玩家不会因为你打开本地窗口而看到相同内容。这一层在设置里有自己的总开关（重启生效）：关掉后它不再加载，本次会话的窗口由 Neon 内置的兜底实现接管；在真 MindustryX 上始终优先用 X 自己的 OverlayUI。
 
 ### 纯客户端是什么意思？
 
@@ -568,7 +568,7 @@ Logic can read a building by coordinates at runtime instead of using an explicit
 
 #### OverlayUI
 
-OverlayUI is the in-game layer used to manage floating windows. Neon supplies a compatible entry on vanilla clients and can connect supported features to MindustryX or a compatible bridge. These windows are local client UI.
+OverlayUI is the in-game layer used to manage floating windows. Neon supplies a compatible entry on vanilla clients and can connect supported features to MindustryX or a compatible bridge. These windows are local client UI. The layer has its own master switch in the settings (restart to apply): with it off the bundled implementation is not loaded and the built-in fallback serves the windows for that session, while a real MindustryX keeps using its own OverlayUI.
 
 #### Client-side
 

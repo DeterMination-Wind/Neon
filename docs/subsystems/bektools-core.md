@@ -30,7 +30,7 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 
 - `markBundled` / `initializeModule` / `initializeFeature` 入口先查 `isModuleGatedOut(moduleId)`：开关关闭时直接短路，不构造对象、不 `init()`、不注册任何钩子/监听器，并记入 `gatedModules`。它与 `moduleFailures` 是两个集合：前者是用户主动关闭，后者是初始化失败。
 - 语义是**重启生效**：Java 类无法卸载，所以关闭开关只保证“下次启动不加载”；本次运行仍靠模块自己的运行期检查（如果它实现了）停止行为。
-- `ocb`（OverlayUI 兼容层）与 usage-reporter 没有 gate，属于基础设施，始终加载；`ocb` 在原生客户端为其它模块绑定 `mindustryX.features.ui.OverlayUI`。
+- 只有 usage-reporter 没有 gate：它是纯遥测基础设施，始终加载。`ocb`（OverlayUI 兼容层）也有总开关（`ocb-enabled`，默认开）：它在原生客户端为其它模块绑定 `mindustryX.features.ui.OverlayUI`，关掉后由内置冻结副本 `neoncompat.overlay` 接管本次会话的 Overlay（详见 [overlay-compat.md](overlay-compat.md)）。
 - 没有自带开关（或完全没有设置项）的模块由 `ModuleEntry.neonSwitch` 标记，Neon 用 `RbmStyle.IconCheckSetting` 在分组首行渲染总开关；键沿用各模块自身的设置前缀（多为 `<prefix>-enabled`，如 `smp-enabled`、`ls-enabled`、`random-enabled`、`lockattack-enabled`）。
 
 之后在 `ClientLoadEvent` 中：

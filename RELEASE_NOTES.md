@@ -4,30 +4,22 @@
 
 ## 中文
 
-### 本次新增
-
-- **内置 LogicSugar 升级到 v5.7.1**（下面的修复与改动都来自它）
-- **OverlayUI 兼容层有了独立总开关**（和其它子模块一样，重启生效；关掉后本次会话由内置兜底实现接管）
-
 ### 本次修复
 
-- **表达式卡里的数据 getter 与跨格内存下标保存、重开后不再退化成裸指令**（`stack.top()`、`queue.front()`、`deque.back()`、`x = buf[i]` 这类写法现在原样回来）
+- **MindustryX 上不再冒出 Neon 自己的齿轮**（悬浮窗口统一交给 X 自己的 OverlayUI 管理，物流监控等窗口正常进入 X 的窗口管理器）
+- **X 加载器被跳过或禁用时，Neon 正确按原版客户端工作**（悬浮窗口照常显示，而不是把入口让给一个并没有真正运行的 X）
 
 ### 本次改动
 
-- **移除 `@counter` 指示线**（写 `@counter` 的积木不再显示跳转徽标与候选目标幻影线）
+- **OverlayUI 兼容层总开关改成真关断**：关闭后原版客户端不再显示悬浮窗口（无齿轮、无 `Z` 键，窗口注册变为空操作），重启生效；内置兜底只在兼容层初始化失败时接管，MindustryX 客户端不受影响
 
 ## English
 
-### Added
-
-- **Bundled LogicSugar is now v5.7.1** (the fix and the change below come from it)
-- **The OverlayUI compat layer has its own master switch** (like every other sub-module; restart to apply, and while it is off the built-in fallback serves the overlay for that session)
-
 ### Fixed
 
-- **Data-structure getters and multi-cell span subscripts in expression cards no longer degrade into raw instructions after saving and reopening** (`stack.top()`, `queue.front()`, `deque.back()`, `x = buf[i]` now come back as written)
+- **Neon no longer shows its own gear button on MindustryX** (floating windows are left to X's own OverlayUI, and windows such as the logistics monitor show up in X's window manager)
+- **A skipped or disabled X loader now correctly falls back to vanilla behavior** (overlay windows keep working instead of handing control to an X runtime that is not actually active)
 
 ### Changed
 
-- **Removed the `@counter` indicator line** (cards that write `@counter` no longer show a jump badge or candidate-target phantom lines)
+- **The OverlayUI compat layer's master switch is now a real off switch**: with it off, vanilla clients show no overlay at all (no gear, no `Z` key, window registration is a no-op), restart to apply; the built-in fallback only takes over when the compat layer fails to initialize, and MindustryX clients are unaffected

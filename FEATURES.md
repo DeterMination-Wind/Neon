@@ -334,7 +334,7 @@ datapatch 可以修改游戏数据库中的对象或属性。PatchViewer 把修�
 
 ### OverlayUI
 
-OverlayUI 是用于管理游戏内悬浮窗口的界面层。Neon 在原版客户端提供兼容的窗口入口；在 MindustryX 或兼容桥接环境中，支持的模块可以接入外部 OverlayUI。Overlay 窗口不是服务器界面，其他玩家不会因为你打开本地窗口而看到相同内容。这一层在设置里有自己的总开关（重启生效）：关掉后它不再加载，本次会话的窗口由 Neon 内置的兜底实现接管；在真 MindustryX 上始终优先用 X 自己的 OverlayUI。
+OverlayUI 是用于管理游戏内悬浮窗口的界面层。Neon 在原版客户端提供兼容的窗口入口；在 MindustryX 或兼容桥接环境中，支持的模块可以接入外部 OverlayUI。Overlay 窗口不是服务器界面，其他玩家不会因为你打开本地窗口而看到相同内容。这一层在设置里有自己的总开关（重启生效）：关掉后原版客户端不再显示悬浮窗口（无齿轮、无 Z 键，窗口注册变为空操作），内置兜底实现只在兼容层初始化失败时接管；在真 MindustryX 上始终优先用 X 自己的 OverlayUI。
 
 ### 纯客户端是什么意思？
 
@@ -568,7 +568,7 @@ Logic can read a building by coordinates at runtime instead of using an explicit
 
 #### OverlayUI
 
-OverlayUI is the in-game layer used to manage floating windows. Neon supplies a compatible entry on vanilla clients and can connect supported features to MindustryX or a compatible bridge. These windows are local client UI. The layer has its own master switch in the settings (restart to apply): with it off the bundled implementation is not loaded and the built-in fallback serves the windows for that session, while a real MindustryX keeps using its own OverlayUI.
+OverlayUI is the in-game layer used to manage floating windows. Neon supplies a compatible entry on vanilla clients and can connect supported features to MindustryX or a compatible bridge. These windows are local client UI. The layer has its own master switch in the settings (restart to apply): with it off vanilla clients show no floating windows at all (no gear, no Z key, window registration becomes a no-op), and the built-in fallback only takes over when the compatibility layer fails to initialize; a real MindustryX always keeps using its own OverlayUI.
 
 #### Client-side
 

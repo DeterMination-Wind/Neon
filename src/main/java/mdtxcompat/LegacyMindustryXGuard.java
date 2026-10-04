@@ -1,44 +1,40 @@
 package mdtxcompat;
 
 import mindustry.Vars;
-import mindustry.mod.Mods;
 
 import java.util.LinkedHashSet;
 
 /** MindustryX runtime detection, cross-classloader class loading, and the minimum-version guard that rejects legacy X builds. */
 public final class LegacyMindustryXGuard {
     public static final String MINIMUM_VERSION = "2026.04.03.B439";
-    private static final String[] MINDUSTRYX_MOD_NAMES = {"mindustryx", "mdtx"};
     private static final String[] MINDUSTRYX_MARKER_CLASSES = {"mindustryX.VarsX", "mindustryX.loader.Main"};
 
     private LegacyMindustryXGuard() {
     }
 
+    /**
+     * Whether a real MindustryX runtime is present. The reliable signal is a marker class on the
+     * game core loader: system properties and mod names also match skipped or disabled loader
+     * mods, and Neon's own same-FQCN overlay copy lives in a mod loader, never on the core.
+     */
     public static boolean isMindustryXRuntime() {
-        if ("1".equals(System.getProperty("mdtx.loader"))) return true;
-        return System.getProperty("MDTX-loaded") != null;
+        return hasMindustryXMarker(Vars.class.getClassLoader());
     }
 
     /**
-     * Whether any candidate class loader exposes MindustryX's marker classes, i.e. a real
-     * MindustryX runtime is present. The system properties read by
-     * {@link #isMindustryXRuntime()} are often absent on current builds, so this is the reliable
-     * signal — the same one the bundled overlay copy uses to go dormant, and what tells a real
-     * MindustryX apart from Neon's own same-FQCN copy when the {@code ocb} module is switched off
-     * ({@link mdtxcompat.OverlayUiBridge#setBundledOverlayActive}).
+     * Resolves a MindustryX class. When the core loader really carries MindustryX, only that
+     * chain is used, so Neon can never bind a same-named copy from a mod realm; otherwise fall
+     * back to this mod's loader (Neon's bundled compatibility copy), the context loader, the
+     * shared ModClassLoader (which walks every mod child), and finally the system loader.
      */
-    public static boolean hasMindustryXRuntimeMarkers() {
-        for (ClassLoader loader : overlayUiClassLoaders()) {
-            if (hasMindustryXMarker(loader)) return true;
-        }
-        return false;
-    }
-
     public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
-        ClassNotFoundException last = null;
-        Iterable<ClassLoader> loaders = compatibleMindustryXClassLoaders();
+        ClassLoader core = Vars.class.getClassLoader();
+        if (hasMindustryXMarker(core)) {
+            return Class.forName(name, false, core);
+        }
 
-        for (ClassLoader loader : loaders) {
+        ClassNotFoundException last = null;
+        for (ClassLoader loader : fallbackClassLoaders()) {
             try {
                 return Class.forName(name, false, loader);
             } catch (ClassNotFoundException e) {
@@ -47,15 +43,6 @@ public final class LegacyMindustryXGuard {
         }
 
         throw last == null ? new ClassNotFoundException(name) : last;
-    }
-
-    public static ClassLoader runtimeClassLoader() {
-        if (Vars.mods != null) {
-            ClassLoader loader = Vars.mods.getClass().getClassLoader();
-            if (loader != null) return loader;
-        }
-        ClassLoader loader = Vars.class.getClassLoader();
-        return loader == null ? LegacyMindustryXGuard.class.getClassLoader() : loader;
     }
 
     public static void rejectLegacyMindustryX(String modName) {
@@ -69,51 +56,18 @@ public final class LegacyMindustryXGuard {
         );
     }
 
-    private static Mods.LoadedMod locateMindustryX() {
-        if (Vars.mods == null) return null;
-        try {
-            for (String name : MINDUSTRYX_MOD_NAMES) {
-                Mods.LoadedMod mod = Vars.mods.locateMod(name);
-                if (mod != null) return mod;
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private static LinkedHashSet<ClassLoader> mindustryXRuntimeClassLoaders() {
+    private static LinkedHashSet<ClassLoader> fallbackClassLoaders() {
         LinkedHashSet<ClassLoader> loaders = new LinkedHashSet<>();
+        addLoader(loaders, LegacyMindustryXGuard.class.getClassLoader());
         addLoader(loaders, Thread.currentThread().getContextClassLoader());
-
-        Mods.LoadedMod mindustryX = locateMindustryX();
-        if (mindustryX != null) addLoader(loaders, mindustryX.loader);
-
-        addLoader(loaders, runtimeClassLoader());
+        if (Vars.mods != null) addLoader(loaders, Vars.mods.mainLoader());
         addLoader(loaders, Vars.class.getClassLoader());
         addLoader(loaders, ClassLoader.getSystemClassLoader());
         return loaders;
     }
 
-    private static LinkedHashSet<ClassLoader> overlayUiClassLoaders() {
-        LinkedHashSet<ClassLoader> loaders = mindustryXRuntimeClassLoaders();
-        addLoader(loaders, LegacyMindustryXGuard.class.getClassLoader());
-        return loaders;
-    }
-
-    private static LinkedHashSet<ClassLoader> compatibleMindustryXClassLoaders() {
-        LinkedHashSet<ClassLoader> candidates = overlayUiClassLoaders();
-        LinkedHashSet<ClassLoader> loaders = new LinkedHashSet<>();
-
-        // Prefer loaders that actually expose MindustryX marker classes, but keep every
-        // candidate for OverlayCompatBridge and other compatibility implementations.
-        for (ClassLoader loader : candidates) {
-            if (hasMindustryXMarker(loader)) addLoader(loaders, loader);
-        }
-        loaders.addAll(candidates);
-        return loaders;
-    }
-
     private static boolean hasMindustryXMarker(ClassLoader loader) {
+        if (loader == null) return false;
         for (String marker : MINDUSTRYX_MARKER_CLASSES) {
             if (classExists(marker, loader)) return true;
         }

@@ -1,5 +1,6 @@
 package betterpolyai.features;
 
+import mindustry.Vars;
 import mindustry.ai.types.BuilderAI;
 
 import java.lang.reflect.Field;
@@ -34,8 +35,8 @@ final class MindustryXBuilderAiProbe {
         resolved = true;
 
         try {
-            overlayUiClass = Class.forName(overlayUiClassName);
-            auxiliaryToolsClass = Class.forName(auxiliaryToolsClassName);
+            overlayUiClass = resolveXClass(overlayUiClassName);
+            auxiliaryToolsClass = resolveXClass(auxiliaryToolsClassName);
             overlayWindowsField = findField(overlayUiClass, "windows");
             selectAiField = findField(auxiliaryToolsClass, "selectAI");
             available = selectAiField != null;
@@ -77,6 +78,20 @@ final class MindustryXBuilderAiProbe {
         }
 
         return null;
+    }
+
+    /**
+     * Resolves a MindustryX class from the game core loader first and only then from
+     * this mod's loader. A real MindustryX lives on the core loader; asking our own
+     * (child-first) loader first would bind to a same-named copy bundled by another
+     * mod (e.g. Neon's OverlayUI compat layer) instead of the class MindustryX uses.
+     */
+    private static Class<?> resolveXClass(String name) throws ClassNotFoundException {
+        try {
+            return Class.forName(name, false, Vars.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return Class.forName(name);
+        }
     }
 
     private static Field findField(Class<?> type, String name) {

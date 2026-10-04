@@ -9,8 +9,10 @@ final class AutoDetectingOverlayUiBridge implements OverlayUiBridge {
     private final MindustryXOverlayUiBridge external = new MindustryXOverlayUiBridge();
     private final NeonEmbeddedOverlayUiBridge embedded = new NeonEmbeddedOverlayUiBridge();
     /**
-     * Whether Neon's bundled OverlayUI copy (the ocb sub-module) was initialized this session;
-     * its class lives in Neon's jar either way, see {@link OverlayUiBridge#setBundledOverlayActive}.
+     * Whether Neon's bundled OverlayUI copy (the ocb sub-module) actually came up this session.
+     * Its class lives in Neon's jar either way, so a successful reflective probe alone cannot
+     * tell a real MindustryX apart from the bundled copy; see
+     * {@link OverlayUiBridge#setBundledOverlayActive}.
      */
     private static boolean bundledOverlayActive = true;
     private OverlayUiBridge lockedDelegate;
@@ -51,15 +53,9 @@ final class AutoDetectingOverlayUiBridge implements OverlayUiBridge {
         }
 
         // A resolvable OverlayUI class does not prove a real MindustryX runtime: the bundled copy
-        // shares its FQCN and is always in Neon's jar. With the ocb master switch off that copy is
-        // never initialized (no gear button / Z key / manager), so only a real MindustryX — its
-        // marker classes are the reliable signal, the same rule ocb uses to go dormant — keeps the
-        // external bridge; everything else falls back to the frozen embedded copy.
-        if (!bundledOverlayActive && !LegacyMindustryXGuard.hasMindustryXRuntimeMarkers()) {
-            return embedded;
-        }
-
-        if (external.isSupported()) {
+        // shares its FQCN and always sits in Neon's jar. Only bind it when the ocb module really
+        // came up this session; otherwise the frozen embedded copy serves the overlay.
+        if (bundledOverlayActive && external.isSupported()) {
             return external;
         }
 

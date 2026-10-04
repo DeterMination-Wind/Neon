@@ -23,6 +23,8 @@ public class OverlayCompatBridgeMod extends Mod {
     private static boolean installed;
     /** True is cached as soon as markers show. False is cached only after the HUD exists, so an early miss can be retried. */
     private static Boolean mindustryXRuntime;
+    /** True while this bridge owns the overlay; the bundled OverlayUI copy refuses to attach while false. */
+    private static boolean serving;
 
     private enum OverlayState {
         UNRESOLVED,
@@ -64,9 +66,10 @@ public class OverlayCompatBridgeMod extends Mod {
      * When a real MindustryX runtime is present it owns mindustryX.features.ui.OverlayUI
      * and already draws the gear button. This bridge must stay dormant instead of binding
      * its bundled copy, or the two buttons overlap.
-     * Loader properties and a mod named mindustryx/mdtx are not enough: X is the client.
-     * Marker classes ({@code mindustryX.VarsX}, {@code mindustryX.loader.Main}) are the
-     * reliable signal and are not shipped in this jar.
+     * The only reliable signal is a marker class on the game core loader
+     * ({@code mindustryX.VarsX} / {@code mindustryX.loader.Main}). Loader properties and a
+     * mod named mindustryx/mdtx also match skipped or disabled loader mods, and are not
+     * shipped in this jar anyway.
      */
     private static boolean isMindustryXRuntime() {
         if (mindustryXRuntime != null) return mindustryXRuntime;
@@ -77,6 +80,11 @@ public class OverlayCompatBridgeMod extends Mod {
         }
         if (dormancyDecisionReady()) mindustryXRuntime = Boolean.FALSE;
         return false;
+    }
+
+    /** Whether this bridge owns the overlay this session. The bundled copy's init() is a no-op otherwise. */
+    public static boolean overlayServing() {
+        return serving;
     }
 
     /** Same gate as binding. A negative answer before this stays uncached. */
@@ -91,19 +99,11 @@ public class OverlayCompatBridgeMod extends Mod {
     }
 
     private static boolean probeMindustryXRuntime() {
-        if ("1".equals(System.getProperty("mdtx.loader"))) return true;
-        if (System.getProperty("MDTX-loaded") != null) return true;
-        if (Vars.mods != null) {
-            for (String name : new String[]{"mindustryx", "mdtx"}) {
-                try {
-                    if (Vars.mods.locateMod(name) != null) return true;
-                } catch (Throwable ignored) {
-                }
-            }
-        }
+        // Core first: a real MindustryX lives on the game core loader, so ask it before any
+        // mod loader that might serve a same-named bundled copy.
         ClassLoader[] loaders = {
-            Thread.currentThread().getContextClassLoader(),
             Vars.class.getClassLoader(),
+            Thread.currentThread().getContextClassLoader(),
             ClassLoader.getSystemClassLoader(),
             OverlayCompatBridgeMod.class.getClassLoader()
         };
@@ -122,6 +122,7 @@ public class OverlayCompatBridgeMod extends Mod {
 
     /** Drop a gear button this bridge already attached, so a late X detection cannot leave it up. */
     private void detachBundledOverlay() {
+        serving = false;
         if (overlayClass == null || overlayInstance == null) return;
         try {
             Method detach = overlayClass.getMethod("detach");
@@ -141,6 +142,7 @@ public class OverlayCompatBridgeMod extends Mod {
     private void update() {
         if (Vars.headless || Core.scene == null) return;
         if (isMindustryXRuntime()) {
+            serving = false;
             if (overlayInstance != null) detachBundledOverlay();
             if (overlayState != OverlayState.UNAVAILABLE_CLASS) {
                 setState(OverlayState.UNAVAILABLE_CLASS, "MindustryX runtime present; bridge stays dormant");
@@ -205,6 +207,8 @@ public class OverlayCompatBridgeMod extends Mod {
         if (overlayState == OverlayState.READY && isOverlayAttached()) return;
         if (overlayState == OverlayState.BINDING) return;
 
+        // From here the bridge owns the overlay this session; the bundled copy may attach.
+        serving = true;
         try {
             setState(OverlayState.BINDING, source + " starting lazy bind");
             overlayInstance = instanceField.get(null);

@@ -36,6 +36,7 @@ import mindustry.gen.Icon;
 import mindustry.gen.Tex;
 import mindustry.graphics.Pal;
 import mindustry.ui.Styles;
+import overlaycompat.OverlayCompatBridgeMod;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -817,6 +818,7 @@ public class OverlayUI {
     private boolean open;
     private boolean initialized;
     private boolean warnedOverlayButtonHidden;
+    private boolean warnedNotServing;
 
     private OverlayUI() {
         buildGroup();
@@ -845,6 +847,17 @@ public class OverlayUI {
     }
 
     public void init() {
+        // The bundled copy must not attach on its own: a real MindustryX owns the overlay,
+        // and the host may have switched this bridge off entirely. Consumers still get a
+        // Window handle from registerWindow; it just stays in an unattached group.
+        if (!OverlayCompatBridgeMod.overlayServing()) {
+            if (!warnedNotServing) {
+                warnedNotServing = true;
+                Log.info("[OverlayCompatBridge] OverlayUI init skipped: the bridge is not serving this session (real MindustryX present, or the host disabled the overlay).");
+            }
+            debugLogState("init-not-serving");
+            return;
+        }
         if (Core.scene == null) {
             Log.info("[OverlayCompatBridge] OverlayUI init skipped: scene is null.");
             debugLogState("init-no-scene");

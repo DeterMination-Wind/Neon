@@ -19,32 +19,43 @@ Neon 的悬浮窗口（Overlay）体验要在两种环境一致可用：原版�
 ```text
 main 入口 → vanillaOverlayUi()
               ├─ LegacyMindustryXGuard.rejectLegacyMindustryX("Neon")   // 旧 MDtX 加载器误入 → 抛错拒绝
+              ├─ ocb-enabled=false → OverlayUiBridge.UNSUPPORTED        // 开关关闭：整体不提供服务
               └─ OverlayUiBridge.autoDetect()                           // 运行时探测
 ```
 
-- `AutoDetectingOverlayUiBridge`（49 行）包装选型结果：探测到可用的 MDtX 就代理过去，否则落回 Neon 内嵌实现。
-- `MindustryXOverlayUiBridge.loadMindustryXClass()` 会依次尝试多个类加载器解析 MDtX 类（MDtX 的加载器与普通 mod 不同），全部失败才抛 `ClassNotFoundException`。**ocb bundled 后，Neon 自己的类加载器里就有 `mindustryX.features.ui.OverlayUI`（`LegacyMindustryXGuard` 把自身 loader 列为候选），因此原版环境必然在此步命中 ocb 副本**。
+- `AutoDetectingOverlayUiBridge` 包装选型结果，首次真正使用时锁存代理：
+  - 核心类加载器能解析标记类 `mindustryX.VarsX` / `mindustryX.loader.Main` → 真 MindustryX，用 `MindustryXOverlayUiBridge`；
+  - 否则 `bundledOverlayActive && external.isSupported()` → 用 `MindustryXOverlayUiBridge` 绑定 ocb 副本；
+  - 否则 → `NeonEmbeddedOverlayUiBridge`（冻结兜底）。
+- `LegacyMindustryXGuard.loadMindustryXClass()` 核心优先：真 X 在场时只用 `Vars.class.getClassLoader()` 那条链解析（找不到就抛 `ClassNotFoundException`，绝不回退到 mod realm，避免命中同名副本）；原版时按 自身加载器（Neon 的 ocb 副本）→ context → `Vars.mods.mainLoader()`（ModClassLoader 会遍历所有 mod 子加载器）→ system 回退。
 - 已在 `mainX` 里时不用探测——入口构造函数已注入确定实现。
-- ocb 主类 `OverlayCompatBridgeMod`（BekToolsMod 初始化的首个模块）负责 OverlayUI 的初始化时机、`Z` 键与齿轮按钮；检测到真 MindustryX 运行时会自动休眠（`UNAVAILABLE_CLASS`），把控制权完整让给 MDtX。MindustryX 是客户端而不是名为 `mindustryx`/`mdtx` 的模组，系统属性也经常不在，所以休眠判定必须包含标记类 `mindustryX.VarsX` / `mindustryX.loader.Main`。漏判时桥会再挂一颗齿轮，和 X 自带的 Overlay 按钮重叠。
+- ocb 主类 `OverlayCompatBridgeMod`（BekToolsMod 初始化的首个模块）负责 OverlayUI 的初始化时机、`Z` 键与齿轮按钮；它只以核心标记类判定真 MindustryX，命中即休眠（`UNAVAILABLE_CLASS`）并 `detach()` 已挂的齿轮。MindustryX 是客户端而不是名为 `mindustryx`/`mdtx` 的模组，系统属性也经常不在——旧判据（属性 / mod 名）在「X loader 被跳过或禁用」时会误报，已全部移除。
 
-## ocb 的总开关（`ocb-enabled`）
+## ocb 的总开关（`ocb-enabled`，语义：真关断）
 
-ocb 与其它子模组一样有加载期总开关（默认开，重启生效）。关闭时它不会被构造/初始化，本次会话的 Overlay 改由冻结副本 `neoncompat.overlay` 提供。两个必须成对的前提：
+ocb 与其它子模组一样有加载期总开关（默认开，重启生效）。**关闭时原版客户端整体不再提供 Overlay**：
 
-1. **选型必须知道开关状态**：ocb 的 `mindustryX.features.ui.OverlayUI` 与 MindustryX 同 FQCN 且始终在 Neon 的 jar 里，光靠「类能不能解析出来」分不出「真 MindustryX」和「我们那份没初始化的副本」；后者没有齿轮按钮 / `Z` 键 / 管理器，消费模块会注册一批没人打得开的窗口。所以入口在探测前调 `OverlayUiBridge.setBundledOverlayActive(moduleEnabled("ocb"))`（`BekToolsMod.vanillaOverlayUi()`，即 `AUTO_DETECT` 锁存代理之前）。真 MindustryX 仍然优先：判定用标记类 `mindustryX.VarsX` / `mindustryX.loader.Main`（`LegacyMindustryXGuard.hasMindustryXRuntimeMarkers()`），不依赖经常缺失的系统属性。
-2. **兜底副本自己能初始化**：`NeonEmbeddedOverlayUiBridge` 在首次注册窗口时调 `NeonOverlayBootstrap.ensureInitialized()`，不依赖 ocb 主类，所以关掉 ocb 的会话仍然有齿轮 / `Z` 键 / 管理器（内容为冻结快照，比真源旧）。
+- `vanillaOverlayUi()` 在 `rejectLegacyMindustryX` 之后直接返回 `OverlayUiBridge.UNSUPPORTED`（no-op 桥），不再 `autoDetect()`：没有齿轮按钮、没有 `Z` 键、所有 `registerWindow` 为空操作；
+- ocb 模块本身也被加载门短路，不会构造；`neoncompat.overlay` 冻结副本**不**在开关关闭时接管（它只负责「ocb 构造失败」这一条兜底路径）；
+- MindustryX 客户端不受影响：`mainX` 入口注入 `MindustryXOverlayUiBridge`，与开关无关。
+
+两个必须成对的前提：
+
+1. **选型必须知道 ocb 是否真的活着**：ocb 的 `mindustryX.features.ui.OverlayUI` 与 MindustryX 同 FQCN 且始终在 Neon 的 jar 里，光靠「类能不能解析出来」分不出「真 MindustryX」和「我们那份没初始化的副本」。入口在 `initializeModule("ocb", ...)` 之后立即调 `OverlayUiBridge.setBundledOverlayActive(overlayCompatBridge != null)`（`BekToolsMod` 构造器），探测锁存代理之前拿到的是「ocb 本会话确实构造成功」。真 MindustryX 仍然优先（核心标记类）。
+2. **副本自己有硬门控**：ocb 主类在确认由自己接管（`isSafeToBindNow()` 通过、即将 bind/init）时置 `serving=true`；休眠 / `detachBundledOverlay()` 时置回 false。`OverlayUI.init()` 首行检查 `overlayServing()`，false 时打一条说明日志后直接返回。这样即使消费模块直接反射调用副本的 `init()`，开关关闭或真 X 在场时也不会挂上齿轮；`registerWindow` 不受门控（窗口照常注册进未挂载的 group，拿到句柄但永不显示）。
 
 ## 守卫：LegacyMindustryXGuard
 
 定位：防止"旧版 MindustryX + 新版 Neon"这类半兼容组合静默出错。
 
 - 常量 `MINIMUM_VERSION = "2026.04.03.B439"`。
-- `isMindustryXRuntime()`（`rejectLegacyMindustryX` 用它）只看系统属性 `mdtx.loader=1` 和 `MDTX-loaded`。不要把标记类并进这个判定：当前 MindustryX 走 `mainX`，误判会让仍调用 `rejectLegacyMindustryX` 的原版入口直接抛错。标记类只给类加载器排序，以及给 ocb 的休眠判定用。
+- `isMindustryXRuntime()`（`rejectLegacyMindustryX` 用它）= **核心标记探测**：`Vars.class.getClassLoader()` 能解析 `mindustryX.VarsX` / `mindustryX.loader.Main`。桌面 dist、Android APK、loader 重启后的形态都适用；原版 + 被跳过/被禁用的 X loader mod 正确判为原版。旧 X 全量包仍会被拦住；当前 X 走 `mainX`，pre-relaunch 的原版实例不再误报。
+- `loadMindustryXClass()` 核心优先（见上节）：真 X 时只认核心那一份，绝不回退 mod realm；原版时才回退自身/context/ModClassLoader/system。
 - 对旧版本的处理是**显式失败**：reject 时给出升级或回退指引，而不是当作单个模块初始化失败继续跑。
 
 ## 原版回退：neoncompat.overlay（已冻结）
 
-`neoncompat.overlay` 是 ocb 真源并入前的**手工改包副本**（`OverlayUI`/`AdsorptionSystem`/`NeonOverlayBootstrap`）。ocb 子模块就位后，正常路径不会再选中它（`AutoDetectingOverlayUiBridge` 总能经 Guard 命中 ocb 副本），它承担两个兜底场合：「ocb 模块初始化失败」和「ocb 总开关关闭」（见上节）。
+`neoncompat.overlay` 是 ocb 真源并入前的**手工改包副本**（`OverlayUI`/`AdsorptionSystem`/`NeonOverlayBootstrap`）。ocb 子模块就位后，它只在**「ocb 模块构造/初始化失败」**这一条兜底路径上被选中（`bundledOverlayActive=false`）；ocb 总开关关闭时整体返回 no-op 桥，不会落到这里。勿与 `mindustryX.features.ui.OverlayUI` 手工同步。
 
 | 类 | 状态 |
 | --- | --- |
@@ -66,4 +77,4 @@ customMarker / Tripwire 这类需要放标记的功能：
 - **设置页某功能说明写着"需要 MindustryX"却没接上**：先确认客户端真跑了 `mainX`（看日志中入口类）；再确认 MDtX 版本 ≥ 守卫常量。
 - **窗口出现在错误位置/不吸附**：原版路径查 `AdsorptionSystem` 状态；MDtX 路径属 MDtX 自身行为。
 - **桥抛 ClassNotFoundException**：多为 MDtX 更新后改了内部类名，检查 `MindustryXSchematicShareBridge` 等实现里的目标类是否仍存在。
-- **原版环境 OverlayUI 完全缺失**：正常情况 ocb 副本一定存在（随 Neon 打包）；若日志出现"check whether that module failed to initialize"，到模块状态里查 `ocb` 是否初始化失败。
+- **原版环境 OverlayUI 完全缺失**：两种原因——`ocb-enabled=false`（预期行为：本次会话没有齿轮/`Z`/窗口，重启并在设置里打开即可）或 ocb 模块初始化失败（日志出现"check whether that module failed to initialize"，此时由冻结副本接管）。真 MindustryX 客户端不显示 Neon 的齿轮也是预期行为（用 X 自己的 OverlayUI）。

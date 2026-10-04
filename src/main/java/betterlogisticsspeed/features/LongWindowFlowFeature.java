@@ -29,6 +29,7 @@ import arc.util.Scaling;
 import arc.util.Strings;
 import arc.util.Time;
 import arc.util.pooling.Pools;
+import mindustry.Vars;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
 import mindustry.gen.Icon;
@@ -1338,22 +1339,31 @@ public class LongWindowFlowFeature {
     }
 
     private static class OverlayCompat {
+        private static final String overlayUiClassName = "mindustryX.features.ui.OverlayUI";
         private static boolean loggedFailure;
 
         static boolean hasOverlayUI() {
-            return classExists("mindustryX.features.ui.OverlayUI");
+            return resolveFromCore() != null || resolveFromSelf() != null;
         }
 
-        static boolean isMindustryX() {
-            return classExists("mindustryX.VarsX") || classExists("mindustryX.loader.Main");
-        }
-
-        private static boolean classExists(String name) {
+        /**
+         * A real MindustryX lives on the game core loader; ask it first so we never bind
+         * to a same-named bundled copy (Neon's OverlayUI compat layer) that this mod's
+         * child-first loader would otherwise serve.
+         */
+        private static Class<?> resolveFromCore() {
             try {
-                Class.forName(name, false, OverlayCompat.class.getClassLoader());
-                return true;
+                return Class.forName(overlayUiClassName, false, Vars.class.getClassLoader());
             } catch (ClassNotFoundException | LinkageError ignored) {
-                return false;
+                return null;
+            }
+        }
+
+        private static Class<?> resolveFromSelf() {
+            try {
+                return Class.forName(overlayUiClassName, false, OverlayCompat.class.getClassLoader());
+            } catch (ClassNotFoundException | LinkageError ignored) {
+                return null;
             }
         }
 
@@ -1361,13 +1371,22 @@ public class LongWindowFlowFeature {
             if (headless || Core.scene == null || table == null) return false;
 
             try {
-                Class<?> overlayClass = Class.forName("mindustryX.features.ui.OverlayUI", true, OverlayCompat.class.getClassLoader());
+                Class<?> overlayClass = resolveFromCore();
+                boolean fromCore = overlayClass != null;
+                if (overlayClass == null) overlayClass = resolveFromSelf();
+                if (overlayClass == null) return false;
+
                 Object overlay = overlayClass.getField("INSTANCE").get(null);
 
-                try {
-                    Method init = overlayClass.getMethod("init");
-                    init.invoke(overlay);
-                } catch (NoSuchMethodException ignored) {
+                // The core copy is the real MindustryX OverlayUI: MindustryX initializes
+                // it itself, and calling init() again would mount a duplicate window
+                // group. A bundled compat copy (Neon) still needs the explicit init.
+                if (!fromCore) {
+                    try {
+                        Method init = overlayClass.getMethod("init");
+                        init.invoke(overlay);
+                    } catch (NoSuchMethodException ignored) {
+                    }
                 }
 
                 Method register = overlayClass.getMethod("registerWindow", String.class, Table.class);
@@ -1380,7 +1399,7 @@ public class LongWindowFlowFeature {
                 windowClass.getMethod("setResizable", boolean.class).invoke(window, resizable);
 
                 return true;
-            } catch (ClassNotFoundException | NoClassDefFoundError missing) {
+            } catch (NoClassDefFoundError missing) {
                 return false;
             } catch (Throwable error) {
                 if (!loggedFailure) {

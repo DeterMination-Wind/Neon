@@ -33,7 +33,7 @@ Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号
 
 ## 发布正文风格（Release body）
 
-`RELEASE_NOTES.md` 就是 GitHub Release 的正文原文（CI 读取它，`generate_release_notes: false`），**只写当前版本**、中英对照。当前范式于 2026-09-25 从 LogicSugar 同步（其 `docs/release.md` 的同名小节是上游原文，范例即下面这份 N15 正文）：
+`RELEASE_NOTES.md` 就是 GitHub Release 的正文原文（CI 读取它，`generate_release_notes: false`），**只写当前版本**、中英对照。当前范式于 2026-10-11 从 LogicSugar v5.9.0 同步（其 `docs/release.md` 的同名小节是上游原文，范例即下面这份 N17 正文）：
 
 ````markdown
 > [!NOTE]
@@ -44,26 +44,38 @@ Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号
 
 ### 本次新增
 
-- **内置 LogicSugar 升级到 v5.4.0**，逻辑编辑器新增下面两项能力。
-- **支持把原版 Mlog 程序解析成 LogicSugar 特有的高级控制流**（例如 Switch / If）
-- **使用 OP / Expr 对 `@counter` 做常量操作时，积木左侧会预览一条类 Jump 的 `@counter` 跳转线**
+- **内置 LogicSugar 升级到 v5.9.0**
+- **变量界面的显示开关会被记住**
+- **性能分析器支持百分比视图**
+- **内置建造透视升级到 v1.2，效果淡入淡出且钻头光束也会透明**
+
+### 本次修复
+
+- **原版积木的悬停说明恢复显示**
+- **失败的断言与 `error` 指令现在会停机**
 
 ## English
 
 ### Added
 
-- **Bundled LogicSugar is now v5.4.0**, adding the two capabilities below to the logic editor.
-- **Parse vanilla mlog back into LogicSugar's structured control flow** (Switch / If, for example)
-- **Constant `@counter` writes from OP / Expr cards preview a Jump-like `@counter` line on the left of the block**
+- **Bundled LogicSugar is now v5.9.0**
+- **The Vars screen remembers your display switches**
+- **Profiler statistics support percentage view**
+- **Bundled Build X-ray is now v1.2, with fade in/out and transparent plasma bore beams**
+
+### Fixed
+
+- **Vanilla statements show their hover hints again**
+- **Failed assertions and `error` now stop the processor**
 ````
 
 写作规则：
 
 1. **结构固定**：顶部只有一个 `> [!NOTE]` 两行引用块（中文一行 + 英文一行）写版本要求，然后 `## 中文`、`## English`。不再用 `> [!IMPORTANT]` / `> [!WARNING]`，也不写构建命令、产物路径、测试数量与 commit 细节。
-2. **小节**：`### 本次新增` / `### 本次修复` / `### 本次改动` / `### 已知问题`，英文对应 `### Added` / `### Fixed` / `### Changed` / `### Known issues`；只保留本版真正涉及的小节，中英小节一一对应。聚合版「内置子模组升级到 vX」是用户能感知的事实，写成 `本次新增` 里的一条普通条目，不为它单开「本次更新 / Updated」小节。
-3. **条目只写一行**：以 `**粗体短标题**` 开头（英文 `**Bold lead-in**`），必要时用括号补一个例子，一句话讲**用户能感知到的结果**；不解释技术细节（类名、方法名、测试名、内部机制与实现原因都不写，留在 commit message 与 `docs/`）。
-4. **「本次修复」只写上一个已发布版本里用户能碰到的问题**：开发过程中用户反馈的问题、同一版本内新功能的内部缺陷，用户从未在任何已发布版本里见过，不构成「修复」，不写进 Release；功能首次发布只写它新增的能力。没有上一版真实缺陷时，整个「本次修复」小节省略。
-5. **粒度**：一条一件事，同主题合并；宁可少写，也不堆细节。
+2. **小节**：默认只有 `### 本次新增` / `### 本次修复`（英文 `### Added` / `### Fixed`）；本版确有行为变化、又归不进「修复」时才加 `### 本次改动` / `### Changed`。**不写「已知问题 / 兼容性」小节**：跨版本线格式与调试产物事实写在 [architecture.md](architecture.md) / [glossary.md](glossary.md)，不逐版复述。中英小节一一对应。聚合版「内置子模组升级到 vX」是用户能感知的事实，写成 `本次新增` 里的一条普通条目，不为它单开「本次更新 / Updated」小节。
+3. **条目就是一句完整的粗体话**：整条加粗、一行写完；不写括号补充、不写「（A / B / C）」式枚举清单、也不在粗体后接解释尾巴；枚举与实现细节留在设置描述、提交信息与 `docs/`。
+4. **篇幅**：全篇最多 3 个小节、条目总数不超过 6 条；常见形态就是两小节各 2 条。一条一件事，同主题合并，宁可少写。
+5. **「本次修复」只写上一个已发布版本里用户能碰到的问题**：开发过程中用户反馈的问题、同一版本内新功能的内部缺陷，用户从未在任何已发布版本里见过，不构成「修复」，不写进 Release；功能首次发布只写它新增的能力。没有上一版真实缺陷时，「本次修复」整节省略。
 6. **语言**：中文用中文标点与引号，英文用半角标点；两边各自通顺，不逐字直译。
 7. **历史不回填**：新版本一律按本范式写；历史正文以各版本的 GitHub Release 为准（N14 及更早是旧范式，保持原样）。
 

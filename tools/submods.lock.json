@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-10-10T12:18:47Z",
+  "generatedAtUtc": "2026-10-11T02:15:49Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -199,13 +199,13 @@
     },
     "bpa": {
       "sourceKind": "git",
-      "syncedHead": "c59c3ceb84da07eb93e23738f51128c0e57ebdd9",
-      "workspaceHeadAtSync": "c59c3ceb84da07eb93e23738f51128c0e57ebdd9",
+      "syncedHead": "f022e521b1870b40bf0be0b49d281019af4edab6",
+      "workspaceHeadAtSync": "f022e521b1870b40bf0be0b49d281019af4edab6",
       "workspaceDirtyAtSync": false,
       "upstreamRef": "origin/main",
-      "upstreamHeadAtSync": "39a2e1687477a5ca1026f87d7c11de3b3d1a9d47",
-      "aheadOfUpstreamAtSync": 5,
-      "behindUpstreamAtSync": 2,
+      "upstreamHeadAtSync": "f022e521b1870b40bf0be0b49d281019af4edab6",
+      "aheadOfUpstreamAtSync": 0,
+      "behindUpstreamAtSync": 0,
       "repoUrl": null,
       "branch": null,
       "localPath": "C:\\Users\\华硕\\Documents\\codex\\BetterPolyAi"
@@ -290,12 +290,12 @@
     },
     "ls": {
       "sourceKind": "git",
-      "syncedHead": "e957074abd5f862506e47ba3fc9be8ec7fd26edf",
-      "workspaceHeadAtSync": "e957074abd5f862506e47ba3fc9be8ec7fd26edf",
-      "workspaceDirtyAtSync": false,
+      "syncedHead": "d0ab4f5e39e17725a6c9e84ecb6105b3251a6667",
+      "workspaceHeadAtSync": "d0ab4f5e39e17725a6c9e84ecb6105b3251a6667",
+      "workspaceDirtyAtSync": true,
       "upstreamRef": "origin/main",
-      "upstreamHeadAtSync": "34c5849cccc127c9bfe65500c5a9ba17d7ec69f9",
-      "aheadOfUpstreamAtSync": 3,
+      "upstreamHeadAtSync": "d0ab4f5e39e17725a6c9e84ecb6105b3251a6667",
+      "aheadOfUpstreamAtSync": 0,
       "behindUpstreamAtSync": 0,
       "repoUrl": null,
       "branch": null,

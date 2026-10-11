@@ -16,7 +16,8 @@
       "trackUpstream": true,
       "javaPackageDir": "src/main/java/stealthpath",
       "mainClassFile": "StealthPathMod.java",
-      "bundlesDir": "src/main/resources/bundles"
+      "bundlesDir": "src/main/resources/bundles",
+      "preserveJavaFiles": ["StealthPathModX.java"]
     },
     {
       "id": "rbm",

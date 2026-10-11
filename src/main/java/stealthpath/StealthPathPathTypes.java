@@ -4,7 +4,6 @@ import arc.graphics.Color;
 import arc.struct.IntSeq;
 import arc.struct.Seq;
 import arc.util.Strings;
-import mindustry.entities.bullet.BulletType;
 import mindustry.gen.Building;
 import mindustry.gen.Unit;
 
@@ -42,60 +41,13 @@ final class Threat{
     final float range;
     final float minRange;
     final float dps;
-    final Building building;
-    final Unit unit;
-    final BulletType bullet;
-    final boolean targetAir;
-    final boolean targetGround;
-    final boolean tractor;
-    final boolean continuous;
-    final boolean preferStrongestTarget;
-    final float shotsPerSecond;
-    final float inaccuracy;
-    final int maxTargets;
 
     Threat(float x, float y, float range, float minRange, float dps){
-        this(x, y, range, minRange, dps, null, null, null, true, true, false, false, false, 0f, 0f, 1);
-    }
-
-    Threat(Building building, BulletType bullet, float range, float minRange, float dps, boolean targetAir, boolean targetGround, boolean tractor, boolean continuous, float shotsPerSecond, float inaccuracy){
-        this(building == null ? 0f : building.x, building == null ? 0f : building.y, range, minRange, dps,
-            building, null, bullet, targetAir, targetGround, tractor, continuous, false, shotsPerSecond, inaccuracy, 1);
-    }
-
-    Threat(Building building, BulletType bullet, float range, float minRange, float dps, boolean targetAir, boolean targetGround, boolean tractor, boolean continuous, boolean preferStrongestTarget, float shotsPerSecond, float inaccuracy){
-        this(building == null ? 0f : building.x, building == null ? 0f : building.y, range, minRange, dps,
-            building, null, bullet, targetAir, targetGround, tractor, continuous, preferStrongestTarget, shotsPerSecond, inaccuracy, 1);
-    }
-
-    Threat(Unit unit, BulletType bullet, float range, float minRange, float dps, boolean targetAir, boolean targetGround, boolean continuous, float shotsPerSecond, float inaccuracy){
-        this(unit == null ? 0f : unit.x, unit == null ? 0f : unit.y, range, minRange, dps,
-            null, unit, bullet, targetAir, targetGround, false, continuous, false, shotsPerSecond, inaccuracy, 1);
-    }
-
-    Threat(Unit unit, float range, float minRange, float dps, boolean targetAir, boolean targetGround, int maxTargets){
-        this(unit == null ? 0f : unit.x, unit == null ? 0f : unit.y, range, minRange, dps,
-            null, unit, null, targetAir, targetGround, false, false, false, 0f, 0f, maxTargets);
-    }
-
-    private Threat(float x, float y, float range, float minRange, float dps, Building building, Unit unit, BulletType bullet,
-                   boolean targetAir, boolean targetGround, boolean tractor, boolean continuous, boolean preferStrongestTarget, float shotsPerSecond, float inaccuracy, int maxTargets){
         this.x = x;
         this.y = y;
         this.range = Math.max(0f, range);
         this.minRange = Math.max(0f, minRange);
         this.dps = Math.max(0f, dps);
-        this.building = building;
-        this.unit = unit;
-        this.bullet = bullet;
-        this.targetAir = targetAir;
-        this.targetGround = targetGround;
-        this.tractor = tractor;
-        this.continuous = continuous;
-        this.preferStrongestTarget = preferStrongestTarget;
-        this.shotsPerSecond = Math.max(0f, shotsPerSecond);
-        this.inaccuracy = Math.max(0f, inaccuracy);
-        this.maxTargets = Math.max(1, maxTargets);
     }
 }
 

@@ -38,6 +38,7 @@ class SubMod:
     source_extra_resource_dirs: List[Path] = dataclasses.field(default_factory=list)
     inject_bek_hooks: bool = True
     allow_no_git: bool = False
+    preserve_java_files: List[str] = dataclasses.field(default_factory=list)
     track_upstream: bool = True
     repo_url: Optional[str] = None
     branch: Optional[str] = None
@@ -102,6 +103,7 @@ def load_config() -> List[SubMod]:
                 source_extra_resource_dirs=[Path(p) for p in m.get("sourceExtraResourceDirs", [])],
                 inject_bek_hooks=bool(m.get("injectBekHooks", True)),
                 allow_no_git=bool(m.get("allowNoGit", False)),
+                preserve_java_files=[str(p) for p in m.get("preserveJavaFiles", [])],
                 track_upstream=bool(m.get("trackUpstream", True)),
                 repo_url=m.get("repoUrl"),
                 branch=m.get("branch"),
@@ -1219,7 +1221,13 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
         target_pkg_dir.mkdir(parents=True, exist_ok=True)
 
         # Clear existing .java files in target package to avoid stale leftovers.
+        # `preserveJavaFiles` entries are Neon-side adapters with no upstream counterpart
+        # (sp's mainX entry), so the mirror must leave them in place.
+        preserve = set(mod.preserve_java_files)
         for p in target_pkg_dir.rglob("*.java"):
+            rel = p.relative_to(target_pkg_dir).as_posix()
+            if p.name in preserve or rel in preserve:
+                continue
             try:
                 p.unlink()
             except OSError:

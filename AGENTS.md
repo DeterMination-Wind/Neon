@@ -57,6 +57,8 @@ python .\tools\update_submods.py --verify-build   # 同步后追加 gradlew comp
   存在 `registerSettings()` 时必须含 `if(bekBundled) return;` 早退，括号必须平衡；
   任一失败即中止同步并指明问题，此时应人工更新 `inject_bek_hooks()` 的匹配逻辑。
   多数子模组已改为 `injectBekHooks=false`（子仓库内自行维护契约），注入主要服务少数老模块。
+- `preserveJavaFiles`（`submods.json`，目前仅 sp 使用）：列出的文件在镜像拷贝时不会被删除，
+  用于 Neon 侧独有的适配器（sp 的 `StealthPathModX.java` 是 mainX 入口，子仓库没有对应文件）。
 - bundle 合并规则：不同子模组对同一 key 给出不同值会直接报碰撞错误（不允许静默覆盖）；
   `tools/bektools-bundles/bundle*.properties` 中的条目是 Neon 侧**显式覆盖**，优先级最高；
   `ls`（LogicSugar）拥有 `logicsugar.` / `setting.logicsugar.` 前缀，以及它自己沿用的两个旧身份命名空间

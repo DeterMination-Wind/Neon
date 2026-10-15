@@ -8,6 +8,8 @@ import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
 import arc.graphics.gl.FrameBuffer;
 import arc.graphics.gl.Shader;
+import arc.input.KeyBind;
+import arc.input.KeyCode;
 import arc.math.Interp;
 import arc.math.Mathf;
 import arc.math.geom.Vec2;
@@ -41,13 +43,19 @@ import static mindustry.Vars.*;
  *     the captured content transparent exactly where the mask was drawn.</li>
  * </ol>
  * The captured windows are the ones the original used: the plasma bore beam, the legged
- * units, and the flying-unit layer (which also carries bullets and effects). Buildings and
- * floors are never captured - the build preview must stay readable.
+ * units, the darkness pass that carries unit and wall shadows, and the flying-unit layer
+ * (which also carries bullets and effects). Buildings and floors are never captured - the
+ * build preview must stay readable.
  *
  * v1.2 of the original added the fade in/out and with it a detail: while the effect fades
  * out there is no live input to redraw the mask from, so the last mask geometry is frozen
  * and replayed until the fade is over. Without that, a selection rectangle would pop away
  * the moment the mouse is released.
+ *
+ * v1.3 of the original added the cursor peek (hold the peek key, Alt by default, to x-ray
+ * only the spot around the pointer) and the darkness pass (unit and wall shadows). The
+ * keybind keeps its upstream name {@code build-xray.peek}; only the settings keys are
+ * renamed to the Neon {@code bx-*} form.
  */
 public class BuildXrayFeature{
     /** Master switch; Neon renders it in its unified settings page, the standalone mod in its own category. */
@@ -88,6 +96,8 @@ public class BuildXrayFeature{
     /** 0..1 fade progress, set from the fade times; smoothed into {@link #transProgress}. */
     private static float fadeProgress;
     private static float transProgress;
+    /** Cursor peek keybind (upstream v1.3), registered in {@link #init()}. */
+    private static KeyBind peekKey;
 
     /**
      * Last mask geometry, replayed while the fade-out runs; the frame id records whether the
@@ -110,6 +120,9 @@ public class BuildXrayFeature{
         "}\n";
 
     public static void init(){
+        // Kept on the upstream name and category so the display key stays the upstream one
+        // (keybind.build-xray.peek.name); only the settings keys use the Neon bx-* naming.
+        peekKey = KeyBind.add("build-xray.peek", KeyCode.altLeft, "build-xray");
         Events.run(EventType.Trigger.draw, BuildXrayFeature::draw);
     }
 
@@ -148,7 +161,10 @@ public class BuildXrayFeature{
         boolean breaking = input.isBreaking();
         boolean rebuildSelecting = input.isRebuildSelecting();
         boolean placingOrDropping = input.isPlacing() || input.isDroppingItem();
-        boolean planning = schematicSelecting || breaking || rebuildSelecting || placingOrDropping;
+        // Same keyboard-focus guard as the schematic branch: a text field owning the keyboard
+        // must swallow the peek key as well.
+        boolean peeking = peekKey != null && Core.input.keyDown(peekKey) && !Core.scene.hasKeyboard();
+        boolean planning = schematicSelecting || breaking || rebuildSelecting || placingOrDropping || peeking;
 
         long frame = Core.graphics.getFrameId();
 
@@ -197,7 +213,7 @@ public class BuildXrayFeature{
             freezeAreaMask(schemX, schemY, 0, frame);
         }
 
-        if(placingOrDropping){
+        if(placingOrDropping || peeking){
             Vec2 mouse = Core.input.mouseWorld();
             float x = mouse.x, y = mouse.y, radius = mouseMaskRadius;
             rect("circle-shadow", x, y, radius, radius);
@@ -224,6 +240,8 @@ public class BuildXrayFeature{
         applyTrans(Layer.power - 1.001f, Layer.power - 0.999f);
         // Legged units.
         applyTrans(Layer.legUnit - 2.001f, Layer.legUnit + 2.001f);
+        // Unit and wall shadows (upstream v1.3).
+        applyTrans(Layer.darkness - 0.001f, Layer.darkness + 0.001f);
         // Flying units, plus the bullets and effects sharing their window.
         applyTrans(Layer.flyingUnitLow - 2.001f, Layer.flyingUnit + 2.001f);
     }

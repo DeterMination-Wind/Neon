@@ -6,26 +6,10 @@
 
 ### 本次新增
 
-- **内置 LogicSugar 升级到 v5.9.0**
-- **变量界面的显示开关会被记住**
-- **性能分析器支持百分比视图**
-- **内置建造透视升级到 v1.2，效果淡入淡出且钻头光束也会透明**
-
-### 本次修复
-
-- **原版积木的悬停说明恢复显示**
-- **失败的断言与 `error` 指令现在会停机**
+- **内置建造透视升级到 v1.3，按住 Alt 只透视指针周围，单位与墙体阴影也会透明**
 
 ## English
 
 ### Added
 
-- **Bundled LogicSugar is now v5.9.0**
-- **The Vars screen remembers your display switches**
-- **Profiler statistics support percentage view**
-- **Bundled Build X-ray is now v1.2, with fade in/out and transparent plasma bore beams**
-
-### Fixed
-
-- **Vanilla statements show their hover hints again**
-- **Failed assertions and `error` now stop the processor**
+- **Bundled Build X-ray is now v1.3, with a hold-to-peek cursor x-ray and transparent unit and wall shadows**

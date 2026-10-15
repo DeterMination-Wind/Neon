@@ -6,7 +6,7 @@ plugins{
 def releaseArtifactBaseName = "Neon"
 
 group = "bektools"
-version = "170000"
+version = "180000"
 
 java{
     sourceCompatibility = JavaVersion.VERSION_17

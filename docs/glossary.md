@@ -19,13 +19,13 @@ Neon 全部功能运行在玩家自己的客户端，不要求服务器安装。
 ## 兼容机制
 
 ### OverlayUI
-管理游戏内悬浮窗口的界面层。原版客户端使用 Neon 内嵌实现（`neoncompat.overlay`）；MindustryX 环境复用 MDtX 的 OverlayUI。悬浮窗都是本地 UI，其他玩家看不到。
+管理游戏内悬浮窗口的界面层。原版客户端默认使用 ocb 子模组提供的同 FQCN `mindustryX.features.ui.OverlayUI`；仅当 ocb 构造失败时回退到冻结副本 `neoncompat.overlay`。MindustryX 环境复用 MDtX 自己的 OverlayUI。悬浮窗都是本地 UI，其他玩家看不到。
 
 ### 桥接口（bridge）
-`mdtxcompat` 包中隔离外部能力的接口族：`OverlayUiBridge`、`MarkerBridge`、`SchematicShareBridge` 等。模块只面向接口编程，由启动参数决定接入 MindustryX 实现、内嵌实现或 Noop 空实现。
+`mdtxcompat` 包中隔离外部能力的接口族：`OverlayUiBridge`、`MarkerBridge`、`SchematicShareBridge` 等。模块只面向接口编程，由入口与运行时探测决定接入 MindustryX 实现、ocb 的 OverlayUI 副本或 Noop 空实现。
 
 ### LegacyMindustryXGuard
-MDtX 版本守卫。设定最低可用版本（`2026.04.03.B439`），检测过旧的 MindustryX 并阻止桥接，回退到内嵌 Overlay 或 Noop，避免半兼容环境崩溃。
+MDtX 守卫。`MINIMUM_VERSION`（`2026.04.03.B439`）是声明的最低版本与拒绝信息中的升级目标；它用核心标记类探测真 MindustryX，真 X 运行时误入原版 `main` 时直接拒绝并给出升级/回退指引，**不做**版本字符串比较，也不会静默回退到内嵌 Overlay 或 Noop。
 
 ### X 变体（ModX）
 同一功能在 MindustryX 环境下的替换实现类（如 `PowerGridMinimapModX`）。仅做环境适配，业务逻辑留在基类。

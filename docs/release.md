@@ -1,6 +1,6 @@
 # 版本与发布
 
-Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号与构建都在本地完成，CI 只负责在 tag 推送后生成 GitHub Release**，不得依赖 CI 改版本或出包。
+Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号与构建都在本地完成，CI 只负责在 tag 推送后生成 GitHub Release**（手动 dispatch 只构建，不创建 Release），不得依赖 CI 改版本或出包。
 
 ## 版本号体系
 
@@ -10,6 +10,8 @@ Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号
 | 预发行 | `B<v>.<b>`，如 `B12.5` | `<v>0000 + <b>`，即 `120005` |
 
 - tag 只使用 `N*` 或 `B*`。
+- `mod.json` 与 `mod.hjson` 必须保持字段一致（当前 `hidden: true`、`minGameVersion: "160.1"`、`main`/`mainX` 双入口）；不要只改一份。
+- 本地 mod 任务默认的 dev 身份（`Neon-dev` / `0.0.0`）只用于临时构建，提交前还原；描述符版本变更只属于发布提交。
 - 更新器必须同时兼容三种历史形态：新数字版本码、预发行码、老的 `vX.Y.Z` 字符串。改动 [modupdater](subsystems/modupdater.md) 时用 `versionUtilTest` 回归。
 
 ## 发布前本地必做步骤
@@ -23,13 +25,13 @@ Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号
    ```powershell
    .\gradlew.bat clean deploy
    ```
-   环境要求：`ANDROID_SDK_ROOT` 指向完整 SDK，且不再走工作区 `commandlinetools-win-*` 兜底路径；先跑一遍 `.\gradlew.bat test` 确认回归任务全绿。
-3. **撰写 `RELEASE_NOTES.md`**：中英对照、只写当前版本，格式见下节「发布正文风格」；CI 直接把它作为 Release 正文。
+   环境要求：`ANDROID_SDK_ROOT` 指向完整 SDK，不设 `D8_PATH`，且不再走工作区 `commandlinetools-win-*` 兜底路径；先跑一遍 `.\gradlew.bat test` 确认回归任务全绿。
+3. **撰写 `RELEASE_NOTES.md`**：中英对照、只写当前版本，格式见下节「发布正文风格」；CI 直接把它作为 Release 正文。发布说明只放在 `RELEASE_NOTES.md`，不要写进 `README.md`。
 4. **拷贝并核实产物**
    - `dist/Neon.jar` → `../构建/Neon/Neon-v<标签>.jar`
    - `dist/Neon.zip` → `../构建/Neon/Neon-v<标签>.zip`
    
-   核实两个文件都存在、大小合理；桌面 jar（不含 dex）不允许进入发布流程。
+   核实两个文件都存在、大小合理；桌面 jar（不含 dex）不允许进入发布流程。同时确认 jar 内包含 `mod.json` 描述符、桌面 main 类与 `classes.dex`。
 
 ## 发布正文风格（Release body）
 

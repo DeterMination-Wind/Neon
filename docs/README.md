@@ -39,7 +39,8 @@ docs/
 ## 相关文件
 
 - [FEATURES.md](../FEATURES.md)：按功能的完整说明（30 个功能逐条介绍 + 术语解释）。
-- [AGENTS.md](../AGENTS.md)：仓库维护约束（版本号规则、设置接入规范、子模组同步）。
+- [AGENTS.md](../AGENTS.md)：代理行为与工作流约束（根目录只放全局规则与指针）。
+- 模块级代理说明：[tools/AGENTS.md](../tools/AGENTS.md)、[bektools/AGENTS.md](../src/main/java/bektools/AGENTS.md)、[mdtxcompat/AGENTS.md](../src/main/java/mdtxcompat/AGENTS.md)。
 - [README.md](../README.md)：项目主页。
 
 ## 维护约定
@@ -47,3 +48,4 @@ docs/
 - 用户指南描述"用"，子系统文档描述"怎么实现"。同一主题两边都会出现时，用户指南从操作视角写，子系统文档从代码结构写。
 - 快捷键可能被玩家自定义；文档只写默认值，并注明在 `设置 → 控制` 可改。
 - 默认关闭的功能必须在用户指南中标注，避免玩家误以为功能缺失。
+- 实现与命令事实以代码、`build.gradle` 和各专题文档为准；`AGENTS.md` 只约束代理行为与流程，不复制会漂移的实现细节。发现文档或指针过时，应在同一次改动里修正，不维护“以谁为准”的双真源。

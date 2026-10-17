@@ -18,7 +18,7 @@ Neon 的悬浮窗口（Overlay）体验要在两种环境一致可用：原版�
 
 ```text
 main 入口 → vanillaOverlayUi()
-              ├─ LegacyMindustryXGuard.rejectLegacyMindustryX("Neon")   // 旧 MDtX 加载器误入 → 抛错拒绝
+              ├─ LegacyMindustryXGuard.rejectLegacyMindustryX("Neon")   // 真 X 运行时误入原版 main → 抛错拒绝
               ├─ ocb-enabled=false → OverlayUiBridge.UNSUPPORTED        // 开关关闭：整体不提供服务
               └─ OverlayUiBridge.autoDetect()                           // 运行时探测
 ```
@@ -46,12 +46,12 @@ ocb 与其它子模组一样有加载期总开关（默认开，重启生效）�
 
 ## 守卫：LegacyMindustryXGuard
 
-定位：防止"旧版 MindustryX + 新版 Neon"这类半兼容组合静默出错。
+定位：阻止真 MindustryX 运行时误入原版 `main`，避免半兼容组合静默出错。
 
-- 常量 `MINIMUM_VERSION = "2026.04.03.B439"`。
-- `isMindustryXRuntime()`（`rejectLegacyMindustryX` 用它）= **核心标记探测**：`Vars.class.getClassLoader()` 能解析 `mindustryX.VarsX` / `mindustryX.loader.Main`。桌面 dist、Android APK、loader 重启后的形态都适用；原版 + 被跳过/被禁用的 X loader mod 正确判为原版。旧 X 全量包仍会被拦住；当前 X 走 `mainX`，pre-relaunch 的原版实例不再误报。
+- `MINIMUM_VERSION = "2026.04.03.B439"` 是声明的最低版本，也是拒绝信息中的升级目标；当前代码**不做**运行期版本字符串比较。
+- `isMindustryXRuntime()`（`rejectLegacyMindustryX` 用它）= **核心标记探测**：`Vars.class.getClassLoader()` 能解析 `mindustryX.VarsX` / `mindustryX.loader.Main`。桌面 dist、Android APK、loader 重启后的形态都适用；原版 + 被跳过/被禁用的 X loader mod 正确判为原版。
+- `rejectLegacyMindustryX("Neon")` 在**原版 main** 探测到 X 运行时就直接抛错并给出升级/回退指引，不是当作单个模块初始化失败继续跑；正常的 X 客户端走 `mainX`，不会走到这里。旧 X 加载器进入 `main` 会被拒绝；pre-relaunch 的原版实例不会被误判。
 - `loadMindustryXClass()` 核心优先（见上节）：真 X 时只认核心那一份，绝不回退 mod realm；原版时才回退自身/context/ModClassLoader/system。
-- 对旧版本的处理是**显式失败**：reject 时给出升级或回退指引，而不是当作单个模块初始化失败继续跑。
 
 ## 原版回退：neoncompat.overlay（已冻结）
 
@@ -74,7 +74,7 @@ customMarker / Tripwire 这类需要放标记的功能：
 
 ## 排障
 
-- **设置页某功能说明写着"需要 MindustryX"却没接上**：先确认客户端真跑了 `mainX`（看日志中入口类）；再确认 MDtX 版本 ≥ 守卫常量。
+- **设置页某功能说明写着"需要 MindustryX"却没接上**：先确认客户端真跑了 `mainX`（X 变体行为是否生效）；若日志出现 `LegacyMindustryXGuard` 的拒绝信息，按提示升级/回退——守卫不做版本比较，别只看版本号。
 - **窗口出现在错误位置/不吸附**：原版路径查 `AdsorptionSystem` 状态；MDtX 路径属 MDtX 自身行为。
 - **桥抛 ClassNotFoundException**：多为 MDtX 更新后改了内部类名，检查 `MindustryXSchematicShareBridge` 等实现里的目标类是否仍存在。
 - **原版环境 OverlayUI 完全缺失**：两种原因——`ocb-enabled=false`（预期行为：本次会话没有齿轮/`Z`/窗口，重启并在设置里打开即可）或 ocb 模块初始化失败（日志出现"check whether that module failed to initialize"，此时由冻结副本接管）。真 MindustryX 客户端不显示 Neon 的齿轮也是预期行为（用 X 自己的 OverlayUI）。

@@ -1,6 +1,6 @@
 # 子系统：聚合核心（bektools）
 
-`bektools` 包是 Neon 的壳：它不实现具体玩法功能，而是负责装载 30 个功能模块、收口设置、隔离故障、注册指令。相关页面：[架构总览](../architecture.md)、[开发指南的接入清单](../development.md)。
+`bektools` 包是 Neon 的壳：它不实现具体玩法功能，而是负责装载 29 个同步子模组与 Neon 内建 feature（customMarker、bss、profiler、usage reporter），收口设置、隔离故障、注册指令。相关页面：[架构总览](../architecture.md)、[开发指南的接入清单](../development.md)。
 
 ## 入口与构造
 
@@ -12,15 +12,15 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
   └─ super(new MindustryXOverlayUiBridge(), new MindustryXMarkerBridge(), X 工厂…)
 ```
 
-- `vanillaOverlayUi()` 先经 `LegacyMindustryXGuard.rejectLegacyMindustryX("Neon")` 检查：若旧版 MindustryX 加载器误入原版 main 类，直接抛出升级/回退错误，**不**吞成单个模块失败——这是故意的。
+- `vanillaOverlayUi()` 先经 `LegacyMindustryXGuard.rejectLegacyMindustryX("Neon")` 检查：若真 MindustryX 运行时误入原版 `main` 类（正常 X 走 `mainX`），直接抛出升级/回退错误，**不**吞成单个模块失败——这是故意的；守卫不做版本字符串比较。
 - 构造函数签名中的可替换位只有六个：OverlayUi 桥、Marker 桥，以及 pgmm / sp / rbm / spdb / bpo / bhk 六个模块工厂（`ModSupplier<T>`）。其余模块直接在基类中固定构造。
 
 ## 启动时序
 
-构造阶段按序做四类事情，全部包裹故障隔离；每一项都先过加载门（见下）：
+构造阶段按序做四类事情：`DataImagePackerCompat.installHooks()` 最先直接执行（不经加载门，也没有 try/catch 包裹）；随后的 `markBundled` / `initializeModule` / `initializeFeature` 三项都先过加载门并包裹故障隔离（见下）：
 
 1. `DataImagePackerCompat.installHooks()` 安装数据图兼容钩子。
-2. `markBundled(moduleId, …)`：把每个模块主类的静态 `bekBundled` 置 `true`；个别模块附带一次性配置（如 `BetterRTSFormationSettings.configure()`）。
+2. `markBundled(moduleId, …)`：把参与聚合的子模组主类的静态 `bekBundled` 置 `true`；个别模块附带一次性配置（如 `BetterRTSFormationSettings.configure()`）。ocb / customMarker / bss / profiler / usage reporter 不是子模组，不走这里。
 3. `initializeModule(moduleId, supplier)`：实例化各模块对象并存为字段。工厂返回 `null` 视为失败。字段可能为 `null`，后续使用前都要判空。
 4. `initializeFeature(moduleId, runnable)`：执行无对象产物的初始化（customMarker / bss / profiler），此时 OverlayUi 桥已就绪，可传入 `configureCompat/configureOverlayUi`。
 
@@ -60,10 +60,20 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 
 `registerSettings()` 只执行一次（`settingsRegistered` 标志防重入）：
 
-1. 收集各模块状态做诊断快照 `snapshotSubmodStates()`（模块可用性 + 当前启用与否，供设置页状态展示；像"偷袭小道默认关"、"翻译未标记服务器则视为未启用"这类动态值在这里计算）。
+1. 收集各模块状态做诊断快照 `snapshotSubmodStates()`（模块可用性 + 当前启用与否，供会话结束遥测快照；像"建造透视是否启用"、"翻译未标记服务器则视为未启用"、"地理围栏是否已配置控制键"这类动态值在这里计算）。
 2. 按 module id 逐个把模块的 `bekBuildSettings(SettingsTable)` 内容加进统一分组；分组标题与说明走 bundle key（无设置项的模块用 `bektools.section.<id>.none` 占位），样式统一 `bektools.ui.RbmStyle`（子标题、缩进、间距组件，见 `bektools/ui/VscodeSettingsStyle.java` 等）。
 3. 启动时被加载门短路（`gatedModules`）的模块不调用它的 builder：改由 `addUnloadedPlaceholder` 渲染 Neon 自绘的总开关加 `@bektools.module.disabled` / `@bektools.module.restart` 说明；`neonSwitch` 模块在正常分组首行也由 Neon 渲染开关。
 4. 失败模块追加错误分组。
+
+## 设置页渲染陷阱（MindustryX）
+
+MindustryX 的 `SettingsTable.act()` 在 `list.size` 变化时会自动重建（`lastSize` 短路），与原版行为不同。
+现有几处写法都是为此服务，改动前先读代码注释：
+
+- `NestedSettingsTable.build()` 是故意的运行期覆盖，**不加 `@Override`**：原版没有这个可覆盖方法，MindustryX 运行时才会分派到它。
+- `finishBuild()` 会把 `list` 从 0 增长到 N 并只重放 `pref()` 项；不抑制重建会重放内容、折叠子分组并追加原版 reset 按钮。
+- `redrawSettings()` 手动清空并重建；`addModuleGroupPref()` 必须走 `pref()`，直接 `add()` 会被清掉。
+- 不要为“统一”删掉这些覆盖或 `suppressRebuild`；改动设置页渲染后按原版与 MindustryX 两条路径手测。
 
 ## 客户端指令
 
@@ -77,7 +87,7 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 不属于玩家功能但由核心管理的两个内部单元：
 
 - `moduleProfiler`：`NeonProfilerFeature`，提供运行时性能剖析指令。
-- `moduleUsageReporter`：`PostHogUsageReporter`，客户端加载时的匿名使用统计上报，独立捕获异常（不上报 ≠ 不可玩）。
+- `moduleUsageReporter`：`PostHogUsageReporter`，会话结束时上报 `mod_session_end` 使用快照（玩家标识/名称、游戏与模组版本、使用分钟数、模块可用性）；含标识符，**不是匿名遥测**。独立捕获异常（不上报 ≠ 不可玩）。
 
 ## 改动守则
 

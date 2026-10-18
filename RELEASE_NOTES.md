@@ -4,12 +4,20 @@
 
 ## 中文
 
-### 本次新增
+### 本次修复
 
-- **内置建造透视升级到 v1.3，按住 Alt 只透视指针周围，单位与墙体阴影也会透明**
+- **安卓端内置随机化模块不再因正则错误导致加载失败**
+
+### 本次改动
+
+- **偷袭小道模块因已知缺陷改为默认关闭**
 
 ## English
 
-### Added
+### Fixed
 
-- **Bundled Build X-ray is now v1.3, with a hold-to-peek cursor x-ray and transparent unit and wall shadows**
+- **The bundled Random module no longer fails to load on Android because of a regex error**
+
+### Changed
+
+- **Stealth Path is now default-off because of known defects**

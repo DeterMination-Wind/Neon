@@ -17,7 +17,9 @@ import java.util.regex.Pattern;
 public final class RandomInstructionTextController{
     private static final String KIND = "instruction";
     private static final List<String> PREFIXES = Arrays.asList("hint.", "gz.", "onset.", "lst.", "lenum.", "lglobal.");
-    private static final Pattern FORMAT_ARGUMENT = Pattern.compile("\\{\\d+(?:\\s*,[^}]*)?}");
+    // Android compiles patterns with ICU regex, which rejects a stray unescaped '}' that desktop
+    // java.util.regex tolerates; braces here must stay escaped or inside a character class.
+    static final Pattern FORMAT_ARGUMENT = Pattern.compile("\\{\\d+(?:\\s*,[^}]*)?\\}");
 
     private final RandomStateStore store;
     private final Map<String, String> replacedValues = new LinkedHashMap<>();

@@ -303,8 +303,14 @@ public final class InstrumentationEngine{
         }
     }
 
+    /** 统计器的收口点：包装/取出 {@code build} 的指令数组。
+     *
+     *  <p>上游 v0.11.7 起对「本客户端不可访问的处理器」直接返回 {@code null}——
+     *  {@code displayable()} 就是 {@code LogicBuild.accessible()}（世界处理器、禁止编辑的地图），
+     *  与变量界面三击入口（{@link logicsugar.vars.ui.VarsAccess}）用的是同一把钥匙：这类处理器
+     *  本客户端读不到实体，不该进统计。所有调用方本来就判空（返回 null 表现为「没有统计」）。</p> */
     public static Instrumentation getInstrumentation(LogicBuild build, boolean instrument, Cons<Instrumentation> action){
-        if(!initialized || build.executor.instructions.length == 0) return null;
+        if(!initialized || build.executor.instructions.length == 0 || !build.displayable()) return null;
 
         Instrumentation instrumentation = instrumentations.get(build);
         if(instrumentation == null || instrumentation.instructions != build.executor.instructions){

@@ -256,12 +256,18 @@ public class Instrumentation{
         return Math.max(0, loss);
     }
 
-    /** recording 快照的逐指令子快照（由 {@link InstrumentationEngine#startInstructionSnapshots} 触发）。 */
+    /** recording 快照的逐指令子快照（由 {@link InstrumentationEngine#startInstructionSnapshots} 触发）。
+     *
+     *  <p>上游 v0.11.7：快照被关掉（{@code maxSnapshots == 0}）时 {@link Snapshots#create} 返回
+     *  {@code null}，此时既不登记也不入列。录制中途把上限设成 0 正是这一支的来源——旧代码直接解引用
+     *  返回值，会让运行中的处理器在自己的包装器里抛 NPE。</p> */
     private void createSnapshot(int index, LVar[] vars){
         String text = index >= 0 && index < source.length ? source[index] : "unknown instruction";
         Snapshot snapshot = Snapshots.create(executor.build, SnapshotType.recording, index + ": " + text, vars);
-        master.recording().add(snapshot);
-        Snapshots.register(snapshot);
+        if(snapshot != null){
+            master.recording().add(snapshot);
+            Snapshots.register(snapshot);
+        }
     }
 
     /** 包装一条指令；对已经包装过的输入先解包，保证幂等。

@@ -137,7 +137,8 @@ public class BekToolsMod extends Mod{
 
     static{
         moduleGates.put(modulePgmm, new ModuleGate("pgmm-enabled", true, false));
-        moduleGates.put(moduleStealthPath, new ModuleGate("sp-enabled", true, false));
+        // Known defects: StealthPath is default-off in the aggregate build (docs/user/battlefield-awareness.md).
+        moduleGates.put(moduleStealthPath, new ModuleGate("sp-enabled", false, false));
         moduleGates.put(moduleCustomMarker, new ModuleGate("cm-enabled", true, false));
         moduleGates.put(moduleScreenshot, new ModuleGate("bss-enabled", true, false));
         moduleGates.put(moduleRadialBuildMenu, new ModuleGate("rbm-enabled", true, false));

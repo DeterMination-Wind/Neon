@@ -70,9 +70,6 @@ public class PatchViewerMod extends Mod{
 
     private static final float minContentWidth = 500f;
     private static final float maxMeasuredContentWidth = 1400f;
-    private static final float maxDescriptionMeasureWidth = 620f;
-    private static final float maxTextDiffMeasureWidth = 720f;
-    private static final float detailsWidth = 400f;
     private static final String buildCostRowKey = "general::buildCost";
     private static final String arrowColor = "[lightgray]";
     private static final String keyEnabled = "patchviewer-enabled";
@@ -1336,68 +1333,6 @@ public class PatchViewerMod extends Mod{
         return inset;
     }
 
-    private void sanitizeQuestionMarkButtons(Element element){
-        if(element == null) return;
-        if(element instanceof Label){
-            Label label = (Label)element;
-            String visible = Strings.stripColors(label.getText() == null ? "" : label.getText().toString()).trim();
-            if("?".equals(visible)) label.setText("");
-            return;
-        }
-        if(element instanceof ScrollPane){
-            sanitizeQuestionMarkButtons(((ScrollPane)element).getWidget());
-            return;
-        }
-        if(element instanceof Group){
-            Seq<Element> children = ((Group)element).getChildren();
-            for(int i = 0; i < children.size; i++){
-                sanitizeQuestionMarkButtons(children.get(i));
-            }
-        }
-    }
-
-    private void normalizeUnitIconLinks(Element element){
-        if(element == null || Vars.content == null) return;
-        if(element instanceof Table){
-            Seq<Cell> cells = ((Table)element).getCells();
-            for(int i = 0; i < cells.size; i++){
-                Element child = cells.get(i).get();
-                if(child instanceof Image){
-                    UnitType unit = unitTypeForImage((Image)child);
-                    if(unit != null){
-                        cells.get(i).size(calcUnitStatIconSize(unit)).scaling(Scaling.fit);
-                    }
-                }
-                normalizeUnitIconLinks(child);
-            }
-            return;
-        }
-        if(element instanceof Image){
-            Image image = (Image)element;
-            UnitType unit = unitTypeForImage(image);
-            if(unit != null){
-                image.setScaling(Scaling.fit);
-                image.clicked(() -> {
-                    if(Vars.ui != null && Vars.ui.content != null && !unit.isHidden()){
-                        Vars.ui.content.show(unit);
-                    }
-                });
-            }
-            return;
-        }
-        if(element instanceof Group){
-            Seq<Element> children = ((Group)element).getChildren();
-            for(int i = 0; i < children.size; i++){
-                normalizeUnitIconLinks(children.get(i));
-            }
-        }
-    }
-
-    private UnitType unitTypeForImage(Image image){
-        UnlockableContent content = contentForImage(image);
-        return content instanceof UnitType ? (UnitType)content : null;
-    }
-
     private UnlockableContent contentForImage(Image image){
         if(image == null || !(image.getDrawable() instanceof TextureRegionDrawable)) return null;
         TextureRegion region = ((TextureRegionDrawable)image.getDrawable()).getRegion();
@@ -1418,43 +1353,6 @@ public class PatchViewerMod extends Mod{
     private float calcUnitStatIconSize(UnitType unit){
         // Match the fixed 40px unit cell used by the vanilla unit production displays.
         return defaultUnitStatIconSize;
-    }
-
-    private Table simplifyRenderedTable(Table table){
-        Table current = table;
-        while(current != null && current.getBackground() == null && current.getChildren().size == 1 && current.getChildren().first() instanceof Table){
-            if(hasVisualCellContent(current)) break;
-            current = (Table)current.getChildren().first();
-            current.left().top();
-        }
-        return current;
-    }
-
-    private boolean hasVisualCellContent(Table table){
-        if(table == null) return false;
-        Seq<Cell> cells = table.getCells();
-        for(int i = 0; i < cells.size; i++){
-            Element child = cells.get(i).get();
-            if(child != null && !(child instanceof Table)){
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void freezeElementTree(Element element){
-        if(element == null) return;
-        element.update(null);
-        if(element instanceof ScrollPane){
-            freezeElementTree(((ScrollPane)element).getWidget());
-            return;
-        }
-        if(element instanceof Group){
-            Seq<Element> children = ((Group)element).getChildren();
-            for(int i = 0; i < children.size; i++){
-                freezeElementTree(children.get(i));
-            }
-        }
     }
 
     private void captureLabelStates(Element element, Seq<LabelState> out){
@@ -2402,92 +2300,10 @@ public class PatchViewerMod extends Mod{
         return "[] " + arrowColor + "-> []";
     }
 
-    private float estimateDialogWidth(UnlockableContent content, ContentSnapshot before, ContentSnapshot after, ContentDiff diff, String titleMarkup, String visibleDescription, String visibleDetails){
-        float width = minContentWidth;
-
-        width = Math.max(width, measureMarkupWidth(titleMarkup) + Vars.iconXLarge + 28f);
-        if(visibleDescription != null){
-            width = Math.max(width, Math.min(maxDescriptionMeasureWidth, measureMarkupWidth(visibleDescription) + 24f));
-        }
-
-        OrderedSet<String> displayKeys = new OrderedSet<>();
-        if(before != null) displayKeys.addAll(before.order);
-        if(after != null) displayKeys.addAll(after.order);
-        if(diff != null) displayKeys.addAll(diff.rows.keys().toSeq());
-
-        for(String key : displayKeys){
-            SnapshotRow currentRow = after == null ? null : after.rows.get(key);
-            SnapshotRow beforeRow = before == null ? null : before.rows.get(key);
-            InlineRow row = diff == null ? null : diff.rows.get(key);
-            SnapshotRow source = currentRow != null ? currentRow : beforeRow;
-            if(source == null){
-                if(isBuildCostDiffRow(row)){
-                    width = Math.max(width, estimateBuildCostDiffWidth(row));
-                }
-                continue;
-            }
-            width = Math.max(width, estimateRowWidth(source, currentRow, row));
-        }
-
-        if(visibleDetails != null){
-            width = Math.max(width, Math.min(detailsWidth, measureMarkupWidth(visibleDetails) + 24f));
-        }
-
-        return Math.min(width, maxMeasuredContentWidth);
-    }
-
-    private float estimateRowWidth(SnapshotRow source, SnapshotRow currentRow, InlineRow row){
-        float labelWidth = measureMarkupWidth(source.label);
-        float width = labelWidth + 48f;
-        float minValueWidth = minimumValueWidth(source.kind);
-        if(row == null){
-            if(currentRow == null) return width;
-            if(currentRow.rendered != null){
-                float valueWidth = Math.max(measureRenderedWidth(currentRow.rendered) + 12f, minValueWidth);
-                return combineRowWidth(source.kind, labelWidth, width, valueWidth);
-            }
-            return Math.max(width + Math.min(maxTextDiffMeasureWidth, measureMarkupWidth(currentRow.text)) + 12f, width + minValueWidth);
-        }
-
-        if(row.buildCostBefore != null || row.buildCostAfter != null){
-            return width + Math.max(measureStacksWidth(row.buildCostBefore), measureStacksWidth(row.buildCostAfter)) + 56f;
-        }
-        if(row.nativeWidgetDiff){
-            float valueWidth = Math.max(Math.max(measureRenderedWidth(row.beforeRendered), measureRenderedWidth(row.afterRendered)) + 24f, minValueWidth);
-            return combineRowWidth(source.kind, labelWidth, width, valueWidth);
-        }
-        return Math.max(width + Math.min(maxTextDiffMeasureWidth, measureMarkupWidth(Strings.stripColors(row.markup))) + 12f, width + minValueWidth);
-    }
-
-    private float estimateBuildCostDiffWidth(InlineRow row){
-        if(row == null) return 0f;
-        float labelWidth = measureMarkupWidth(row.label);
-        float width = labelWidth + 48f;
-        return width + Math.max(measureStacksWidth(row.buildCostBefore), measureStacksWidth(row.buildCostAfter)) + 56f;
-    }
-
-    private float combineRowWidth(RowKind kind, float labelWidth, float inlineWidth, float valueWidth){
-        if(isBlockPanelKind(kind)){
-            return Math.max(labelWidth + 24f, valueWidth + 24f);
-        }
-        return inlineWidth + valueWidth;
-    }
-
     private float measureRenderedWidth(Table rendered){
         if(rendered == null) return 0f;
         rendered.pack();
         return Math.max(rendered.getPrefWidth(), rendered.getWidth());
-    }
-
-    private float measureStacksWidth(Seq<ItemStack> stacks){
-        if(stacks == null || stacks.isEmpty()) return 0f;
-        Table table = new Table();
-        table.left().top().defaults().left().top();
-        for(ItemStack stack : stacks){
-            if(stack == null || stack.item == null) continue;
-            table.add(StatValues.stack(stack)).padRight(5f);
-        }
-        return table.getPrefWidth();
     }
 
     private float measureMarkupWidth(String text){
@@ -2499,31 +2315,6 @@ public class PatchViewerMod extends Mod{
             max = Math.max(max, label.getPrefWidth());
         }
         return max;
-    }
-
-    private float minimumValueWidth(RowKind kind){
-        if(kind == RowKind.STACK_LIST) return 500f;
-        if(kind == RowKind.AMMO_PANEL || kind == RowKind.WEAPON_PANEL || kind == RowKind.ABILITY_PANEL || kind == RowKind.NATIVE_PANEL) return 360f;
-        return 160f;
-    }
-
-    private float rowValueWidth(String label, float contentWidth, RowKind kind){
-        if(isBlockPanelKind(kind)){
-            return Math.max(minimumValueWidth(kind), contentWidth - 12f);
-        }
-        return Math.max(minimumValueWidth(kind), contentWidth - measureMarkupWidth(label) - 28f);
-    }
-
-    private boolean isBlockPanelKind(RowKind kind){
-        return kind == RowKind.STACK_LIST
-            || kind == RowKind.NATIVE_PANEL
-            || kind == RowKind.AMMO_PANEL
-            || kind == RowKind.WEAPON_PANEL
-            || kind == RowKind.ABILITY_PANEL;
-    }
-
-    private boolean isCenteredPanelKind(RowKind kind){
-        return kind == RowKind.STACK_LIST;
     }
 
     private boolean isBuildCostDiffRow(InlineRow row){
@@ -2765,312 +2556,6 @@ public class PatchViewerMod extends Mod{
         }
     }
 
-    private void showLegacyPatched(UnlockableContent content){
-        Vars.ui.content.cont.clear();
-
-        Table table = new Table();
-        table.margin(10f);
-        content.checkStats();
-        ContentDiff diff = diffsByContent.get(content);
-        ContentSnapshot before = baselineSnapshots.get(content);
-        ContentSnapshot after = afterSnapshots.get(content);
-        int logicId = content.getLogicId();
-        String titleMarkup = diff == null || diff.title == null
-            ? "[accent]" + content.localizedName + "\n[gray]" + content.name + (logicId != -1 ? " <#" + logicId + ">" : "")
-            : "[accent]" + diff.title + "\n[gray]" + content.name + (logicId != -1 ? " <#" + logicId + ">" : "");
-        String visibleDescription = diff == null || diff.description == null ? content.displayDescription() : diff.description;
-        String visibleDetails = diff == null || diff.details == null ? content.details : diff.details;
-        float contentWidth = estimateDialogWidth(content, before, after, diff, titleMarkup, visibleDescription, visibleDetails);
-        float titleWidth = Math.max(260f, contentWidth - Vars.iconXLarge - 16f);
-        float descriptionWidth = contentWidth;
-        table.table(title1 -> {
-            title1.image(content.uiIcon).size(Vars.iconXLarge).scaling(Scaling.fit).get().clicked(() -> Core.app.setClipboardText(content.emoji()));
-            Cell<Label> titleCell = title1.add(new Label(titleMarkup)).padLeft(5f).width(titleWidth);
-            titleCell.growX().left();
-            titleCell.get().setWrap(true);
-        });
-        table.row();
-
-        if(Vars.state.isGame() && diffsByContent.containsKey(content)){
-            table.table(t -> {
-                t.image(Icon.info).color(Pal.lightishGray);
-                t.add("@database.patched").color(Pal.lightishGray).padLeft(4f);
-            }).pad(4f).left();
-            table.row();
-        }
-
-        if(visibleDescription != null){
-            boolean any = content.stats.toMap().size > 0;
-            if(any){
-                table.add("@category.purpose").color(Pal.accent).fillX().padTop(10f);
-                table.row();
-            }
-            Cell<Label> descriptionCell = table.add(new Label("[lightgray]" + visibleDescription));
-            descriptionCell.wrap().fillX().padLeft(any ? 10f : 0f).width(descriptionWidth).padTop(any ? 0f : 10f).left();
-            descriptionCell.get().setWrap(true);
-            table.row();
-            if(!content.stats.useCategories && any){
-                table.add("@category.general").fillX().color(Pal.accent);
-                table.row();
-            }
-        }
-
-        OrderedSet<String> displayKeys = new OrderedSet<>();
-        if(before != null) displayKeys.addAll(before.order);
-        if(after != null) displayKeys.addAll(after.order);
-        if(diff != null) displayKeys.addAll(diff.rows.keys().toSeq());
-        OrderedSet<String> displayedCategories = new OrderedSet<>();
-
-        for(String key : displayKeys){
-            SnapshotRow currentRow = after == null ? null : after.rows.get(key);
-            SnapshotRow beforeRow = before == null ? null : before.rows.get(key);
-            InlineRow row = diff == null ? null : diff.rows.get(key);
-            SnapshotRow source = currentRow != null ? currentRow : beforeRow;
-            if(source == null && !isBuildCostDiffRow(row)) continue;
-
-            if(source != null){
-                boolean showCategory = false;
-                if(displayedCategories.add(source.cat.name)) showCategory = content.stats.useCategories;
-                if(showCategory){
-                    table.add("@category." + source.cat.name).color(Pal.accent).fillX();
-                    table.row();
-                }
-            }
-
-            table.table(inset -> {
-                inset.left().top().defaults().left().top();
-                String label = source != null ? source.label : row.label;
-                RowKind kind = source != null ? source.kind : row.kind;
-                boolean blockRow = isBlockPanelKind(kind);
-                inset.add("[lightgray]" + label + ":[] ").top().left();
-                if(blockRow) inset.row();
-                float valueWidth = rowValueWidth(label, contentWidth, kind);
-                if(row == null && source != null){
-                    renderSnapshotRow(inset, source, valueWidth);
-                }else if(isBuildCostDiffRow(row)){
-                    renderBuildCostDiff(inset, row.buildCostBefore, row.buildCostAfter, valueWidth);
-                }else if(row != null && row.nativeWidgetDiff){
-                    renderNativeDiff(inset, row.beforeRendered, row.beforeLabels, row.afterRendered, row.afterLabels, row.kind, valueWidth);
-                }else if(row != null){
-                    Label diffLabel = new Label(row.markup);
-                    diffLabel.setWrap(true);
-                    Cell<Label> cell = inset.add(diffLabel);
-                    cell.growX().top().fillX().width(valueWidth);
-                }
-            }).left().top().fillX().width(contentWidth).padLeft(10f);
-            table.row();
-        }
-
-        if(visibleDetails != null){
-            table.add("[gray]" + visibleDetails).pad(6f).padTop(20f).width(Math.min(detailsWidth, contentWidth)).wrap().fillX();
-            table.row();
-        }
-
-        String credit = Reflector.getString(content, "credit");
-        if(credit != null){
-            table.row();
-            table.add("Created by: " + credit).color(Color.gray).padTop(40f).row();
-        }
-
-        if(Core.settings.getBool("console")){
-            table.button("@viewfields", Icon.link, Styles.grayt, () -> {
-                Class<?> contentClass = content.getClass();
-                if(contentClass.isAnonymousClass()) contentClass = contentClass.getSuperclass();
-                Core.app.openURI("https://mindustrygame.github.io/wiki/Modding%20Classes/" + contentClass.getSimpleName());
-            }).margin(8f).pad(4f).padTop(16f).size(300f, 50f).row();
-        }
-
-        content.displayExtra(table);
-
-        table.table(t -> {
-            t.defaults().size(40f);
-            t.button(content.emoji(), Styles.cleart, () -> Core.app.setClipboardText(content.emoji())).tooltip(content.emoji());
-            t.button(Icon.info, Styles.clearNonei, () -> Core.app.setClipboardText(content.name)).tooltip(content.name);
-            if(content.description != null){
-                t.button(Icon.book, Styles.clearNonei, () -> Core.app.setClipboardText(content.description)).tooltip(content.description);
-            }
-            if(Vars.net.active()){
-                try{
-                    t.button("♐简", Styles.cleart, () -> shareContent(content, false)).width(60f);
-                    t.button("♐详", Styles.cleart, () -> shareContent(content, true)).width(60f);
-                }catch(Throwable ignored){
-                }
-            }
-        }).fillX().padLeft(10f);
-
-        ScrollPane pane = new ScrollPane(table);
-        table.marginRight(30f);
-        pane.setScrollingDisabled(false, false);
-        float paneWidth = contentWidth + 50f;
-        if(Core.scene != null){
-            paneWidth = Math.min(paneWidth, Math.max(minContentWidth, Core.scene.getWidth() - 40f));
-        }
-        Vars.ui.content.cont.add(pane).width(paneWidth).maxHeight(Core.scene == null ? 900f : Core.scene.getHeight() - 120f);
-        if(Vars.ui.content.isShown()){
-            Vars.ui.content.show(Core.scene, Actions.fadeIn(0f));
-        }else{
-            Vars.ui.content.show();
-        }
-    }
-
-    private void renderSnapshotRow(Table table, SnapshotRow row, float textRowWidth){
-        if(row == null){
-            return;
-        }
-        if(row.rendered != null){
-            restoreLabelStates(row.labels);
-            if(isCenteredPanelKind(row.kind)){
-                row.rendered.pack();
-                renderCenteredRenderedRow(table, row.rendered, textRowWidth);
-            }else if(isBlockPanelKind(row.kind)){
-                row.rendered.invalidateHierarchy();
-                table.add(row.rendered).left().top().fillX().growX().width(textRowWidth);
-            }else{
-                row.rendered.pack();
-                table.add(row.rendered).left().top().fillX().growX().width(textRowWidth);
-            }
-            return;
-        }
-        if(row.text != null){
-            Label label = new Label(row.text);
-            label.setWrap(true);
-            table.add(label).left().top().fillX().growX().width(textRowWidth);
-        }
-    }
-
-    private void renderCenteredRenderedRow(Table table, Table rendered, float width){
-        if(rendered == null){
-            return;
-        }
-        rendered.pack();
-        table.table(holder -> {
-            holder.top();
-            holder.defaults().top();
-            holder.add(rendered).top().center();
-        }).top().fillX().growX().width(width);
-    }
-
-    private void renderRenderedValue(Table table, Table rendered, RowKind kind){
-        if(rendered == null){
-            return;
-        }
-        if(isCenteredPanelKind(kind)){
-            rendered.pack();
-            table.top().defaults().top();
-            table.table(holder -> {
-                holder.top();
-                holder.defaults().top();
-                holder.add(rendered).top().center();
-            }).top().fillX().growX();
-        }else if(isBlockPanelKind(kind)){
-            rendered.invalidateHierarchy();
-            table.left().top().defaults().left().top();
-            table.add(rendered).left().top().fillX().growX();
-        }else{
-            rendered.pack();
-            table.left().top().defaults().left().top();
-            table.add(rendered).left().top().fillX().growX();
-        }
-    }
-
-    private void renderDiffPanel(Table table, String labelMarkup, Table rendered, RowKind kind, float contentWidth, float bottomPad){
-        if(rendered == null) return;
-        if(labelMarkup != null && !labelMarkup.isEmpty()){
-            table.add(labelMarkup).left().padBottom(2f).row();
-        }
-        table.table(Styles.grayPanel, panel -> renderRenderedValue(panel, rendered, kind)).left().top().fillX().width(contentWidth).growX().padBottom(bottomPad);
-        table.row();
-    }
-
-    private void renderNativeDiff(Table table, Table before, Seq<LabelState> beforeLabels, Table after, Seq<LabelState> afterLabels, RowKind kind, float contentWidth){
-        Table root = new Table();
-        root.left().top().defaults().left().top();
-        if(before != null && after != null){
-            prepareRenderedDiff(beforeLabels, afterLabels);
-            if(kind == RowKind.STACK_LIST){
-                highlightChangedGroups(beforeLabels);
-                highlightChangedGroups(afterLabels);
-            }
-            // Wrapper padding around both panels plus the arrow's own padding.
-            float inlineWidth = measureRenderedWidth(before) + measureRenderedWidth(after) + measureMarkupWidth("->") + 24f;
-            if(inlineWidth <= contentWidth){
-                root.table(Styles.grayPanel, panel -> renderRenderedValue(panel, before, kind)).left().top();
-                root.add(arrowColor + "->[]").center().padLeft(6f).padRight(6f).top();
-                root.table(Styles.grayPanel, panel -> renderRenderedValue(panel, after, kind)).left().top().growX().fillX();
-                root.row();
-            }else{
-                // Keep the arrow on the old panel's row; only the new panel drops below.
-                Table oldRow = new Table();
-                oldRow.left().top().defaults().left().top();
-                oldRow.table(Styles.grayPanel, panel -> renderRenderedValue(panel, before, kind)).left().top().growX().fillX();
-                oldRow.add(arrowColor + "->[]").right().padLeft(8f).top();
-                root.add(oldRow).left().top().fillX().growX().padBottom(6f).row();
-                renderDiffPanel(root, null, after, kind, contentWidth, 0f);
-            }
-        }else if(before != null){
-            restoreLabelStates(beforeLabels);
-            highlightAllLabels(beforeLabels, removedColorTag());
-            if(kind == RowKind.STACK_LIST){
-                highlightChangedGroups(beforeLabels);
-            }
-            renderDiffPanel(root, null, before, kind, contentWidth, 0f);
-        }else if(after != null){
-            restoreLabelStates(afterLabels);
-            highlightAllLabels(afterLabels, addedColorTag());
-            if(kind == RowKind.STACK_LIST){
-                highlightChangedGroups(afterLabels);
-            }
-            renderDiffPanel(root, null, after, kind, contentWidth, 0f);
-        }
-        table.add(root).left().top().fillX().growX();
-    }
-
-    private void renderBuildCostDiff(Table table, Seq<ItemStack> before, Seq<ItemStack> after, float availableWidth){
-        Table line = new Table();
-        line.left().top().defaults().left().top();
-        if(before != null && after != null){
-            boolean inline = shouldInlineBuildCost(before, after, availableWidth);
-            if(inline){
-                addBuildCostStacks(line, before, modifiedOldColorTag());
-                line.add(arrowColor + "->[]").padLeft(6f).padRight(6f).top();
-                addBuildCostStacks(line, after, modifiedNewColorTag());
-            }else{
-                addBuildCostStacks(line, before, modifiedOldColorTag());
-                // Keep the arrow beside the old stacks; only the new value drops to its own row.
-                line.add(arrowColor + "->[]").padLeft(6f).padRight(5f).top().left().row();
-                addBuildCostStacks(line, after, modifiedNewColorTag());
-            }
-        }else if(before != null){
-            addBuildCostStacks(line, before, removedColorTag());
-        }else if(after != null){
-            addBuildCostStacks(line, after, addedColorTag());
-        }
-        table.add(line).growX().top().left();
-    }
-
-    private void addBuildCostStacks(Table table, Seq<ItemStack> stacks, String amountColorTag){
-        if(table == null || stacks == null) return;
-        for(ItemStack stack : stacks){
-            if(stack == null || stack.item == null) continue;
-            Element stackView = StatValues.stack(stack);
-            colorStackAmountLabels(stackView, amountColorTag);
-            table.add(stackView).padRight(5f).top();
-        }
-    }
-
-    private void renderCompactMarkupValue(Table table, String text, float width){
-        if(table == null || text == null) return;
-        Seq<String> lines = splitCompactDisplayLines(compactDisplayText(text));
-        for(String lineText : lines){
-            if(lineText == null || Strings.stripColors(lineText).trim().isEmpty()) continue;
-            Table line = new Table();
-            line.left().top().defaults().left().top();
-            addCompactInline(line, lineText, width);
-            table.add(line).left().top().width(width).growX().fillX();
-            table.row();
-        }
-    }
-
     private boolean renderCompactStackDiff(Table table, CompactChange change, float width){
         if(table == null || change == null || (change.kind != RowKind.STACK_LIST && change.kind != RowKind.BUILD_COST)) return false;
         Seq<CompactStackItem> beforeItems = parseCompactStackItems(change.before);
@@ -3158,14 +2643,6 @@ public class PatchViewerMod extends Mod{
             }
         }
         return null;
-    }
-
-    private boolean shouldInlineBuildCost(Seq<ItemStack> before, Seq<ItemStack> after, float availableWidth){
-        if(before == null || after == null) return false;
-        float leftWidth = measureStacksWidth(before);
-        float rightWidth = measureStacksWidth(after);
-        float arrowWidth = measureMarkupWidth("->") + 20f;
-        return leftWidth + arrowWidth + rightWidth <= Math.max(availableWidth, 0f);
     }
 
     private void colorStackAmountLabels(Element element, String amountColorTag){
@@ -3497,11 +2974,6 @@ public class PatchViewerMod extends Mod{
             }catch(Throwable ignored){
             }
             return null;
-        }
-
-        static String getString(Object object, String fieldName){
-            Object value = get(object, fieldName);
-            return value == null ? null : String.valueOf(value);
         }
     }
 

@@ -1057,10 +1057,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
         }
 
-        boolean isAvailable(){
-            return available;
-        }
-
         void ensureAttached(PowerGridCache cache, Color markerColor, SplitAlert alert, RescueAlert rescueAlert, Color rescueColor){
             if(!Core.settings.getBool(keyDrawOnMi2Minimap, false)){
                 detachIfPresent();
@@ -1480,55 +1476,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             }
         }
 
-        private void drawBalanceMarkers(float invScale){
-            if(player == null) return;
-            if(!Core.settings.getBool(keyShowBalance, true)) return;
-
-            float markerScale = Core.settings.getInt(keyMarkerScale, 100) / 100f;
-            if(markerScale <= 0.001f) return;
-
-            float follow = Mathf.clamp(Core.settings.getInt(keyHudMarkerFollowScale, 100) / 100f, 0f, 2f);
-            float invScalePow = Mathf.pow(invScale, 1f - follow);
-
-            Font font = Fonts.outline;
-            GlyphLayout layout = Pools.obtain(GlyphLayout.class, GlyphLayout::new);
-
-            boolean ints = font.usesIntegerPositions();
-            font.setUseIntegerPositions(false);
-
-            float baseFontScale = (1f / 1.25f) / Math.max(0.0001f, Scl.scl(1f));
-            font.getData().setScale(baseFontScale * invScalePow * markerScale);
-
-            Color textColor = Tmp.c2.set(markerColor);
-            textColor.a *= parentAlpha;
-
-            for(int i = 0; i < cache.markers.size; i++){
-                MarkerInfo info = cache.markers.get(i);
-                PowerGraph graph = info.graph;
-                if(graph == null) continue;
-                if(!viewRect.contains(info.x, info.y)) continue;
-
-                float balance = graph.getPowerBalance() * 60f;
-                String text = (balance >= 0f ? "+" : "") + UI.formatAmount((long)balance);
-
-                layout.setText(font, text);
-
-                float margin = 3f * invScalePow * markerScale;
-
-                Draw.color(0f, 0f, 0f, 0.35f * parentAlpha);
-                Fill.rect(info.x, info.y, layout.width + margin * 2f, layout.height + margin * 2f);
-                Draw.color();
-
-                font.setColor(textColor);
-                font.draw(text, info.x, info.y + layout.height / 2f, 0, Align.center, false);
-            }
-
-            Draw.reset();
-            font.getData().setScale(1f);
-            font.setColor(Color.white);
-            font.setUseIntegerPositions(ints);
-            Pools.free(layout);
-        }
     }
 
     // Extracted helper types live in `PgmmTypes` (no behavior changes).
@@ -2400,7 +2347,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     }
 
     private static class RescueCutHint{
-        int graphId;
         int aPos, bPos;
         int islandStartPos;
         float rescueNetPerTick;
@@ -2412,7 +2358,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     }
 
     private static class ImpactDisableHint{
-        int graphId;
         int pos;
         float x, y;
         float improvePerSecond;
@@ -2742,7 +2687,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             hints.clear();
             for(int i = 0; i < newHints.size; i++){
                 RescueCutHint h = newHints.get(i);
-                h.graphId = graphId;
                 h.expiresAt = Time.time + 60f * 6f;
                 h.rank = i + 1;
                 hints.add(h);
@@ -2750,7 +2694,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             impacts.clear();
             for(int i = 0; i < newImpacts.size; i++){
                 ImpactDisableHint h = newImpacts.get(i);
-                h.graphId = graphId;
                 h.expiresAt = Time.time + 60f * 6f;
                 h.rank = i + 1;
                 impacts.add(h);
@@ -3318,7 +3261,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 if(pending == null || Time.time > pending.expiresAt){
                     pending = new PendingSplit();
                     pending.prevId = prevId;
-                    pending.createdAt = Time.time;
                     pending.expiresAt = Time.time + windowFrames;
                     pending.resultIds.clear();
                     pending.belowSince.clear();
@@ -3424,7 +3366,6 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
         private class PendingSplit{
             int prevId;
-            float createdAt;
             float expiresAt;
             IntSet resultIds = new IntSet();
             IntMap<Float> belowSince = new IntMap<>();

@@ -38,10 +38,6 @@ public final class ScopeTree{
         return true;
     }
 
-    public static ScopeTree locate(TextField field){
-        return locate(field, capture(field));
-    }
-
     static ScopeTree locate(TextField field, Context context){
         if(context == null || !context.isActive(field)) return null;
 
@@ -71,7 +67,6 @@ public final class ScopeTree{
     }
 
     public void postFilter(String query, MatchEngine.MatchOptions opts){
-        SearchTextExtractor.invalidate();
         if(query == null || query.isEmpty()) return;
         for(int i = 0; i < scopes.size; i++){
             scopes.get(i).filter(query, opts);

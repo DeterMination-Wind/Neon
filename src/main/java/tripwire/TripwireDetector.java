@@ -70,22 +70,10 @@ public final class TripwireDetector {
                 float cross1 = TripwireFence.cross(a, b, lastX, lastY);
                 float cross2 = TripwireFence.cross(a, b, unit.x, unit.y);
                 if (!fence.crossedSelectedSide(cross1, cross2)) continue;
-                if (!movementIntersectsSegment(lastX, lastY, unit.x, unit.y, a.x, a.y, b.x, b.y)) continue;
+                if (!TripwireFence.segmentsIntersect(lastX, lastY, unit.x, unit.y, a.x, a.y, b.x, b.y)) continue;
                 TripwireAlert.crossed((a.x + b.x) / 2f, (a.y + b.y) / 2f, unit);
                 return;
             }
         }
-    }
-
-    private static boolean movementIntersectsSegment(float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy) {
-        float c1 = cross(ax, ay, bx, by, cx, cy);
-        float c2 = cross(ax, ay, bx, by, dx, dy);
-        float c3 = cross(cx, cy, dx, dy, ax, ay);
-        float c4 = cross(cx, cy, dx, dy, bx, by);
-        return c1 * c2 <= 0f && c3 * c4 <= 0f;
-    }
-
-    private static float cross(float ax, float ay, float bx, float by, float px, float py) {
-        return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
     }
 }

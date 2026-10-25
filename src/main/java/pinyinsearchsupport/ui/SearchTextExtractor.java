@@ -7,29 +7,14 @@ import arc.scene.ui.Button;
 import arc.scene.ui.Image;
 import arc.scene.ui.Label;
 import arc.scene.ui.Tooltip;
-import arc.struct.ObjectMap;
 import arc.struct.Seq;
 
 public final class SearchTextExtractor{
-    private static final ObjectMap<Element, String> cache = new ObjectMap<>();
-
     private SearchTextExtractor(){}
 
     public static String extract(Element element){
         if(element == null) return null;
-
-        String cached = cache.get(element);
-        if(cached != null) return cached;
-
-        String result = doExtract(element);
-        if(result != null){
-            cache.put(element, result);
-        }
-        return result;
-    }
-
-    public static void invalidate(){
-        cache.clear();
+        return doExtract(element);
     }
 
     private static String doExtract(Element element){

@@ -99,7 +99,7 @@ public class TripwireFence {
         return Mathf.dst(px, py, ax + dx * t, ay + dy * t);
     }
 
-    private static boolean segmentsIntersect(float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy) {
+    static boolean segmentsIntersect(float ax, float ay, float bx, float by, float cx, float cy, float dx, float dy) {
         float c1 = cross(ax, ay, bx, by, cx, cy);
         float c2 = cross(ax, ay, bx, by, dx, dy);
         float c3 = cross(cx, cy, dx, dy, ax, ay);

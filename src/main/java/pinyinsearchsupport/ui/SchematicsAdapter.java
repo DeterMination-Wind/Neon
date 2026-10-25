@@ -27,10 +27,6 @@ public final class SchematicsAdapter{
         return target != null;
     }
 
-    public static boolean filter(TextField field, String query, MatchEngine.MatchOptions opts){
-        return filter(field, query, opts, ScopeTree.capture(field));
-    }
-
     static boolean filter(TextField field, String query, MatchEngine.MatchOptions opts, ScopeTree.Context context){
         Target target = find(field);
         if(target == null || query == null || query.isEmpty() || context == null || !context.isActive(field)) return false;

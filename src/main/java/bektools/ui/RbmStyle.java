@@ -7,26 +7,20 @@ import arc.math.Mathf;
 import arc.scene.event.Touchable;
 import arc.scene.style.Drawable;
 import arc.scene.ui.CheckBox;
-import arc.scene.ui.Image;
 import arc.scene.ui.Label;
-import arc.scene.ui.ScrollPane;
 import arc.scene.ui.Slider;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Table;
-import arc.util.Scaling;
-import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
 import java.util.Locale;
 
-/** Shared Neon settings-row widgets (headers, checks, sliders, text rows, spacers) used by every bundled module's settings builder. */
+/** Shared Neon settings-row widgets (sub-headers, checks, sliders, text rows, spacers) used by every bundled module's settings builder. */
 public final class RbmStyle{
     private static final float defaultButtonHeight = 42f;
     private static final float dialogEdgePadding = 56f;
     private static final float settingsRowInset = 72f;
-    private static final float dialogGap = 8f;
-    private static final float dialogMinRightPaneWidth = 440f;
     private static final float settingMargin = 10f;
     private static final float settingTopPad = 6f;
     private static final float settingIconSize = 20f;
@@ -48,17 +42,6 @@ public final class RbmStyle{
 
     public static float dialogContentWidth(){
         return Math.max(420f, Math.min(Core.graphics.getWidth() - dialogEdgePadding, 960f));
-    }
-
-    public static TwoPaneLayout twoPaneLayout(float desiredLeftWidth){
-        float total = dialogContentWidth();
-        float left = Mathf.clamp(desiredLeftWidth, 220f, 300f);
-        float right = total - left - dialogGap;
-        if(right < dialogMinRightPaneWidth){
-            left = Math.max(220f, total - dialogGap - dialogMinRightPaneWidth);
-            right = total - left - dialogGap;
-        }
-        return new TwoPaneLayout(total, left, Math.max(240f, right), dialogGap);
     }
 
     private static String normalizeHex(String text){
@@ -109,39 +92,6 @@ public final class RbmStyle{
         }
 
         return hudColorCache;
-    }
-
-    public static class HeaderSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final Drawable icon;
-
-        public HeaderSetting(String title, Drawable icon){
-            super("bektools-header");
-            this.title = title;
-            this.icon = icon;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            float width = rowWidth();
-            table.row();
-            table.table(t -> {
-                t.center();
-                t.table(inner -> {
-                    inner.background(VscodeSettingsStyle.headerBackground());
-                    inner.margin(8f);
-                    inner.center();
-                    if(icon != null){
-                        Image ic = inner.image(icon).size(20f).padRight(8f).get();
-                        ic.setScaling(Scaling.fit);
-                        ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
-                    }
-                    inner.add(title).color(VscodeSettingsStyle.accentColor()).center().growX().minWidth(0f).wrap();
-                }).growX();
-            }).width(width).padTop(12f).padBottom(6f).center();
-            table.row();
-            table.image(Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).width(width).padBottom(10f).center();
-            table.row();
-        }
     }
 
     public static class SubHeaderSetting extends SettingsMenuDialog.SettingsTable.Setting{
@@ -369,28 +319,6 @@ public final class RbmStyle{
         }
     }
 
-    public static ScrollPane verticalPane(Table content){
-        ScrollPane pane = new ScrollPane(content);
-        pane.setFadeScrollBars(false);
-        pane.setScrollingDisabled(true, false);
-        pane.setOverscroll(false, false);
-        return pane;
-    }
-
-    public static class IndentSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final float indent;
-
-        public IndentSetting(float indent){
-            super("bektools-indent");
-            this.indent = indent;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            table.defaults().padLeft(indent);
-        }
-    }
-
     public static class SpacerSetting extends SettingsMenuDialog.SettingsTable.Setting{
         private final float height;
 
@@ -404,20 +332,6 @@ public final class RbmStyle{
             table.row();
             table.add().height(height);
             table.row();
-        }
-    }
-
-    public static class TwoPaneLayout{
-        public final float totalWidth;
-        public final float leftWidth;
-        public final float rightWidth;
-        public final float gap;
-
-        public TwoPaneLayout(float totalWidth, float leftWidth, float rightWidth, float gap){
-            this.totalWidth = totalWidth;
-            this.leftWidth = leftWidth;
-            this.rightWidth = rightWidth;
-            this.gap = gap;
         }
     }
 }

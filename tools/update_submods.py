@@ -1280,6 +1280,50 @@ def copy_kotlin(mod: SubMod, repo_dir: Path) -> None:
         write_text(mod.kotlin_package_dir / rel, read_text(src_path))
 
 
+def _prune_fst_bundles(target_dir: Path) -> None:
+    """Drop localized lines that are byte-identical to the English base.
+
+    FST merges each locale on top of bundle.properties, so identical lines never change
+    the resulting map; removing them keeps the 35-language term table without shipping
+    ~1.4MB of duplicated text.
+    """
+    base = target_dir / "bundle.properties"
+    if not base.exists():
+        return
+
+    base_lines = set()
+    for raw in base.read_bytes().splitlines():
+        line = raw.decode("utf-8", "surrogateescape")
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "!")) or stripped.endswith("\\"):
+            continue
+        if "=" not in stripped and ":" not in stripped:
+            continue
+        base_lines.add(line)
+
+    for path in target_dir.glob("bundle_*.properties"):
+        data = path.read_bytes()
+        crlf = data.count(b"\r\n")
+        lf = data.count(b"\n") - crlf
+        newline = b"\r\n" if crlf > lf else b"\n"
+        kept = []
+        changed = False
+        for raw in data.splitlines():
+            line = raw.decode("utf-8", "surrogateescape")
+            stripped = line.strip()
+            if (line in base_lines and stripped
+                    and not stripped.startswith(("#", "!"))
+                    and not stripped.endswith("\\")):
+                changed = True
+                continue
+            kept.append(raw)
+        if changed:
+            out = newline.join(kept)
+            if data.endswith((b"\n", b"\r")):
+                out += newline
+            path.write_bytes(out)
+
+
 def copy_extra_resources(mod: SubMod, repo_dir: Path) -> None:
     for target_dir, source_rel in zip(mod.extra_resource_dirs, _source_extra_resource_dirs(mod)):
         upstream_dir = repo_join(repo_dir, source_rel)
@@ -1301,6 +1345,9 @@ def copy_extra_resources(mod: SubMod, repo_dir: Path) -> None:
             dst_path = target_dir / rel
             dst_path.parent.mkdir(parents=True, exist_ok=True)
             dst_path.write_bytes(src_path.read_bytes())
+
+        if target_dir.name == "fst-bundles":
+            _prune_fst_bundles(target_dir)
 
 
 def copy_sources(mod: SubMod, repo_dir: Path) -> None:

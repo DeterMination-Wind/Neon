@@ -38,7 +38,6 @@ public final class NeonProfiler{
 
     private static boolean enabled;
     private static boolean showAll;
-    private static long enableEpochMillis;
     private static long windowStartMillis = nowMillis();
     private static long lastRotateMillis = windowStartMillis;
 
@@ -69,9 +68,6 @@ public final class NeonProfiler{
     public static synchronized void setEnabled(boolean value){
         rotateBucketsIfNeeded(nowMillis());
         enabled = value;
-        if(value){
-            enableEpochMillis = nowMillis();
-        }
     }
 
     public static synchronized boolean isEnabled(){
@@ -99,9 +95,6 @@ public final class NeonProfiler{
         long now = nowMillis();
         windowStartMillis = now;
         lastRotateMillis = now;
-        if(enabled){
-            enableEpochMillis = now;
-        }
     }
 
     public static Scope timeRoot(String module, String category, String operation, String threadGroup){
@@ -187,10 +180,8 @@ public final class NeonProfiler{
         snapshot.selfCopyMsPerSecond = selfCopyNanos / 1_000_000.0 / bucketCount;
         snapshot.selfSnapshotMsPerSecond = selfSnapshotNanos / 1_000_000.0 / bucketCount;
         snapshot.selfTotalMsPerSecond = snapshot.selfUiRefreshMsPerSecond + snapshot.selfCopyMsPerSecond + snapshot.selfSnapshotMsPerSecond;
-        snapshot.enabledMillis = enabled && enableEpochMillis > 0L ? Math.max(0L, nowMillis() - enableEpochMillis) : 0L;
         Runtime runtime = Runtime.getRuntime();
         snapshot.memUsedBytes = runtime.totalMemory() - runtime.freeMemory();
-        snapshot.memFreeBytes = runtime.freeMemory();
         snapshot.memTotalBytes = runtime.totalMemory();
         snapshot.memMaxBytes = runtime.maxMemory();
         addSelfSnapshot(Time.timeSinceNanos(started));
@@ -490,9 +481,7 @@ public final class NeonProfiler{
         public double selfCopyMsPerSecond;
         public double selfSnapshotMsPerSecond;
         public double selfTotalMsPerSecond;
-        public long enabledMillis;
         public long memUsedBytes;
-        public long memFreeBytes;
         public long memTotalBytes;
         public long memMaxBytes;
     }

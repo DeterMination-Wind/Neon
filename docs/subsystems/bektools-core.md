@@ -61,7 +61,7 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 `registerSettings()` 只执行一次（`settingsRegistered` 标志防重入）：
 
 1. 收集各模块状态做诊断快照 `snapshotSubmodStates()`（模块可用性 + 当前启用与否，供会话结束遥测快照；像"建造透视是否启用"、"翻译未标记服务器则视为未启用"、"地理围栏是否已配置控制键"这类动态值在这里计算）。
-2. 按 module id 逐个把模块的 `bekBuildSettings(SettingsTable)` 内容加进统一分组；分组标题与说明走 bundle key（无设置项的模块用 `bektools.section.<id>.none` 占位），样式统一 `bektools.ui.RbmStyle`（子标题、缩进、间距组件，见 `bektools/ui/VscodeSettingsStyle.java` 等）。
+2. 按 module id 逐个把模块的 `bekBuildSettings(SettingsTable)` 内容加进统一分组；分组标题与说明走 bundle key（无设置项的模块用 `bektools.section.<id>.none` 占位），样式统一 `bektools.ui.RbmStyle`（子标题、勾选、滑块、文本行、间距组件，见 `bektools/ui/VscodeSettingsStyle.java` 等）。
 3. 启动时被加载门短路（`gatedModules`）的模块不调用它的 builder：改由 `addUnloadedPlaceholder` 渲染 Neon 自绘的总开关加 `@bektools.module.disabled` / `@bektools.module.restart` 说明；`neonSwitch` 模块在正常分组首行也由 Neon 渲染开关。
 4. 失败模块追加错误分组。
 

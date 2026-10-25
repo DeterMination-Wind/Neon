@@ -662,17 +662,6 @@ public final class NeonProfilerFeature{
             && "total".equals(row.operation);
     }
 
-    private static String displayRowName(NeonProfiler.SnapshotRow row){
-        String moduleName = displayModuleName(row.module);
-        if(isModuleTotalRow(row)){
-            return moduleName + " [" + row.threadGroup + "]";
-        }
-        if(row.rollup){
-            return "  " + moduleName + " / " + row.category + " / " + row.operation + " [" + row.threadGroup + "]";
-        }
-        return "    " + moduleName + " / " + row.category + " / " + row.operation + " [" + row.threadGroup + "]";
-    }
-
     private static String displayModuleName(String module){
         return Core.bundle.get(moduleBundleKey(module), module);
     }

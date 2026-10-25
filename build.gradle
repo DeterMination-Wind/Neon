@@ -132,20 +132,26 @@ jar{
     }
 }
 
-tasks.register("jarAndroid", Jar){
-    group = "build"
-    description = "Packages Neon as a .jar for Mindustry Android (classes.dex)."
-    archiveFileName = "Neon-android.jar"
-    from(projectDir){
-        include "mod.json"
-        include "mod.hjson"
-        include "icon.png"
-    }
-}
-
 // Keep a copy in workspace root "构建/<mod-name>/" (mod name + version).
 def buildOutDir = new File(rootDir.parentFile, "构建/${releaseArtifactBaseName}")
 def localDevOutputDir = new File(rootDir.parentFile, "构建/Neon")
+
+// Keep only the native SQLite builds for supported desktop platforms. Android cannot load
+// sqlite-jdbc (the classes are not in classes.dex), so Linux-Android natives are dead weight;
+// FreeBSD/musl/32-bit/POWER/RISC-V are not part of the desktop support matrix.
+def sqliteNativeExcludes = [
+    "org/sqlite/native/FreeBSD/**",
+    "org/sqlite/native/Linux-Android/**",
+    "org/sqlite/native/Linux-Musl/**",
+    "org/sqlite/native/Linux/arm/**",
+    "org/sqlite/native/Linux/armv6/**",
+    "org/sqlite/native/Linux/armv7/**",
+    "org/sqlite/native/Linux/x86/**",
+    "org/sqlite/native/Linux/ppc64/**",
+    "org/sqlite/native/Linux/riscv64/**",
+    "org/sqlite/native/Windows/x86/**",
+    "org/sqlite/native/Windows/armv7/**"
+]
 
 tasks.register("jarLocalDev", Jar){
     group = "build"
@@ -156,6 +162,7 @@ tasks.register("jarLocalDev", Jar){
     from(sourceSets.main.output)
     from({ configurations.runtimeClasspath.collect{ zipTree(it) } }){
         exclude "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA"
+        sqliteNativeExcludes.each{ exclude it }
     }
     from(projectDir){
         include "mod.json"
@@ -163,30 +170,6 @@ tasks.register("jarLocalDev", Jar){
         include "icon.png"
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-tasks.register("copyZipToBuildDir", Copy){
-    doNotTrackState("Copies into build output folder for convenience.")
-    dependsOn tasks.named("jar")
-    from(tasks.named("jar").flatMap{ it.archiveFile })
-    into(buildOutDir)
-    rename{ _ -> "${releaseArtifactBaseName}.zip" }
-}
-
-tasks.register("copyJarToBuildDir", Copy){
-    doNotTrackState("Copies into build output folder for convenience.")
-    dependsOn tasks.named("jarAndroid")
-    from(tasks.named("jarAndroid").flatMap{ it.archiveFile })
-    into(buildOutDir)
-    rename{ _ -> "${releaseArtifactBaseName}-android.jar" }
-}
-
-tasks.named("jar").configure{
-    finalizedBy tasks.named("copyZipToBuildDir")
-}
-
-tasks.named("jarAndroid").configure{
-    finalizedBy tasks.named("copyJarToBuildDir")
 }
 
 def isWindows = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows")
@@ -301,14 +284,6 @@ tasks.register("dexAndroid", Exec){
     }
 }
 
-tasks.named("jarAndroid").configure{
-    dependsOn tasks.named("dexAndroid")
-    from(androidDexOutDir){
-        include "classes.dex"
-    }
-    from(sourceSets.main.output.resourcesDir)
-}
-
 def mergedArchiveBase = releaseArtifactBaseName
 
 tasks.register("jarMerged", Jar){
@@ -321,6 +296,7 @@ tasks.register("jarMerged", Jar){
     from(sourceSets.main.output)
     from({ configurations.runtimeClasspath.collect{ zipTree(it) } }){
         exclude "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA"
+        sqliteNativeExcludes.each{ exclude it }
     }
     from(androidDexOutDir){
         include "classes.dex"

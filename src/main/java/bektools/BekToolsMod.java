@@ -783,18 +783,10 @@ public class BekToolsMod extends Mod{
             // MindustryX turns SettingsTable.rebuild() into a no-op while list.size is
             // unchanged (build() short-circuits on lastSize), so re-render the category
             // table by hand: clear, re-add every group (this re-hooks the poller via
-            // Element.update replacement), then re-add the feedback button and the
-            // vanilla reset button - the equivalent of a vanilla rebuild().
+            // Element.update replacement), then re-add the feedback button.
             table.clearChildren();
             add(table);
             new FeedbackSetting().add(table);
-            table.button(Core.bundle.get("settings.reset", "Reset to Defaults"), () -> {
-                for(SettingsMenuDialog.SettingsTable.Setting setting : table.getSettings()){
-                    if(setting.name == null || setting.title == null) continue;
-                    Core.settings.remove(setting.name);
-                }
-                redrawSettings(table);
-            }).margin(14f).width(240f).pad(6f);
         }
 
         private void attachSwitchPoller(SettingsMenuDialog.SettingsTable table){

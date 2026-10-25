@@ -63,6 +63,8 @@ python .\tools\update_submods.py --verify-build     # 同步后跑 gradlew compi
   这个豁免只对 `ls` 成立，且刻意很窄：`instruction.*` 不豁免，`la.*` 的其余键不豁免，
   其他子模组使用 `lcategory.*` 或 `la.err.*` 仍走碰撞检查（未注册的 `../NewHorizonMod`、
   `../logic-assist` 仍在用这些前缀）。判定必须与 `update_submods.py` 的 `child_owns_key` 一致。
+- **FST 术语表**：`fst-bundles` 复制时会丢弃与英文 `bundle.properties` 完全相同的行；
+  语言覆盖和“base + localized”合并语义不变，不要把这条裁剪去掉。
 - 不要直接编辑合并后的 bundle；改子仓库原文，或改 `tools/bektools-bundles/` 的覆盖。
 
 ## 其他

@@ -59,7 +59,7 @@ Neon 原生代码不直接 import MindustryX 类，而是通过桥接口隔离�
 - Java 17 字节码（`options.release.set(17)`），Kotlin 仅用于 `advancedreplace` 包。
 - 编译期优先使用工作区本地的 `Mindustry-master` core/desktop jar 与 Arc jar；缺省时退回 JitPack `v160.1` 并排除其可传递的 arc 依赖，改用 `tools/deps/` 里的 arc-core / arcnet jar。
 - `build.gradle` 默认不把 MindustryX 挂进编译类路径；X 定制走 `mdtxcompat` / `*ModX`，编译期不要引用 `mindustryX.*`。
-- 运行时依赖仅两件外部库：`pinyin4j`（拼音搜索）与 `sqlite-jdbc`（SPDB 存储）。二者都会被打进最终 jar；D8 输入还额外包含 `kotlin-stdlib`。
+- 运行时依赖仅两件外部库：`pinyin4j`（拼音搜索）与 `sqlite-jdbc`（SPDB 存储）。二者都会被打进最终 jar；D8 输入还额外包含 `kotlin-stdlib`。`sqlite-jdbc` 只保留 Windows / Linux / macOS 的 x86_64 与 aarch64 本机库，其余平台（FreeBSD、musl、32 位、Android）由 JSON 分片后端兜底。
 - SPDB 的语义搜索使用嵌入 GGUF 模型（`bge-base-zh-v1.5-q8_0.gguf`）；`downloadEmbeddingModel` 是按需手动任务，不是构建依赖。模型 >100MB，已被 `.gitignore` 排除。
 - 发布管线（`deploy`）产出桌面+安卓合并包，细节见 [release.md](release.md) 与 [development.md](development.md)。
 

@@ -1280,22 +1280,40 @@ def copy_kotlin(mod: SubMod, repo_dir: Path) -> None:
         write_text(mod.kotlin_package_dir / rel, read_text(src_path))
 
 
+def _is_continuation_head(line: str) -> bool:
+    """True when a .properties natural line continues onto the next one."""
+    return line.rstrip().endswith("\\")
+
+
 def _prune_fst_bundles(target_dir: Path) -> None:
     """Drop localized lines that are byte-identical to the English base.
 
     FST merges each locale on top of bundle.properties, so identical lines never change
     the resulting map; removing them keeps the 35-language term table without shipping
     ~1.4MB of duplicated text.
+
+    Multi-line values are never pruned on either side: a continuation tail is not a
+    standalone entry, and deleting one would fold the next key into the value above it.
     """
     base = target_dir / "bundle.properties"
     if not base.exists():
+        print(f"fst-bundles: {base.as_posix()} is missing, skipping duplicate-line prune.")
         return
 
     base_lines = set()
+    base_continuing = False
     for raw in base.read_bytes().splitlines():
         line = raw.decode("utf-8", "surrogateescape")
         stripped = line.strip()
-        if not stripped or stripped.startswith(("#", "!")) or stripped.endswith("\\"):
+        if base_continuing:
+            # Continuation tail: part of the value above, never a match candidate.
+            base_continuing = _is_continuation_head(line)
+            continue
+        base_continuing = False
+        if not stripped or stripped.startswith(("#", "!")):
+            continue
+        base_continuing = _is_continuation_head(line)
+        if base_continuing:
             continue
         if "=" not in stripped and ":" not in stripped:
             continue
@@ -1308,12 +1326,20 @@ def _prune_fst_bundles(target_dir: Path) -> None:
         newline = b"\r\n" if crlf > lf else b"\n"
         kept = []
         changed = False
+        continuing = False
         for raw in data.splitlines():
             line = raw.decode("utf-8", "surrogateescape")
             stripped = line.strip()
-            if (line in base_lines and stripped
-                    and not stripped.startswith(("#", "!"))
-                    and not stripped.endswith("\\")):
+            if continuing:
+                continuing = _is_continuation_head(line)
+                kept.append(raw)
+                continue
+            continuing = False
+            if not stripped or stripped.startswith(("#", "!")):
+                kept.append(raw)
+                continue
+            continuing = _is_continuation_head(line)
+            if not continuing and line in base_lines:
                 changed = True
                 continue
             kept.append(raw)

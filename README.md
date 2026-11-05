@@ -6,6 +6,8 @@
   <a href="https://github.com/DeterMination-Wind/Neon"><img src="https://img.shields.io/github/stars/DeterMination-Wind/Neon?style=flat&label=Star%20this%20mod!&color=yellow"></a>
 </h1>
 
+> [NOTE] 若有反馈，请发送反馈到bugsoc@qq.com / If you have any feedback, please send it to bugsoc@qq.com
+
 - [中文](#中文)
 - [English](#english)
 

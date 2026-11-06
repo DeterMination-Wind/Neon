@@ -4,12 +4,20 @@
 
 ## 中文
 
-### 本次改动
+### 本次新增
 
-- **对代码库进行了优化，大幅降低了Jar大小**
+- **内置 Power Grid Minimap 升级到 v1.18.4**
+
+### 本次修复
+
+- **修复启动时电力表在资源加载线程创建界面导致的 `UI should be created in main Thread` 报错**
 
 ## English
 
-### Changed
+### Added
 
-- **The codebase has been optimized, greatly reducing the jar size**
+- **Bundled Power Grid Minimap is now v1.18.4**
+
+### Fixed
+
+- **Fixed the `UI should be created in main Thread` error caused by the power table being created on the asset-loading thread at startup**

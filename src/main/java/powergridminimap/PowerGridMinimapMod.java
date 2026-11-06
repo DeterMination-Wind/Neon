@@ -146,7 +146,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private final RescueAdvisor rescueAdvisor = new RescueAdvisor();
     private final Vec2 tmpGridCenter = new Vec2();
     private final RescueAlert rescueAlert = new RescueAlert();
-    private final PowerTableOverlay powerTable = new PowerTableOverlay();
+    //Lazily built on the render thread: mod construction runs on the asset-loading thread,
+    //and Arc refuses to build scene widgets ("UI should be created in main Thread") off it.
+    private PowerTableOverlay powerTable;
     private final MarkerBridge xMarkers;
     private final NativeMarkers nativeMarkers = new NativeMarkers();
     // Optional OverlayUI integration is injected by the dedicated mainX entry or detected in vanilla.
@@ -572,6 +574,21 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         Log.info("PGMM: overlay attached.");
     }
 
+    /**
+     * Returns the power table, creating it on first use.
+     *
+     * <p>The mod constructor is executed by {@code Vars.loadAsync} on the asset-loading thread, so
+     * building the table there makes Arc log {@code RuntimeException: UI should be created in main
+     * Thread}. Every caller of this method runs from the render thread (client load event, update
+     * trigger, console commands).</p>
+     */
+    private PowerTableOverlay powerTable(){
+        if(powerTable == null){
+            powerTable = new PowerTableOverlay();
+        }
+        return powerTable;
+    }
+
     private void ensurePowerTableAttached(){
         if(ui == null || ui.hudGroup == null) return;
 
@@ -580,9 +597,10 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         if(xOverlayUi.isSupported()){
             if(xPowerTableWindow == null){
                 try{
+                    PowerTableOverlay table = powerTable();
                     //When hosted by OverlayUI, our table must not fight the Window for positioning/sizing.
-                    powerTable.setHostedByOverlayUI(true);
-                    xPowerTableWindow = xOverlayUi.registerWindow(powerTableName, powerTable, () -> state != null && state.isGame());
+                    table.setHostedByOverlayUI(true);
+                    xPowerTableWindow = xOverlayUi.registerWindow(powerTableName, table, () -> state != null && state.isGame());
                     if(xPowerTableWindow != null && xPowerTableWindow.asElement() != null){
                         xPowerTableWindow.configure(false, true);
                         Log.info("PGMM: power table registered to MindustryX OverlayUI.");
@@ -591,7 +609,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 }catch(Throwable t){
                     Log.err("PGMM: failed to register power table to MindustryX OverlayUI; falling back to HUD attachment.", t);
                     xPowerTableWindow = null;
-                    powerTable.setHostedByOverlayUI(false);
+                    powerTable().setHostedByOverlayUI(false);
                 }
             }else{
                 return;
@@ -601,15 +619,16 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         //Fallback: attach directly to HUD group (vanilla client, or OverlayUI unavailable).
         if(ui.hudGroup.find(powerTableName) != null) return;
 
+        PowerTableOverlay table = powerTable();
         try{
-            powerTable.remove();
+            table.remove();
         }catch(Throwable ignored){
         }
 
-        powerTable.name = powerTableName;
-        powerTable.setHostedByOverlayUI(false);
-        ui.hudGroup.addChild(powerTable);
-        powerTable.toFront();
+        table.name = powerTableName;
+        table.setHostedByOverlayUI(false);
+        ui.hudGroup.addChild(table);
+        table.toFront();
     }
 
     private void focusGridCenter(GridInfo info){

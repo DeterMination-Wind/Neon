@@ -35,6 +35,7 @@ import mindustry.Vars;
 import mindustry.ctype.Content;
 import mindustry.ctype.ContentType;
 import mindustry.ctype.UnlockableContent;
+import mindustry.entities.bullet.BulletType;
 import mindustry.game.Team;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
@@ -52,6 +53,8 @@ import mindustry.ui.dialogs.ContentInfoDialog;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
 import mindustry.world.Tile;
+import mindustry.world.consumers.ConsumePower;
+import mindustry.world.draw.DrawBlock;
 import mindustry.world.meta.Stat;
 import mindustry.world.meta.StatCat;
 import mindustry.world.meta.StatValue;
@@ -59,6 +62,7 @@ import mindustry.world.meta.StatValues;
 import mindustry.world.meta.Stats;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -73,6 +77,7 @@ public class PatchViewerMod extends Mod{
     private static final String buildCostRowKey = "general::buildCost";
     private static final String arrowColor = "[lightgray]";
     private static final String keyEnabled = "patchviewer-enabled";
+    private static final String keyHiddenEntries = "patchviewer-hidden-entries";
     private static final String keyRemovedColor = "patchviewer-color-removed";
     private static final String keyModifiedOldColor = "patchviewer-color-modified-old";
     private static final String keyModifiedNewColor = "patchviewer-color-modified-new";
@@ -90,6 +95,12 @@ public class PatchViewerMod extends Mod{
     private static final String quickModeBuildInfo = "buildinfo";
     private static final String quickHudName = "patchviewer-quick-hud";
     private static final String quickBuildInfoName = "patchviewer-quick-build-info";
+    private static final String hiddenSectionName = "patchviewer-hidden-section";
+    private static final int hiddenEntryLimit = 24;
+    private static final int hiddenBuildInfoLimit = 8;
+    private static final int hiddenDialogLimit = 200;
+    private static final int hiddenRefreshFrames = 60;
+    private static final int hiddenTextLimit = 160;
     private static final String iconTokenPrefix = "<patchviewer-icon:";
     private static final float defaultUnitStatIconSize = 40f;
     private static final float compactComponentGap = 5f;
@@ -101,14 +112,24 @@ public class PatchViewerMod extends Mod{
     private final ObjectMap<UnlockableContent, ContentSnapshot> afterSnapshots = new ObjectMap<>();
     private final ObjectMap<UnlockableContent, ContentDiff> diffsByContent = new ObjectMap<>();
     private final ObjectMap<UnlockableContent, CompactDiff> compactDiffsByContent = new ObjectMap<>();
+    private final ObjectMap<UnlockableContent, Seq<HiddenEntry>> hiddenEntriesByContent = new ObjectMap<>();
+    private ObjectMap<Object, Seq<HiddenOwner>> hiddenOwnerIndex;
+    private boolean hiddenOwnerIndexFailed;
+    private long hiddenCacheSignature;
+    private boolean hiddenCacheReady;
+    private final ObjectMap<String, Stat> hiddenStatExtCache = new ObjectMap<>();
+    private boolean hiddenPatcherWarned;
+    private int hiddenRefreshTicker;
     private KeyBind quickViewKey;
     private Table quickHud;
     private ScrollPane quickHudPane;
     private UnlockableContent lastQuickHudContent;
+    private Seq<HiddenEntry> lastQuickHudHidden;
     private float lastQuickHudWidth = -1f;
     private Table lastBuildInfoRoot;
     private UnlockableContent lastBuildInfoContent;
     private CompactDiff lastBuildInfoCompact;
+    private Seq<HiddenEntry> lastBuildInfoHidden;
     private Table lastBuildInfoRebuildRoot;
     private boolean baselineCaptured;
     private boolean placementReflectReady;
@@ -143,6 +164,15 @@ public class PatchViewerMod extends Mod{
             afterSnapshots.clear();
             diffsByContent.clear();
             compactDiffsByContent.clear();
+            clearHiddenEntries();
+            hiddenOwnerIndex = null;
+            hiddenOwnerIndexFailed = false;
+            hiddenRefreshTicker = 0;
+            lastQuickHudContent = null;
+            lastQuickHudHidden = null;
+            lastBuildInfoContent = null;
+            lastBuildInfoCompact = null;
+            lastBuildInfoHidden = null;
             hideQuickHud();
             hideInjectedRows(lastBuildInfoRoot);
         });
@@ -195,6 +225,7 @@ public class PatchViewerMod extends Mod{
     private void setupDefaults(){
         Core.settings.defaults(
             keyEnabled, true,
+            keyHiddenEntries, true,
             keyRemovedColor, defaultRemovedColor,
             keyModifiedOldColor, defaultModifiedOldColor,
             keyModifiedNewColor, defaultModifiedNewColor,
@@ -261,6 +292,8 @@ public class PatchViewerMod extends Mod{
                 if(compact != null && !compact.isEmpty()) compactDiffsByContent.put(content, compact);
             }
         }
+
+        refreshHiddenEntries(true);
     }
 
     private void updateQuickDisplay(){
@@ -271,9 +304,13 @@ public class PatchViewerMod extends Mod{
             return;
         }
 
+        if(isHiddenEntriesEnabled()) refreshHiddenEntries(false);
         QuickTarget target = findQuickTarget();
         CompactDiff compact = target == null ? null : compactDiffsByContent.get(target.content);
-        if(compact == null || compact.isEmpty()){
+        Seq<HiddenEntry> hidden = target == null || !isHiddenEntriesEnabled() ? null : hiddenEntriesByContent.get(target.content);
+        boolean hasCompact = compact != null && !compact.isEmpty();
+        boolean hasHidden = hidden != null && !hidden.isEmpty();
+        if(!hasCompact && !hasHidden){
             hideQuickHud();
             hideInjectedRows(lastBuildInfoRoot);
             return;
@@ -281,12 +318,12 @@ public class PatchViewerMod extends Mod{
 
         if(quickModeBuildInfo.equals(readQuickDisplayMode())){
             hideQuickHud();
-            if(!showBuildInfoDiff(target, compact)){
+            if(!showBuildInfoDiff(target, compact, hidden)){
                 hideInjectedRows(lastBuildInfoRoot);
             }
         }else{
             hideInjectedRows(lastBuildInfoRoot);
-            showQuickHud(target.content, compact);
+            showQuickHud(target.content, compact, hidden);
         }
     }
 
@@ -384,16 +421,17 @@ public class PatchViewerMod extends Mod{
         return best[0];
     }
 
-    private void showQuickHud(UnlockableContent content, CompactDiff compact){
+    private void showQuickHud(UnlockableContent content, CompactDiff compact, Seq<HiddenEntry> hidden){
         if(Core.scene == null) return;
         ensureQuickHud();
         if(quickHud == null || quickHudPane == null) return;
         applyQuickHudBackground();
 
         float width = readQuickHudWidth();
-        if(lastQuickHudContent != content || Math.abs(lastQuickHudWidth - width) > 0.5f){
-            rebuildQuickHudContent(content, compact);
+        if(lastQuickHudContent != content || lastQuickHudHidden != hidden || Math.abs(lastQuickHudWidth - width) > 0.5f){
+            rebuildQuickHudContent(content, compact, hidden);
             lastQuickHudContent = content;
+            lastQuickHudHidden = hidden;
             lastQuickHudWidth = width;
         }
 
@@ -432,7 +470,7 @@ public class PatchViewerMod extends Mod{
         Core.scene.root.addChild(quickHudPane);
     }
 
-    private void rebuildQuickHudContent(UnlockableContent content, CompactDiff compact){
+    private void rebuildQuickHudContent(UnlockableContent content, CompactDiff compact, Seq<HiddenEntry> hidden){
         quickHud.clearChildren();
         quickHud.left().top().defaults().left().top();
         applyQuickHudBackground();
@@ -446,6 +484,7 @@ public class PatchViewerMod extends Mod{
         }).growX().fillX().width(width);
         quickHud.row();
         addCompactLines(quickHud, compact, width, true);
+        addHiddenLines(quickHud, hidden, width, hiddenEntryLimit);
     }
 
     private void applyQuickHudBackground(){
@@ -455,14 +494,16 @@ public class PatchViewerMod extends Mod{
         quickHud.setColor(color);
     }
 
-    private boolean showBuildInfoDiff(QuickTarget target, CompactDiff compact){
+    private boolean showBuildInfoDiff(QuickTarget target, CompactDiff compact, Seq<HiddenEntry> hidden){
         Table root = target == null ? null : target.topTable;
         if(root == null) return false;
+        if((compact == null || compact.isEmpty()) && (hidden == null || hidden.isEmpty())) return false;
         lastBuildInfoRoot = root;
 
-        boolean changed = target.content != lastBuildInfoContent || compact != lastBuildInfoCompact || root != lastBuildInfoRebuildRoot;
+        boolean changed = target.content != lastBuildInfoContent || compact != lastBuildInfoCompact || hidden != lastBuildInfoHidden || root != lastBuildInfoRebuildRoot;
         lastBuildInfoContent = target.content;
         lastBuildInfoCompact = compact;
+        lastBuildInfoHidden = hidden;
         lastBuildInfoRebuildRoot = root;
 
         Table extra = (Table)root.find(quickBuildInfoName);
@@ -485,6 +526,7 @@ public class PatchViewerMod extends Mod{
         }).left().width(width).padTop(3f);
         extra.row();
         addCompactLines(extra, compact, width, false);
+        addHiddenLines(extra, hidden, width, hiddenBuildInfoLimit);
         return true;
     }
 
@@ -1132,10 +1174,15 @@ public class PatchViewerMod extends Mod{
     private void hideQuickHud(){
         if(quickHudPane != null) quickHudPane.visible = false;
         lastQuickHudContent = null;
+        lastQuickHudHidden = null;
         lastQuickHudWidth = -1f;
     }
 
     private void hideInjectedRows(Table root){
+        lastBuildInfoContent = null;
+        lastBuildInfoCompact = null;
+        lastBuildInfoHidden = null;
+        lastBuildInfoRebuildRoot = null;
         if(root == null) return;
         try{
             Element extra = root.find(quickBuildInfoName);
@@ -1249,6 +1296,419 @@ public class PatchViewerMod extends Mod{
             }
         }
         return result;
+    }
+
+    /**
+     * Rebuilds the hidden-entry cache from the game's datapatch records. This is read-only: it never
+     * un-applies or re-applies patches. Only blocks (and their direct DrawBlock/BulletType children)
+     * are considered; everything else is silently ignored.
+     */
+    private void refreshHiddenEntries(boolean force){
+        if(!isHiddenEntriesEnabled()){
+            clearHiddenEntries();
+            return;
+        }
+        if(!force){
+            if(++hiddenRefreshTicker < hiddenRefreshFrames) return;
+            hiddenRefreshTicker = 0;
+        }
+
+        try{
+            if(Vars.state == null || !Vars.state.isGame() || Vars.headless){
+                clearHiddenEntries();
+                return;
+            }
+
+            Object data = Reflector.get(Vars.state, "data");
+            Object patcher = data == null ? Reflector.get(Vars.state, "patcher") : Reflector.get(data, "patcher");
+            if(patcher == null){
+                warnHiddenPatcherOnce();
+                clearHiddenEntries();
+                return;
+            }
+
+            Object used = Reflector.get(patcher, "usedpatches");
+            if(!(used instanceof Iterable)){
+                warnHiddenPatcherOnce();
+                clearHiddenEntries();
+                return;
+            }
+
+            long signature = 31L * System.identityHashCode(patcher) + 17L;
+            for(Object item : (Iterable<?>)used){
+                signature = signature * 1099511628211L + System.identityHashCode(item);
+            }
+            boolean signatureChanged = !hiddenCacheReady || signature != hiddenCacheSignature;
+            if(!force && !signatureChanged) return;
+            if(signatureChanged) hiddenOwnerIndex = null;
+
+            hiddenEntriesByContent.clear();
+            hiddenCacheSignature = signature;
+            hiddenCacheReady = true;
+
+            ObjectMap<Object, Seq<HiddenOwner>> owners = null;
+            for(Object item : (Iterable<?>)used){
+                HiddenPatchRecord record = hiddenPatchRecord(item);
+                if(record == null) continue;
+
+                Block block;
+                String path;
+                if(record.target instanceof Block){
+                    block = (Block)record.target;
+                    path = record.field.getName();
+                }else if(record.target instanceof ConsumePower || record.target instanceof DrawBlock || record.target instanceof BulletType){
+                    if(owners == null) owners = hiddenOwnerIndex();
+                    if(owners == null) continue;
+                    Seq<HiddenOwner> candidates = owners.get(record.target);
+                    if(candidates == null || candidates.size != 1) continue;
+                    HiddenOwner owner = candidates.first();
+                    if(!(owner.content instanceof Block)) continue;
+                    block = (Block)owner.content;
+                    path = owner.fieldName + "." + record.field.getName();
+                }else{
+                    continue;
+                }
+
+                if(isHiddenDeniedField(record.field.getName())) continue;
+
+                Object value;
+                try{
+                    record.field.setAccessible(true);
+                    value = record.field.get(record.target);
+                }catch(Throwable ignored){
+                    continue;
+                }
+                if(hiddenValuesEqual(record.oldValue, value)) continue;
+
+                boolean container = isHiddenContainer(record.oldValue) || isHiddenContainer(value);
+                String beforeText = container ? null : hiddenValueText(record.oldValue);
+                String afterText = container ? null : hiddenValueText(value);
+                if(!container && (beforeText == null || afterText == null || beforeText.equals(afterText))){
+                    // Opaque values and changes that round to the same text are summarized instead of
+                    // rendering "changed -> changed" or "5 -> 5".
+                    container = true;
+                    beforeText = null;
+                    afterText = null;
+                }
+
+                Stat mapped = hiddenStatFor(record);
+                if(hiddenStatAlreadyShown(block, mapped)) continue;
+                // A patched PowerTurret bullet is already visible in the ammo panel.
+                if(mapped == null && record.target instanceof BulletType && path.startsWith("shootType.")
+                    && hiddenStatAlreadyShown(block, Stat.ammo)) continue;
+
+                String label = hiddenLabel(mapped, path);
+                HiddenEntry entry = new HiddenEntry(path, label, beforeText, afterText, container);
+
+                Seq<HiddenEntry> entries = hiddenEntriesByContent.get(block);
+                if(entries == null){
+                    entries = new Seq<>();
+                    hiddenEntriesByContent.put(block, entries);
+                }
+                boolean duplicate = false;
+                for(HiddenEntry existing : entries){
+                    if(existing != null && existing.path.equals(path)){
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if(!duplicate) entries.add(entry);
+            }
+
+            for(Seq<HiddenEntry> entries : hiddenEntriesByContent.values()){
+                entries.sort((a, b) -> a.path.compareTo(b.path));
+            }
+        }catch(Throwable error){
+            Log.debug("[PatchViewer] Failed to read hidden datapatch entries: @", Strings.getSimpleMessage(error));
+            clearHiddenEntries();
+        }
+    }
+
+    private void clearHiddenEntries(){
+        hiddenEntriesByContent.clear();
+        hiddenCacheSignature = 0L;
+        hiddenCacheReady = false;
+    }
+
+    private void warnHiddenPatcherOnce(){
+        if(hiddenPatcherWarned) return;
+        hiddenPatcherWarned = true;
+        Log.warn("[PatchViewer] Datapatch internals were not found; hidden-field differences are disabled.");
+    }
+
+    private HiddenPatchRecord hiddenPatchRecord(Object item){
+        if(item == null || item instanceof Content) return null;
+        Object field = Reflector.get(item, "field");
+        if(!(field instanceof Field)) return null;
+        Object target = Reflector.get(item, "target");
+        if(target == null) return null;
+        return new HiddenPatchRecord(target, (Field)field, Reflector.get(item, "value"));
+    }
+
+    /** Indexes direct child objects of every block so one-level nested records can be attributed. */
+    private ObjectMap<Object, Seq<HiddenOwner>> hiddenOwnerIndex(){
+        if(hiddenOwnerIndex != null) return hiddenOwnerIndex;
+        if(hiddenOwnerIndexFailed) return null;
+
+        ObjectMap<Object, Seq<HiddenOwner>> index = new ObjectMap<>();
+        try{
+            for(UnlockableContent content : collectAllContents()){
+                if(!(content instanceof Block)) continue;
+                Block block = (Block)content;
+                Class<?> current = block.getClass();
+                while(current != null && current != Object.class){
+                    Field[] fields = current.getDeclaredFields();
+                    for(Field field : fields){
+                        int modifiers = field.getModifiers();
+                        if(Modifier.isStatic(modifiers) || field.isSynthetic()) continue;
+                        Class<?> fieldType = field.getType();
+                        if(!ConsumePower.class.isAssignableFrom(fieldType)
+                            && !DrawBlock.class.isAssignableFrom(fieldType)
+                            && !BulletType.class.isAssignableFrom(fieldType)) continue;
+                        try{
+                            field.setAccessible(true);
+                            Object value = field.get(block);
+                            if(value == null) continue;
+                            Seq<HiddenOwner> owners = index.get(value);
+                            if(owners == null){
+                                owners = new Seq<>();
+                                index.put(value, owners);
+                            }
+                            owners.add(new HiddenOwner(block, field.getName()));
+                        }catch(Throwable ignored){
+                        }
+                    }
+                    current = current.getSuperclass();
+                }
+            }
+            hiddenOwnerIndex = index;
+        }catch(Throwable error){
+            hiddenOwnerIndexFailed = true;
+            Log.debug("[PatchViewer] Failed to index block child objects: @", Strings.getSimpleMessage(error));
+        }
+
+        return hiddenOwnerIndex;
+    }
+
+    private Stat hiddenStatFor(HiddenPatchRecord record){
+        if(record == null || record.field == null) return null;
+        String name = record.field.getName();
+
+        if(record.target instanceof ConsumePower){
+            if("usage".equals(name)) return Stat.powerUse;
+            if("capacity".equals(name)) return Stat.powerCapacity;
+            return null;
+        }
+
+        Class<?> declaring = record.field.getDeclaringClass();
+        if(!Block.class.isAssignableFrom(declaring)) return null;
+
+        if("health".equals(name)) return Stat.health;
+        if("armor".equals(name)) return Stat.armor;
+        if("size".equals(name)) return Stat.size;
+        if("buildTime".equals(name)) return Stat.buildTime;
+        if("itemCapacity".equals(name)) return Stat.itemCapacity;
+        if("liquidCapacity".equals(name)) return Stat.liquidCapacity;
+        if("unitCapModifier".equals(name)) return Stat.maxUnits;
+        if("range".equals(name)){
+            if(hiddenTypeIs(declaring, "BaseTurret", "MassDriver", "PayloadMassDriver")) return Stat.shootRange;
+            if(hiddenTypeIs(declaring, "BeamNode")) return Stat.powerRange;
+            if(hiddenTypeIs(declaring, "LogicBlock")) return Stat.linkRange;
+            return Stat.range;
+        }
+        if("reload".equals(name)){
+            if(hiddenTypeIs(declaring, "MendProjector")){
+                Stat mendReload = hiddenStatExt("mendReload");
+                return mendReload != null ? mendReload : Stat.repairTime;
+            }
+            if(hiddenTypeIs(declaring, "OverdriveProjector")) return null;
+            return Stat.reload;
+        }
+        if("inaccuracy".equals(name)) return Stat.inaccuracy;
+        if("targetAir".equals(name)) return Stat.targetsAir;
+        if("targetGround".equals(name)) return Stat.targetsGround;
+        if("ammoPerShot".equals(name)) return Stat.ammoUse;
+        if("heatRequirement".equals(name)) return Stat.input;
+        if("maxHeatEfficiency".equals(name)) return Stat.maxEfficiency;
+        if("canOverdrive".equals(name)) return hiddenStatExt("canOverdrive");
+        return null;
+    }
+
+    private boolean hiddenTypeIs(Class<?> type, String... names){
+        Class<?> current = type;
+        while(current != null && current != Object.class){
+            String simpleName = current.getSimpleName();
+            for(String name : names){
+                if(name.equals(simpleName)) return true;
+            }
+            current = current.getSuperclass();
+        }
+        return false;
+    }
+
+    private Stat hiddenStatExt(String fieldName){
+        if(hiddenStatExtCache.containsKey(fieldName)) return hiddenStatExtCache.get(fieldName);
+
+        Stat res = null;
+        try{
+            Class<?> statExt = Class.forName("mindustryX.features.StatExt");
+            Object value = statExt.getField(fieldName).get(null);
+            if(value instanceof Stat) res = (Stat)value;
+        }catch(Throwable ignored){
+        }
+        hiddenStatExtCache.put(fieldName, res);
+        return res;
+    }
+
+    private boolean hiddenStatAlreadyShown(UnlockableContent content, Stat stat){
+        if(content == null || stat == null) return false;
+        ContentDiff diff = diffsByContent.get(content);
+        if(diff == null || diff.isEmpty()) return false;
+
+        String key = hiddenSnapshotStatKey(baselineSnapshots.get(content), stat);
+        if(key == null) key = hiddenSnapshotStatKey(afterSnapshots.get(content), stat);
+        return key != null && diff.rows.containsKey(key);
+    }
+
+    private String hiddenSnapshotStatKey(ContentSnapshot snapshot, Stat stat){
+        if(snapshot == null || stat == null) return null;
+        for(ObjectMap.Entry<String, SnapshotRow> entry : snapshot.rows.entries()){
+            if(entry.value != null && entry.value.stat == stat) return entry.key;
+        }
+        return null;
+    }
+
+    private boolean isHiddenDeniedField(String name){
+        return "localizedName".equals(name)
+            || "name".equals(name)
+            || "description".equals(name)
+            || "details".equals(name)
+            || "requirements".equals(name);
+    }
+
+    private String hiddenLabel(Stat stat, String path){
+        if(stat != null){
+            String base = stat.localized();
+            if(base != null && !base.isEmpty()){
+                if(path != null && path.indexOf('.') >= 0) return base + " (" + path + ")";
+                return base;
+            }
+        }
+        return path == null ? "" : path;
+    }
+
+    private boolean isHiddenContainer(Object value){
+        if(value == null) return false;
+        return value.getClass().isArray() || value instanceof Seq || value instanceof ObjectMap;
+    }
+
+    private boolean hiddenValuesEqual(Object first, Object second){
+        if(first == second) return true;
+        if(first == null || second == null) return false;
+
+        if(first instanceof Number && second instanceof Number){
+            double left = ((Number)first).doubleValue();
+            double right = ((Number)second).doubleValue();
+            return left == right || (Double.isNaN(left) && Double.isNaN(right));
+        }
+        if(first instanceof CharSequence || second instanceof CharSequence){
+            return first.toString().equals(second.toString());
+        }
+        if(first instanceof Color && second instanceof Color) return first.equals(second);
+        if(first instanceof Content && second instanceof Content) return first == second;
+
+        if(first.getClass().isArray() && second.getClass().isArray()){
+            int length = java.lang.reflect.Array.getLength(first);
+            if(length != java.lang.reflect.Array.getLength(second)) return false;
+            for(int i = 0; i < length; i++){
+                Object left = java.lang.reflect.Array.get(first, i);
+                Object right = java.lang.reflect.Array.get(second, i);
+                if(left == right) continue;
+                if(!hiddenValuesEqual(left, right)) return false;
+            }
+            return true;
+        }
+
+        if(first instanceof Seq && second instanceof Seq){
+            Seq<?> left = (Seq<?>)first;
+            Seq<?> right = (Seq<?>)second;
+            if(left.size != right.size) return false;
+            for(int i = 0; i < left.size; i++){
+                Object leftItem = left.get(i);
+                Object rightItem = right.get(i);
+                if(leftItem == rightItem) continue;
+                if(!hiddenValuesEqual(leftItem, rightItem)) return false;
+            }
+            return true;
+        }
+
+        return first.equals(second);
+    }
+
+    private String hiddenValueText(Object value){
+        if(value == null) return bundle("patchviewer.hidden.none", "none");
+        if(value instanceof Number) return hiddenNumberText((Number)value);
+        if(value instanceof Boolean){
+            boolean flag = (Boolean)value;
+            return Core.bundle == null ? (flag ? "true" : "false") : Core.bundle.get(flag ? "yes" : "no", flag ? "Yes" : "No");
+        }
+        if(value instanceof CharSequence){
+            String text = value.toString();
+            return text.isEmpty() ? bundle("patchviewer.hidden.none", "none") : hiddenText(text);
+        }
+        if(value instanceof Color) return "#" + value.toString();
+        if(value instanceof Enum) return ((Enum<?>)value).name().toLowerCase(Locale.ROOT);
+        if(value instanceof UnlockableContent) return hiddenText(((UnlockableContent)value).localizedName);
+        if(value instanceof Content){
+            Class<?> type = value.getClass();
+            String simpleName = type.getSimpleName();
+            if(simpleName == null || simpleName.isEmpty()){
+                Class<?> superclass = type.getSuperclass();
+                simpleName = superclass == null ? "" : superclass.getSimpleName();
+            }
+            return hiddenText(simpleName.isEmpty() ? String.valueOf(value) : simpleName);
+        }
+
+        String buildVisibility = hiddenBuildVisibilityName(value);
+        if(buildVisibility != null) return buildVisibility;
+
+        // Opaque value: no stable text form, let the caller collapse it to a single "changed" row.
+        return null;
+    }
+
+    private String hiddenBuildVisibilityName(Object value){
+        if(value == null) return null;
+        try{
+            Class<?> type = value.getClass();
+            if(!"BuildVisibility".equals(type.getSimpleName())) return null;
+            for(Field field : type.getFields()){
+                if(!Modifier.isStatic(field.getModifiers())) continue;
+                if(field.getType() != type) continue;
+                if(field.get(null) == value) return field.getName();
+            }
+        }catch(Throwable ignored){
+        }
+        return null;
+    }
+
+    private String hiddenNumberText(Number number){
+        if(number instanceof Float || number instanceof Double){
+            double value = number.doubleValue();
+            if(Double.isNaN(value) || Double.isInfinite(value)) return String.valueOf(value);
+            if(value == Math.rint(value) && Math.abs(value) < 1e15) return String.valueOf((long)value);
+            String text = String.format(Locale.ROOT, "%.6f", value);
+            while(text.endsWith("0")) text = text.substring(0, text.length() - 1);
+            if(text.endsWith(".")) text = text.substring(0, text.length() - 1);
+            if("-0".equals(text)) text = "0";
+            return text;
+        }
+        return String.valueOf(number);
+    }
+
+    private String hiddenText(String text){
+        if(text == null) return "";
+        if(text.length() <= hiddenTextLimit) return text;
+        return text.substring(0, hiddenTextLimit) + "...";
     }
 
     private ContentSnapshot snapshot(UnlockableContent content){
@@ -2325,8 +2785,12 @@ public class PatchViewerMod extends Mod{
     private void showPatched(ContentInfoDialog dialog, UnlockableContent content){
         if(dialog == null || content == null) return;
 
+        if(isHiddenEntriesEnabled()) refreshHiddenEntries(true);
         ContentDiff diff = diffsByContent.get(content);
-        if(diff == null || diff.isEmpty()) return;
+        Seq<HiddenEntry> hidden = isHiddenEntriesEnabled() ? hiddenEntriesByContent.get(content) : null;
+        boolean hasDiff = diff != null && !diff.isEmpty();
+        boolean hasHidden = hidden != null && !hidden.isEmpty();
+        if(!hasDiff && !hasHidden) return;
 
         Table table = findNativeContentTable(dialog.cont);
         if(table == null) return;
@@ -2334,9 +2798,14 @@ public class PatchViewerMod extends Mod{
         ContentSnapshot before = baselineSnapshots.get(content);
         ContentSnapshot after = afterSnapshots.get(content);
 
-        applyContentTextDiff(table, content.displayDescription(), diff.description);
-        applyContentTextDiff(table, content.details, diff.details);
-        applyNativeStatDiffs(table, content, before, after, diff);
+        if(hasDiff){
+            applyContentTextDiff(table, content.displayDescription(), diff.description);
+            applyContentTextDiff(table, content.details, diff.details);
+            applyNativeStatDiffs(table, content, before, after, diff);
+        }
+        if(hasHidden){
+            appendHiddenSection(table, hidden);
+        }
     }
 
     private Table findNativeContentTable(Element element){
@@ -2413,6 +2882,137 @@ public class PatchViewerMod extends Mod{
         root.invalidateHierarchy();
     }
 
+    private void appendHiddenSection(Table root, Seq<HiddenEntry> hidden){
+        if(root == null || hidden == null || hidden.isEmpty()) return;
+
+        float contentWidth = root.getWidth() > 0f ? root.getWidth() : root.getPrefWidth();
+        contentWidth = Math.max(160f, contentWidth - 44f);
+
+        Table section = new Table();
+        section.name = hiddenSectionName;
+        section.left().top().defaults().left().top();
+
+        Label header = new Label("[accent]" + escape(bundle("patchviewer.hidden.title", "Hidden entries")) + "[]");
+        header.setWrap(true);
+        header.setEllipsis(false);
+        section.add(header).left().width(contentWidth).padTop(10f).row();
+
+        int shown = 0;
+        for(HiddenEntry entry : hidden){
+            if(entry == null) continue;
+            if(shown >= hiddenDialogLimit) break;
+            addHiddenEntryRow(section, entry, contentWidth);
+            shown++;
+        }
+        if(hidden.size > shown){
+            Label more = new Label("[lightgray]" + escape(hiddenMoreText(hidden.size - shown)) + "[]");
+            more.setWrap(true);
+            more.setEllipsis(false);
+            section.add(more).left().width(contentWidth).padTop(2f).row();
+        }
+
+        root.row();
+        root.add(section).left().top().width(contentWidth).padLeft(4f);
+        root.invalidateHierarchy();
+    }
+
+    private void addHiddenEntryRow(Table section, HiddenEntry entry, float width){
+        if(section == null || entry == null) return;
+
+        Table row = new Table();
+        row.left().top().defaults().left().top();
+
+        float available = Math.max(120f, width - 8f);
+        String labelText = "[lightgray]" + escape(entry.label) + ":[]";
+        if(entry.container){
+            Label line = new Label(labelText + " " + modifiedNewColorTag() + escape(bundle("patchviewer.hidden.changed", "changed")) + "[]");
+            line.setWrap(true);
+            line.setEllipsis(false);
+            row.add(line).left().width(available);
+            section.add(row).left().width(available).padTop(2f).row();
+            return;
+        }
+
+        String beforeText = entry.before == null ? "" : entry.before;
+        String afterText = entry.after == null ? "" : entry.after;
+
+        Label label = new Label(labelText);
+        label.setWrap(true);
+        label.setEllipsis(false);
+        Label oldLabel = new Label(modifiedOldColorTag() + escape(beforeText) + "[]");
+        oldLabel.setWrap(true);
+        oldLabel.setEllipsis(false);
+        Label arrowLabel = new Label(arrowColor + "->[]");
+        Label newLabel = new Label(modifiedNewColorTag() + escape(afterText) + "[]");
+        newLabel.setWrap(true);
+        newLabel.setEllipsis(false);
+
+        float arrowWidth = Math.max(18f, measureMarkupWidth("->") + 12f);
+        float labelWidth = Math.max(36f, Math.min(available * 0.42f, measureMarkupWidth(escape(entry.label + ": "))));
+        float oldWidth = Math.max(28f, Math.min(available * 0.32f, measureMarkupWidth(escape(beforeText))));
+        float remaining = available - labelWidth - oldWidth - arrowWidth - 8f;
+        boolean inline = remaining >= 60f && measureMarkupWidth(escape(afterText)) <= remaining;
+
+        if(labelWidth + oldWidth + arrowWidth + 60f > available){
+            labelWidth = Math.max(28f, available * 0.34f);
+            oldWidth = Math.max(24f, available * 0.28f);
+            remaining = Math.max(40f, available - labelWidth - oldWidth - arrowWidth - 8f);
+            inline = false;
+        }
+
+        row.add(label).width(labelWidth);
+        row.add(oldLabel).width(oldWidth).padLeft(3f);
+        row.add(arrowLabel).padLeft(3f).padRight(3f);
+        if(inline){
+            row.add(newLabel).width(remaining);
+            section.add(row).left().width(available).padTop(2f).row();
+        }else{
+            section.add(row).left().width(available).padTop(2f).row();
+            Table next = new Table();
+            next.left().top().defaults().left().top();
+            next.add(newLabel).left().width(Math.max(80f, available - 10f));
+            section.add(next).left().width(available).padLeft(10f).row();
+        }
+    }
+
+    private void addHiddenLines(Table table, Seq<HiddenEntry> hidden, float width, int limit){
+        if(table == null || hidden == null || hidden.isEmpty()) return;
+
+        // Always emit the header: build-info mode disables the other headers, and a bare
+        // "field: old -> new" line would be indistinguishable from a modified stat row.
+        addCompactHeader(table, bundle("patchviewer.hidden.title", "Hidden entries"), width);
+
+        int shown = 0;
+        for(HiddenEntry entry : hidden){
+            if(entry == null) continue;
+            if(shown >= limit) break;
+            addCompactLine(table, hiddenEntryMarkup(entry), width);
+            shown++;
+        }
+        if(hidden.size > shown){
+            addCompactLine(table, "[lightgray]" + escape(hiddenMoreText(hidden.size - shown)) + "[]", width);
+        }
+    }
+
+    private String hiddenEntryMarkup(HiddenEntry entry){
+        if(entry == null) return null;
+        String label = escape(entry.label);
+        if(entry.container){
+            return "[lightgray]" + label + ": []" + modifiedNewColorTag()
+                + escape(bundle("patchviewer.hidden.changed", "changed")) + "[]";
+        }
+        String beforeText = entry.before == null ? "" : entry.before;
+        String afterText = entry.after == null ? "" : entry.after;
+        // Non-breaking space keeps the arrow on the old value's line when the label wraps.
+        return "[lightgray]" + label + ": []"
+            + modifiedOldColorTag() + escape(beforeText) + "\u00A0"
+            + arrowColor + "-> " + modifiedNewColorTag() + escape(afterText) + "[]";
+    }
+
+    private String hiddenMoreText(int count){
+        return bundle("patchviewer.hidden.more", "{0} more").replace("{0}", String.valueOf(count));
+    }
+
     private NativeStatInset findNativeStatInset(Table root, String label){
         if(root == null || label == null) return null;
         String expected = label.trim() + ":";
@@ -2421,6 +3021,7 @@ public class PatchViewerMod extends Mod{
             Element child = cells.get(i).get();
             if(!(child instanceof Table)) continue;
             Table candidate = (Table)child;
+            if(hiddenSectionName.equals(candidate.name)) continue;
             Seq<Cell> candidateCells = candidate.getCells();
             if(candidateCells.isEmpty()) continue;
             Element first = candidateCells.first().get();
@@ -2681,6 +3282,7 @@ public class PatchViewerMod extends Mod{
         table.defaults().growX().pad(4f).left();
 
         table.checkPref(keyEnabled, true);
+        table.checkPref(keyHiddenEntries, true);
         table.pref(new QuickDisplayModeSetting());
         table.sliderPref(keyQuickHudOpacity, 70, 20, 100, 1, value -> value + "%");
         table.sliderPref(keyQuickHudWidth, 420, 100, 900, 10, value -> value + "px");
@@ -2844,6 +3446,10 @@ public class PatchViewerMod extends Mod{
 
     private boolean isPatchViewerEnabled(){
         return Core.settings.getBool(keyEnabled, true);
+    }
+
+    private boolean isHiddenEntriesEnabled(){
+        return isPatchViewerEnabled() && Core.settings.getBool(keyHiddenEntries, true);
     }
 
     private String readQuickDisplayMode(){
@@ -3035,6 +3641,44 @@ public class PatchViewerMod extends Mod{
             layoutWidth = width;
             setWidth(width);
             invalidateHierarchy();
+        }
+    }
+
+    private static class HiddenPatchRecord{
+        final Object target;
+        final Field field;
+        final Object oldValue;
+
+        HiddenPatchRecord(Object target, Field field, Object oldValue){
+            this.target = target;
+            this.field = field;
+            this.oldValue = oldValue;
+        }
+    }
+
+    private static class HiddenOwner{
+        final UnlockableContent content;
+        final String fieldName;
+
+        HiddenOwner(UnlockableContent content, String fieldName){
+            this.content = content;
+            this.fieldName = fieldName;
+        }
+    }
+
+    private static class HiddenEntry{
+        final String path;
+        final String label;
+        final String before;
+        final String after;
+        final boolean container;
+
+        HiddenEntry(String path, String label, String before, String after, boolean container){
+            this.path = path;
+            this.label = label;
+            this.before = before;
+            this.after = after;
+            this.container = container;
         }
     }
 

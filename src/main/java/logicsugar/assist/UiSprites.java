@@ -1,4 +1,4 @@
-package logicsugar.profile.ui;
+package logicsugar.assist;
 
 import arc.Core;
 import arc.graphics.g2d.TextureRegion;
@@ -9,49 +9,46 @@ import mindustry.Vars;
 import mindustry.mod.Mods.LoadedMod;
 
 /**
- * ProfileDialog 的 6 张自绘图标（上游 MlogAssertions v0.11.3 的 {@code Icon2}）。
+ * 自绘 UI 图标（{@code assets/sprites/ui/*.png}）的图集加载器。
  *
- * <p>图标文件放在 {@code assets/sprites/ui/*.png}，Mindustry 的图集打包会把它们命名成
- * {@code <mod.name>-<文件名>}，所以运行时前缀必须按「当前实际加载我们的那个 mod」拼。
- * 三种形态自动成立：dev 构建 {@code LogicSugar-dev-*}、正式 {@code LogicSugar-*}、
- * Neon 聚合构建 {@code Neon-*}（Neon 的 sync 把同一批 png 复制进它自己的资源目录，
- * 此时 {@code LogicSugarMod} 不再是任何 mod 的 main 类，{@link Vars#mods}{@code .getMod}
- * 返回 null，需要按类加载器反查宿主 mod）。</p>
+ * <p>Mindustry 的图集打包会把 mod 的 sprites 命名成 {@code <mod.name>-<文件名>}，所以运行时
+ * 前缀必须按「当前实际加载我们的那个 mod」拼。三种形态自动成立：dev 构建
+ * {@code LogicSugar-dev-*}、正式 {@code LogicSugar-*}、Neon 聚合构建 {@code Neon-*}
+ * （Neon 的 sync 把同一批 png 复制进它自己的资源目录，此时 {@code LogicSugarMod} 不再是
+ * 任何 mod 的 main 类，{@link Vars#mods}{@code .getMod} 返回 null，需要按类加载器反查宿主
+ * mod）。</p>
  *
- * <p>无头/图集缺失时退回游戏自带的 error 区域并只记一次日志——图标是纯装饰，
- * 不允许因此让 profiler 或游戏启动失败。</p>
+ * <p>无头/图集缺失时退回游戏自带的 error 区域并只每个图标记一次日志——图标是纯装饰，
+ * 不允许因此让任何界面或游戏启动失败。</p>
+ *
+ * <p>本类是 profiler 与变量/日志界面共用的入口（{@code ProfilerIcons}、
+ * {@code VarsIcons}）；不要在界面代码里另拼前缀。</p>
  */
-public final class ProfilerIcons{
-    public static final TextureRegionDrawable branching = load("branching");
-    public static final TextureRegionDrawable percent = load("percent");
-    public static final TextureRegionDrawable sortAsc = load("sort-asc");
-    public static final TextureRegionDrawable sortDesc = load("sort-desc");
-    public static final TextureRegionDrawable sum = load("sum");
-    public static final TextureRegionDrawable time = load("time");
-
+public final class UiSprites{
     private static String prefix;
-    private static boolean warned;
+    private static final arc.struct.ObjectSet<String> warned = new arc.struct.ObjectSet<>();
 
-    private ProfilerIcons(){
+    private UiSprites(){
     }
 
-    private static TextureRegionDrawable load(String name){
+    /** 解析并缓存 {@code <atlas prefix><name>}；缺图时返回 error 区域。 */
+    public static TextureRegionDrawable load(String name){
         String atlasName = prefix() + name;
 
         try{
             if(Core.atlas != null && !Core.atlas.has(atlasName)){
-                warnOnce("atlas region '" + atlasName + "' is missing (profiler icons fall back to the error region)");
+                warnOnce(atlasName, "atlas region '" + atlasName + "' is missing (the icon falls back to the error region)");
             }
             return new TextureRegionDrawable(Core.atlas == null ? null : Core.atlas.find(atlasName));
         }catch(Throwable t){
-            warnOnce("cannot resolve the profiler icon '" + name + "': " + t);
+            warnOnce(atlasName, "cannot resolve the UI icon '" + name + "': " + t);
             return new TextureRegionDrawable((TextureRegion)null);
         }
     }
 
-    private static void warnOnce(String message){
-        if(warned) return;
-        warned = true;
+    private static void warnOnce(String key, String message){
+        if(warned.contains(key)) return;
+        warned.add(key);
         Log.warn("LogicSugar: @", message);
     }
 
@@ -59,7 +56,7 @@ public final class ProfilerIcons{
     static String prefix(){
         if(prefix == null){
             prefix = resolve();
-            Log.info("LogicSugar: profiler icons use the atlas prefix '@'", prefix);
+            Log.info("LogicSugar: UI icons use the atlas prefix '@'", prefix);
         }
         return prefix;
     }
@@ -98,7 +95,7 @@ public final class ProfilerIcons{
         }catch(Throwable ignored){
         }
 
-        warnOnce("cannot determine the mod's atlas prefix; profiler icons may be missing");
+        Log.warn("LogicSugar: cannot determine the mod's atlas prefix; UI icons may be missing");
         return "";
     }
 }

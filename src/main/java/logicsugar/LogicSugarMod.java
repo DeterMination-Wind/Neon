@@ -10,6 +10,7 @@ import arc.struct.IntSeq;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Log;
+import arc.util.Time;
 import arc.util.io.PropertiesUtils;
 import java.util.Locale;
 import mindustry.Vars;
@@ -18,6 +19,7 @@ import mindustry.gen.LogicIO;
 import mindustry.logic.LStatement;
 import mindustry.logic.LogicDialog;
 import mindustry.logic.SugarCoexist;
+import mindustry.logic.SugarDebugLines;
 import mindustry.logic.SugarFunctions;
 import mindustry.logic.SugarLogicDialog;
 import mindustry.logic.SugarStatements;
@@ -27,13 +29,8 @@ import mindustry.ui.dialogs.BaseDialog;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import logicsugar.assist.BoxSelect;
 import logicsugar.assist.JumpLineColor;
-import logicsugar.assist.ProcessorStatus;
 import logicsugar.assist.UnitFlags;
 import logicsugar.assist.VarDisplayFilter;
-import logicsugar.vars.MemoryVars;
-import logicsugar.vars.Snapshots;
-import logicsugar.vars.ui.BlockConfigAccess;
-import logicsugar.vars.ui.VarsAccess;
 import logicsugar.assist.data.ArrayBulkModule;
 import logicsugar.assist.data.BitsetModule;
 import logicsugar.assist.data.ChainModule;
@@ -46,6 +43,7 @@ import logicsugar.assist.data.SetModule;
 import logicsugar.assist.expr.ArrayRegistry;
 import logicsugar.assist.expr.ExprHook;
 import logicsugar.assist.expr.ExprIntrinsics;
+import logicsugar.assist.expr.UnitIntrinsics;
 import static arc.Events.on;
 
 public class LogicSugarMod extends Mod{
@@ -80,7 +78,12 @@ public class LogicSugarMod extends Mod{
      *  and never shown unless the library button is pressed. */
     private static SugarLogicDialog sideEditor;
 
-    /** How the install pass treats a logic editor that another mod has already replaced. */
+    /** How the install pass treats a logic editor that another mod has already replaced.
+     *
+     *  <p>KEEP(P4) — 这段处理的是「**其它 mod** 的 {@code LogicDialog} 子类」，与 Mlog Dev Tools
+     *  的功能重叠无关，不要随 MDT 解耦一起删除。它决定的只是谁拥有 {@code Vars.ui.logic}：
+     *  接管 / 询问 / 让位 / 共存。删掉它，LogicSugar 会静默顶掉对方的编辑器界面（或反过来被顶掉），
+     *  设置里的「逻辑编辑器冲突」也随之失效。</p> */
     public enum EditorConflict{
         /** Replace it, keeping only LogicSugar's editor. Destructive for the other mod: its editor
          *  UI is detached and only that mod could restore it, so this is deliberately not the
@@ -158,8 +161,17 @@ public class LogicSugarMod extends Mod{
         // heuristic inside ArrayRegistry.
         ArrayRegistry.setLinkResolverProvider(ArrayRegistry::processorLinks);
         on(ClientLoadEvent.class, event -> Core.app.post(LogicSugarMod::installEditor));
-        // 变量界面/快照与编辑器所有权无关（其它 mod 接管编辑器时快照仍然可用），单独安装
-        on(ClientLoadEvent.class, event -> Core.app.post(LogicSugarMod::installVars));
+        // 一次性推荐 MDT。延后一帧再排入 Time.run：ClientLoadEvent 同一帧里其它 mod（包括本模组
+        // 自己的编辑器冲突询问）也会弹窗，延后一次让出屏幕，避免两个模态互相盖住。
+        on(ClientLoadEvent.class, event -> Core.app.post(() -> Time.run(60f, MdtRecommendation::maybeShow)));
+        // 匿名使用统计是可选观测设施：初始化失败绝不能影响编辑器或编译。
+        on(ClientLoadEvent.class, event -> {
+            try{
+                PostHogReporter.install();
+            }catch(Throwable t){
+                Log.warn("LogicSugar: failed to install the PostHog usage reporter.", t);
+            }
+        });
     }
 
     /** Re-applies the localized mod bundle, which the game's own pass cannot find on Android.
@@ -217,6 +229,13 @@ public class LogicSugarMod extends Mod{
 
     /** Installs - or deliberately leaves alone - the logic editor; see {@link EditorConflict}. */
     private static void installEditor(){
+        // Debug-line passthrough parsers (assert/log/snapshot/…, see SugarDebugLines) register
+        // here and nowhere else: this runs from Core.app.post after ClientLoadEvent, so every
+        // other mod has already registered its parsers. Mlog Dev Tools owns these opcodes when
+        // it is present, and installParsers() is first-wins — registering from init() would take
+        // them from it permanently.
+        SugarDebugLines.installParsers();
+
         if(Vars.ui == null || Vars.ui.logic == null) return;
 
         LogicDialog current = Vars.ui.logic;
@@ -364,29 +383,6 @@ public class LogicSugarMod extends Mod{
         Vars.ui.logic = sugar;
     }
 
-    /**
-     * 变量界面（Vars/Memory/Properties）与快照子系统的安装：数据层初始化 + 两个入口
-     * （三击任意方块、内存块/处理器配置面板上的按钮）+ 设置读取，以及运行时 mlog 的
-     * {@code snapshot} 指令需要的内存视图。
-     *
-     * <p>与 {@link #installEditor} 分开：编辑器被其它 mod 接管时快照仍然应当可用，而这些
-     * 入口都不依赖编辑器所有权。整段包在 try 里：它们是可选功能，任何一环接不上（例如游戏
-     * 改掉了需要反射的私有字段）都不允许影响编辑/编译。</p>
-     */
-    private static void installVars(){
-        try{
-            Snapshots.init();
-            MemoryVars.init();
-            // profiler：反射桥的初始化（LParser 的源码列）失败了也只是降级，不影响快照与变量界面
-            logicsugar.profile.InstrumentationEngine.init();
-            VarsAccess.applySettings();
-            VarsAccess.init();
-            BlockConfigAccess.init();
-        }catch(Throwable t){
-            Log.warn("LogicSugar: failed to install the vars/snapshot subsystem: @", t);
-        }
-    }
-
     /** The editor add-ons only make sense on our own canvas, so a step-aside pass skips them. */
     private static void postInstall(boolean ownsEditor){
         if(Vars.ui == null || Vars.ui.logic == null) return;
@@ -399,8 +395,6 @@ public class LogicSugarMod extends Mod{
             BoxSelect.init();
             ExprHook.init();
             VarDisplayFilter.init();
-            ProcessorStatus.init();
-            ProcessorStatus.applySettings();
             UnitFlags.init();
             UnitFlags.applySettings();
         }
@@ -574,6 +568,10 @@ public class LogicSugarMod extends Mod{
         DataModules.register(new ListHeapModule());
         DataModules.register(new ChainModule());
 
+        // Unit family/tier/planet getters. Pure compile-time expression expansions whose emitted
+        // instructions are vanilla sensor/op, so this does not touch the multiplayer gate.
+        ExprIntrinsics.register(new UnitIntrinsics());
+
         // single registration point shared with the decompiler preflight and the self-tests
         SugarStatements.installParsers();
         // record/stack/queue/deque/bitset/map/uset/list/heap/chain declaration cards + parsers
@@ -598,12 +596,11 @@ public class LogicSugarMod extends Mod{
         // without it the editor conflict stays stuck on whatever value it happens to hold.
         table.pref(new LogicSugarSettings.EditorConflictSetting(LogicSugarMod.settingEditorConflict, LogicSugarMod.EditorConflict.ask.id));
         table.pref(new LogicSugarSettings.LibraryButtonSetting("logicsugar.funclib"));
-        LogicSugarSettings.addProcessorStatusPrefs(table);
-        LogicSugarSettings.addVarsPrefs(table);
         LogicSugarSettings.addUnitFlagsPref(table);
-        LogicSugarSettings.addHideVarsPref(table);
         LogicSugarSettings.addBoxSelectPrefs(table);
         LogicSugarSettings.addCompactCardsPref(table);
         JumpLineColor.buildSettings(table);
+        // 反馈入口放在整页最下面：两种形态都必须有，否则聚合用户看不到它。
+        table.pref(new LogicSugarSettings.FeedbackButtonSetting());
     }
 }

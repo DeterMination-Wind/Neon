@@ -1,5 +1,6 @@
 package mindustry.logic;
 
+import logicsugar.assist.InstructionBudget;
 import logicsugar.assist.expr.ExprCompiler;
 import logicsugar.assist.expr.ExprStatement;
 import logicsugar.assist.expr.ExprTextImport;
@@ -714,13 +715,26 @@ public final class SugarDecompiler{
             //（它们的 jump 目标还是 __ls_* 标签，数字那一趟是空操作）。串起来一起用。
             String threadedTarget = normalize(SugarCompiler.threadAlwaysJumpTargets(
                 SugarCompiler.threadNumericJumpTargets(original)), privileged);
+            // KEEP(P4) — recovered sugar keeps the generated bounds checks (see Candidate.emit),
+            // but a strip recompilation of that sugar drops every debug line. So when the stored
+            // stream carries one, both sides are also compared with the generated-bounds lines
+            // filtered out; that keeps the strip shape verifiable without widening the gate for
+            // programs that never had such a line. The filter is safe because the line is a
+            // debug-only check of an emit build, and a recovered expression that regenerates a
+            // check on top of the kept one collapses under the same filter (the gate compares
+            // the executable instruction stream, not the literal text).
+            boolean generatedBounds = SugarDebugLines.containsGeneratedBoundsLine(target);
+            String targetNoBounds = generatedBounds
+                ? SugarDebugLines.stripGeneratedBoundsLines(target) : target;
+            String threadedTargetNoBounds = generatedBounds
+                ? SugarDebugLines.stripGeneratedBoundsLines(threadedTarget) : threadedTarget;
             // The lowering also depends on the switch strategy and the assert-emit shape,
             // which are user settings: a program saved under different settings must still
             // verify, so the gate compiles every candidate across the full matrix instead of
             // only the locally configured one. The assert-emit dimension only matters for
-            // candidates containing assertion cards (2 modes x 2 strategies otherwise).
-            boolean hasAsserts = SugarAsserts.containsAssertStatements(candidate)
-                || SugarAsserts.containsAssertStatements(original);
+            // candidates containing debug lines (2 modes x 2 strategies otherwise).
+            boolean hasAsserts = SugarDebugLines.containsDebugLine(candidate)
+                || SugarDebugLines.containsDebugLine(original);
             SugarCompiler.AssertEmit[] emitShapes = hasAsserts
                 ? SugarCompiler.AssertEmit.values() : new SugarCompiler.AssertEmit[]{SugarCompiler.AssertEmit.strip};
             // Two lowering eras of the trailing entry skip, exactly like
@@ -740,6 +754,15 @@ public final class SugarDecompiler{
                                 String stripped = normalize(stripGeneratedMetadata(compiled), privileged);
                                 if(stripped.equals(target) || stripped.equals(threadedTarget)){
                                     return new Verification(true, mode.name() + "/" + strategy.name() + "/" + emit.name());
+                                }
+                                if(generatedBounds){
+                                    // Same comparison with the generated bounds lines filtered out
+                                    // of both sides (see the KEEP(P4) note above).
+                                    String strippedNoBounds = SugarDebugLines.stripGeneratedBoundsLines(stripped);
+                                    if(strippedNoBounds.equals(targetNoBounds)
+                                        || strippedNoBounds.equals(threadedTargetNoBounds)){
+                                        return new Verification(true, mode.name() + "/" + strategy.name() + "/" + emit.name());
+                                    }
                                 }
                             }catch(Throwable ignored){
                                 // Try the next matrix combination.
@@ -768,12 +791,20 @@ public final class SugarDecompiler{
      *  vanilla mlog. */
     private static void installSugarParsers(){
         logicsugar.LogicSugarMod.registerStatements();
+        // Recovered sugar can now keep LogicSugar's own generated bounds lines as text, so the
+        // recompilation gate has to parse them. Decompiling is a user action (open a processor),
+        // i.e. after every mod's init has registered, and installParsers() is first-wins — MDT
+        // still owns the opcodes when present. Headless self-tests get the parsers here too.
+        SugarDebugLines.installParsers();
     }
 
     private static void validateInput(String code, boolean privileged){
         List<String> heads = logicalHeads(code);
-        if(heads.size() > LExecutor.maxInstructions){
-            throw new IllegalArgumentException("logic program exceeds the " + LExecutor.maxInstructions + " instruction limit");
+        // KEEP(save budget): the processor product is capped by the vanilla 1000-instruction
+        // limit, never by a third-party (e.g. MDT slider) raise of LExecutor.maxInstructions.
+        int limit = InstructionBudget.vanillaLimit();
+        if(heads.size() > limit){
+            throw new IllegalArgumentException("logic program exceeds the " + limit + " instruction limit");
         }
         int index = 0;
         for(LStatement statement : LAssembler.read(code, privileged)){
@@ -926,6 +957,9 @@ public final class SugarDecompiler{
     private static final class RawItem extends Item{
         final String[] tokens;
         RawItem(int origin, String[] tokens){ super(origin, origin); this.tokens = tokens; }
+        /** One of LogicSugar's own generated bounds checks (KEEP(P4), see
+         *  {@link SugarDebugLines#isGeneratedBoundsMessage}). */
+        boolean isGeneratedBoundsLine(){ return SugarDebugLines.isGeneratedBoundsLine(tokens); }
         @Override void write(StringBuilder out, Emitter emitter){
             for(int i = 0; i < tokens.length; i++){
                 if(i > 0) out.append(' ');
@@ -1750,8 +1784,10 @@ public final class SugarDecompiler{
             Statement head = program.statements.get(at + 3);
             if(head.kind().equals("ubind")) return unitFreeFrame(at, limit);
             if(unitTempIndex(at + 3, 1, "n") != null) return unitForFrame(at, limit);
-            if(unitTempIndex(at + 3, 1, "s") != null) return unitNextFrame(at, limit);
-            if(head.kind().equals("jump")) return unitBindFrame(at, limit);
+            if(head.kind().equals("jump")){
+                Frame next = unitNextFrame(at, limit);
+                return next != null ? next : unitBindFrame(at, limit);
+            }
             return null;
         }
 
@@ -1830,40 +1866,53 @@ public final class SugarDecompiler{
         }
 
         /**
-         * {@code unitnext}: the same scan loop without the "rebind a unit that already wears our
-         * flag" branch. The region ends at the label both assignments jump to.
+         * {@code unitnext}: the same scan loop without accepting a unit that already wears our
+         * flag during the scan. It does keep a one-shot confirmation branch for the unit claimed
+         * on the previous entry, and clears {@code held} when it assigns, so the next call scans
+         * again instead of sticking to the same unit like {@code unitbind}.
          */
         private Frame unitNextFrame(int at, int limit){
-            String index = unitTempIndex(at + 3, 1, "s");
+            String index = unitTempIndex(at + 3, 3, "h");
             if(!unitIndexMatches(index)) return null;
-            String steps = unitTemp("s", index), anchor = unitTemp("a", index), flag = unitTemp("f", index),
-                dead = unitTemp("d", index), ctrl = unitTemp("c", index);
-            int loop = at + 5, keep = at + 12, fail = at + 32, end = at + 33;
+            String hold = unitTemp("h", index), flag = unitTemp("f", index), dead = unitTemp("d", index),
+                ctrl = unitTemp("c", index), anchor = unitTemp("a", index), steps = unitTemp("s", index);
+            int scan = at + 11, lost = at + 10, loop = at + 13, keep = at + 20,
+                take = at + 38, fail = at + 41, end = at + 43;
             if(end > limit) return null;
-            String type = program.statements.get(at + 7).token(1);
-            String variable = program.statements.get(at + 30).token(1);
+            String type = program.statements.get(at + 15).token(1);
+            String variable = program.statements.get(at + 38).token(1);
             if(!unitOperand(variable)) return null;
-            boolean ok = unitLine(at + 3, "set", steps, "0")
-                && unitLine(at + 4, "set", anchor, "null")
-                && unitLine(at + 5, "op", "add", steps, steps, "1")
-                && unitJump(at + 6, fail, "greaterThan", steps, "8192")
-                && unitLine(at + 7, "ubind", type)
-                && unitJump(at + 8, fail, "equal", "@unit", "null")
-                && unitJump(at + 9, fail, "equal", "@unit", anchor)
-                && unitJump(at + 10, keep, "notEqual", anchor, "null")
-                && unitLine(at + 11, "set", anchor, "@unit")
-                && unitLine(at + 12, "sensor", dead, "@unit", "@dead")
-                && unitJump(at + 13, loop, "notEqual", dead, "0")
-                && unitLine(at + 14, "sensor", flag, "@unit", "@flag")
-                && unitJump(at + 15, loop, "notEqual", flag, "0")
-                && unitLine(at + 16, "sensor", ctrl, "@unit", "@controlled")
-                && unitJump(at + 17, loop, "notEqual", ctrl, "0")
-                && unitLine(at + 18, "sensor", flag, "@unit", "@flag")
-                && unitJump(at + 19, loop, "notEqual", flag, "0")
-                && unitClaim(at + 20, index, loop)
-                && unitLine(at + 30, "set", variable, "@unit")
-                && unitJump(at + 31, end, "always", "x", "false")
-                && unitLine(at + 32, "set", variable, "null");
+            boolean ok = unitJump(at + 3, scan, "equal", hold, "null")
+                && unitLine(at + 4, "ubind", hold)
+                && unitJump(at + 5, lost, "equal", "@unit", "null")
+                && unitLine(at + 6, "sensor", dead, "@unit", "@dead")
+                && unitJump(at + 7, lost, "notEqual", dead, "0")
+                && unitLine(at + 8, "sensor", flag, "@unit", "@flag")
+                && unitJump(at + 9, take, "equal", flag, "__ls_ub_uid")
+                && unitLine(at + 10, "set", hold, "null")
+                && unitLine(at + 11, "set", steps, "0")
+                && unitLine(at + 12, "set", anchor, "null")
+                && unitLine(at + 13, "op", "add", steps, steps, "1")
+                && unitJump(at + 14, fail, "greaterThan", steps, "8192")
+                && unitLine(at + 15, "ubind", type)
+                && unitJump(at + 16, fail, "equal", "@unit", "null")
+                && unitJump(at + 17, fail, "equal", "@unit", anchor)
+                && unitJump(at + 18, keep, "notEqual", anchor, "null")
+                && unitLine(at + 19, "set", anchor, "@unit")
+                && unitLine(at + 20, "sensor", dead, "@unit", "@dead")
+                && unitJump(at + 21, loop, "notEqual", dead, "0")
+                && unitLine(at + 22, "sensor", flag, "@unit", "@flag")
+                && unitJump(at + 23, loop, "notEqual", flag, "0")
+                && unitLine(at + 24, "sensor", ctrl, "@unit", "@controlled")
+                && unitJump(at + 25, loop, "notEqual", ctrl, "0")
+                && unitLine(at + 26, "sensor", flag, "@unit", "@flag")
+                && unitJump(at + 27, loop, "notEqual", flag, "0")
+                && unitClaim(at + 28, index, loop)
+                && unitLine(at + 38, "set", variable, "@unit")
+                && unitLine(at + 39, "set", hold, "null")
+                && unitJump(at + 40, end, "always", "x", "false")
+                && unitLine(at + 41, "set", variable, "null")
+                && unitLine(at + 42, "set", hold, "null");
             return ok ? unitCardFrame(at, end, "unitnext " + type + " " + variable) : null;
         }
 
@@ -1954,8 +2003,9 @@ public final class SugarDecompiler{
             return frame;
         }
 
-        /** The flag claim every unit card shares: write the flag, yield four ticks so a peer
-         *  processor that read flag 0 just before us gets to write first, then re-read it. */
+        /** The flag claim every unit card shares: write the flag, end the pass, then let the
+         *  card's next entry re-read it. The lowering keeps four `end`s (only the first is
+         *  reachable) as part of the fixed shape that inference matches. */
         private boolean unitClaim(int at, String index, int reject){
             String hold = unitTemp("h", index), flag = unitTemp("f", index);
             return unitLine(at, "set", hold, "@unit")
@@ -3243,7 +3293,25 @@ public final class SugarDecompiler{
                 && s.token(2).equals(variable) && s.token(3).equals(variable);
         }
 
-        String emit(){ return new Emitter(items, program.statements.size()).emit(); }
+        /**
+         * KEEP(P4) — the recovered sugar keeps the bounds checks LogicSugar's own debug emitter
+         * generates ({@code ExprCompiler.emitBoundsAssert}). They match the exact generated
+         * message signature, so a user-authored {@code assertBounds} with any other message was
+         * never touched. Keeping them as passthrough text is what makes an emit product survive
+         * decompile → edit → recompile: the line is plain text (no card type, no MDT
+         * dependency), an expression card saves as its flattened mlog chain, and dropping the
+         * line here would silently lose the check the moment the recovered program is re-saved.
+         *
+         * <p>The gate stays tolerant of the strip shape: recompiling the recovered source with
+         * {@code AssertEmit=strip} removes the lines again (a debug build is single-player only),
+         * so {@code verify} compares both sides with {@link SugarDebugLines#stripGeneratedBoundsLines}
+         * whenever the input carried one. That also absorbs a line that a recovered expression
+         * (condition/argument/return) regenerates on top of the kept one — the executable
+         * instruction stream is compared after removing all of them.</p>
+         */
+        String emit(){
+            return new Emitter(items, program.statements.size()).emit();
+        }
     }
 
     // ===== Emitter ========================================================================

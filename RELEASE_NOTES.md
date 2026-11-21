@@ -6,18 +6,10 @@
 
 ### 本次新增
 
-- **内置 Power Grid Minimap 升级到 v1.18.4**
-
-### 本次修复
-
-- **修复启动时电力表在资源加载线程创建界面导致的 `UI should be created in main Thread` 报错**
+- **内置 PatchViewer 升级到 v2.5.0，可显示数据补丁修改的隐藏词条，并可在设置中单独关闭**
 
 ## English
 
 ### Added
 
-- **Bundled Power Grid Minimap is now v1.18.4**
-
-### Fixed
-
-- **Fixed the `UI should be created in main Thread` error caused by the power table being created on the asset-loading thread at startup**
+- **Bundled PatchViewer is now v2.5.0, showing hidden entries changed by datapatches and offering a separate setting to turn them off**

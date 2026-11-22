@@ -911,13 +911,6 @@ public class LongWindowFlowFeature {
         public float getMinWidth() {
             return 0f;
         }
-
-        @Override
-        public float getPrefWidth() {
-            float pref = super.getPrefWidth();
-            float parentWidth = parent != null ? parent.getWidth() : width;
-            return parentWidth > 0.001f ? Math.max(pref, parentWidth) : pref;
-        }
     }
 
     private static class MarkedNode {

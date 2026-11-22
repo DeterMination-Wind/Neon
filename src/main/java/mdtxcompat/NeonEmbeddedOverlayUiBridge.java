@@ -119,8 +119,13 @@ final class NeonEmbeddedOverlayUiBridge implements OverlayUiBridge {
             try {
                 // A restored size (or any other sizing path) already won; nothing to do.
                 if (window.getWidth() > 0.5f && window.getHeight() > 0.5f) return true;
-                // Hidden windows have no content yet; keep waiting for their first rebuild.
-                if (!OverlayWindowSizeSeed.contentReady(window)) return false;
+                // Wait until the window is actually shown and rebuilt; packing an invisible window
+                // would lock in its registration-time skeleton. A detached one can never be packed,
+                // and content without a usable pref size cannot improve by waiting.
+                if (!window.visible) return false;
+                if (window.getScene() == null) return true;
+                if (!OverlayWindowSizeSeed.hasContent(window)) return false;
+                if (!OverlayWindowSizeSeed.measurable(window)) return true;
                 window.pack();
                 return true;
             } catch (Throwable t) {

@@ -368,8 +368,13 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
                 }
                 if (windowPackMethod == null) return true;
 
-                // Hidden windows have no content yet; keep waiting for their first rebuild.
-                if (!OverlayWindowSizeSeed.contentReady(element)) return false;
+                // Wait until the window is actually shown and rebuilt; packing an invisible window
+                // would lock in its registration-time skeleton. A detached one can never be packed,
+                // and content without a usable pref size cannot improve by waiting.
+                if (!element.visible) return false;
+                if (element.getScene() == null) return true;
+                if (!OverlayWindowSizeSeed.hasContent(element)) return false;
+                if (!OverlayWindowSizeSeed.measurable(element)) return true;
 
                 invoke(windowPackMethod, window);
                 return true;

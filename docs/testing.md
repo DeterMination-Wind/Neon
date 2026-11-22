@@ -38,6 +38,7 @@ Neon 的自动化测试规模不大，采用 main() 断言式的 JavaExec 回归
 3. **功能开关**：默认关闭的模块（智能拆除、导管染色、betterMiniMap、Better PolyAI、profiler 等，以设置页当前默认值为准）开启后生效、再次关闭后恢复。
 4. **安卓包**：安装 `dist/Neon.jar` 于安卓设备，确认能加载（验证 `classes.dex` 有效），重点点一遍涉及 Arc 输入接口的交互（拖拽等，防 `AbstractMethodError` 回归）。
 5. **更新中心**：检查列表能区分 可更新 / 已最新 / 黑名单 / 无仓库 四种状态。
+6. **Overlay 窗口尺寸**（重启不塌陷）：只拖位置、不拖缩放手柄，重启客户端后窗口仍按内容定尺寸（`custommarker` 聊天坐标、`tripwire` 绘制/删除、`pgmm` 电力表、`spdb`、`stealthpath` 各点一遍）；拖过缩放手柄的 resizable 窗口重启后沿用保存尺寸；隐藏窗口进游戏后再启用能立刻按内容定尺寸；BLS 标记节点列表在内容变窄时能收回去。
 
 ## 已知环境缺口
 

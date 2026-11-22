@@ -69,9 +69,9 @@ ocb 与其它子模组一样有加载期总开关（默认开，重启生效）�
 
 OverlayUI 只在玩家拖动缩放手柄时持久化窗口 `size`，预览模式又只在 `size` 存在时恢复。resizable 窗口若从未被手动缩放过，重启后会以 0 宽高开始，直到按 `Z` 打开编辑界面把它 `pack()` 一次——这次 pack 不写回设置，所以每次重启都会复发。
 
-`mdtxcompat.OverlayWindowSizeSeed` 因此轮询经 Neon 桥注册的窗口：内容就绪且窗口仍无有效尺寸时调用一次 `pack()`；已经从设置或其他路径拿到尺寸的窗口不会被覆盖。这条兜底只对 Neon 注册的窗口生效，MindustryX 自带窗口需要上游在 `Window.act()` 里做同样的回退（`size == null` 时用内容尺寸）。
+`mdtxcompat.OverlayWindowSizeSeed` 因此轮询经 Neon 桥注册的窗口：窗口可见、内容已量出且仍无有效尺寸时调用一次 `pack()`；已经从设置或其他路径拿到尺寸的窗口不会被覆盖，隐藏窗口也不会按空壳尺寸打包。这条兜底只对 Neon 注册的窗口生效，直接反射调用 OverlayUI 的子模组（如 BLS）拿不到它，必须自己按内容定尺寸或改走桥；MindustryX 自带窗口需要上游在 `Window.act()` 里做同样的回退（`size == null` 时用内容尺寸）。
 
-模块注册窗口时优先 `resizable=false`（面板按内容自适应）；确需用户手动缩放再开 `resizable`，由上面的兜底保证首次启动也有尺寸。
+模块注册窗口时优先 `resizable=false`（面板按内容自适应）；确需用户手动缩放再开 `resizable`，由上面的兜底保证首次启动也有尺寸。注意把已有窗口改成 `resizable=false` 会清空它已保存的 `size` 并移除编辑模式下的缩放手柄，只适合本来就不需要手调大小的面板，发版时要在更新日志里提一句。
 
 ## Marker 能力的降级链
 

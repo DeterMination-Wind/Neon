@@ -40,13 +40,17 @@ public final class OverlayWindowSizeSeed{
     }
 
     /**
-     * Whether the window's content has been added and measured. Hidden windows report false until
-     * their first rebuild, which is why the seed keeps polling instead of packing once.
+     * Whether the window is on screen with measured content. Hidden windows report false until their
+     * first rebuild, and the embedded copy builds its content at registration time - packing an
+     * invisible window there would lock in the empty skeleton, so visibility is part of readiness.
      */
     public static boolean contentReady(Element element){
-        return element instanceof Group
+        return element.visible
+            && element.getScene() != null
+            && element instanceof Group
             && !((Group)element).getChildren().isEmpty()
-            && element.getPrefWidth() > 0.5f;
+            && element.getPrefWidth() > 0.5f
+            && element.getPrefHeight() > 0.5f;
     }
 
     private static void install(){

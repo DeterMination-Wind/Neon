@@ -303,6 +303,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
         private Boolean resizable;
         private Boolean enabled;
         private Boolean pinned;
+        private boolean packResolved;
 
         private WindowHandle(PendingWindow pending) {
             this.pending = pending;
@@ -328,7 +329,6 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
                 windowSetAutoHeightMethod = windowMethod(window, "setAutoHeight", boolean.class);
                 windowSetResizableMethod = windowMethod(window, "setResizable", boolean.class);
                 windowGetDataMethod = windowMethod(window, "getData");
-                windowPackMethod = windowMethod(window, "pack");
             }
         }
 
@@ -347,19 +347,27 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
          * launch keeps them correct without touching the persisted state.
          */
         private void submitSizeSeed() {
-            if (!(window instanceof Element)) return;
+            if (asElement() == null) return;
             OverlayWindowSizeSeed.submit(this::seedSizeIfMissing);
         }
 
         private boolean seedSizeIfMissing() {
-            if (!(window instanceof Element)) return true;
-            Element element = (Element) window;
+            Element element = asElement();
+            if (element == null) return true;
             try {
                 // A restored size (or any other sizing path) already won; nothing to do.
                 if (element.getWidth() > 0.5f && element.getHeight() > 0.5f) return true;
 
-                ensureWindowMethods();
+                // Optional capability: a window without a public pack() simply skips the seed.
+                if (!packResolved) {
+                    packResolved = true;
+                    try {
+                        windowPackMethod = windowMethod(window, "pack");
+                    } catch (Throwable ignored) {
+                    }
+                }
                 if (windowPackMethod == null) return true;
+
                 // Hidden windows have no content yet; keep waiting for their first rebuild.
                 if (!OverlayWindowSizeSeed.contentReady(element)) return false;
 

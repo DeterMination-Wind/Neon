@@ -51,6 +51,7 @@ final class NeonEmbeddedOverlayUiBridge implements OverlayUiBridge {
             if (!hasStoredState) {
                 handle.applyDefaultHiddenState();
             }
+            handle.submitSizeSeed();
             Log.info("Neon OverlayUI integration: registered embedded window '" + name + "'.");
             return handle;
         } catch (Throwable t) {
@@ -107,6 +108,25 @@ final class NeonEmbeddedOverlayUiBridge implements OverlayUiBridge {
 
         private void applyDefaultHiddenState() {
             window.getData().setEnabled(false);
+        }
+
+        /** Packs the window once when its persisted state has no size; see {@link OverlayWindowSizeSeed}. */
+        private void submitSizeSeed() {
+            OverlayWindowSizeSeed.submit(this::seedSizeIfMissing);
+        }
+
+        private boolean seedSizeIfMissing() {
+            try {
+                // A restored size (or any other sizing path) already won; nothing to do.
+                if (window.getWidth() > 0.5f && window.getHeight() > 0.5f) return true;
+                // Hidden windows have no content yet; keep waiting for their first rebuild.
+                if (!OverlayWindowSizeSeed.contentReady(window)) return false;
+                window.pack();
+                return true;
+            } catch (Throwable t) {
+                Log.err("Neon OverlayUI integration: embedded size seed failed; leaving the window as-is.", t);
+                return true;
+            }
         }
 
         @Override

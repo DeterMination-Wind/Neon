@@ -43,6 +43,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
     private Method windowSetAutoHeightMethod;
     private Method windowSetResizableMethod;
     private Method windowGetDataMethod;
+    private Method windowPackMethod;
     private Method dataSetEnabledMethod;
     private Method dataSetPinnedMethod;
     private Method dataGetEnabledMethod;
@@ -168,6 +169,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
                 }
                 pending.handle.bind(window);
                 pending.handle.applyDefaultHiddenState(!hasStoredState);
+                pending.handle.submitSizeSeed();
                 Log.info("Neon OverlayUI integration: registered window '" + pending.name + "' via " + window.getClass().getName() + ".");
             }
             pending.handle.applyPendingState();
@@ -326,6 +328,7 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
                 windowSetAutoHeightMethod = windowMethod(window, "setAutoHeight", boolean.class);
                 windowSetResizableMethod = windowMethod(window, "setResizable", boolean.class);
                 windowGetDataMethod = windowMethod(window, "getData");
+                windowPackMethod = windowMethod(window, "pack");
             }
         }
 
@@ -334,6 +337,38 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
                 dataSetEnabledMethod = windowMethod(data, "setEnabled", boolean.class);
                 dataSetPinnedMethod = windowMethod(data, "setPinned", boolean.class);
                 dataGetEnabledMethod = windowMethod(data, "getEnabled");
+            }
+        }
+
+        /**
+         * Registers a one-shot size seed. OverlayUI only writes a window's {@code size} when the
+         * player drags a resize handle; resizable windows without one start at zero size after every
+         * restart, which collapses their content until the editor is reopened. Packing once per
+         * launch keeps them correct without touching the persisted state.
+         */
+        private void submitSizeSeed() {
+            if (!(window instanceof Element)) return;
+            OverlayWindowSizeSeed.submit(this::seedSizeIfMissing);
+        }
+
+        private boolean seedSizeIfMissing() {
+            if (!(window instanceof Element)) return true;
+            Element element = (Element) window;
+            try {
+                // A restored size (or any other sizing path) already won; nothing to do.
+                if (element.getWidth() > 0.5f && element.getHeight() > 0.5f) return true;
+
+                ensureWindowMethods();
+                if (windowPackMethod == null) return true;
+                // Hidden windows have no content yet; keep waiting for their first rebuild.
+                if (!OverlayWindowSizeSeed.contentReady(element)) return false;
+
+                invoke(windowPackMethod, window);
+                return true;
+            } catch (Throwable t) {
+                Log.err("Neon OverlayUI integration: size seed failed for '" + pending.name
+                    + "'; leaving the window as-is.", unwrapReflectionFailure(t));
+                return true;
             }
         }
 

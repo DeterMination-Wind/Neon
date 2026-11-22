@@ -188,7 +188,9 @@ public class BetterScreenShotFeature {
             if (xWindow == null) {
                 xWindow = xOverlayUi.registerWindow(overlayWindowName, panel, () -> state != null && state.isGame());
                 if (xWindow != null && xWindow.asElement() != null) {
-                    xWindow.configure(false, true);
+                    // Content-sized panel: let the window follow its table instead of starting from
+                    // an unset (zero) persisted size after a restart.
+                    xWindow.configure(false, false);
                     lastOverlayEnabled = enabled;
                 }
             }

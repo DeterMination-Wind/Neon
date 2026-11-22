@@ -1,71 +1,80 @@
 name: 💡 功能建议 / Feature Request
-description: 提出新功能、体验改进或现有功能的调整建议。
+description: 提出新功能、体验改进或现有功能的调整建议 / Suggest a new feature, improvement, or change to existing behavior
 title: "[Feature] "
 body:
   - type: markdown
     attributes:
       value: |
-        ## 📧 建议优先发邮件到 **bugsoc@qq.com**
+        ## 📧 建议优先发邮件到 bugsoc@qq.com
 
         本仓库的 Issue 由作者在空闲时间处理，**响应时间可能长达数周**。
-        如果你希望建议尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，说明使用场景和你期望的效果。
+        如果希望建议尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，说明使用场景和期望效果。
         也可以加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 讨论。
+
+        ---
+
+        ## 📧 Please email bugsoc@qq.com first
+
+        Issues here are handled in the author's spare time and **responses may take weeks**.
+        If you want your suggestion seen sooner, email **bugsoc@qq.com** with the use case
+        and the behavior you want. You can also discuss it in the
+        [BEK mod feedback QQ group](https://qm.qq.com/q/cZWzPa4cTu).
 
   - type: checkboxes
     id: precheck
     attributes:
-      label: 提交前确认
+      label: 提交前确认 / Before submitting
       options:
-        - label: 我已查看 [FEATURES.md](https://github.com/DeterMination-Wind/Neon/blob/main/FEATURES.md) 和 Neon 设置页，确认现有功能无法满足需求。
+        - label: 我已查看 [FEATURES.md](https://github.com/DeterMination-Wind/Neon/blob/main/FEATURES.md) 和 Neon 设置页，确认现有功能无法满足需求。/ I checked [FEATURES.md](https://github.com/DeterMination-Wind/Neon/blob/main/FEATURES.md) and Neon settings; no existing feature covers this.
           required: true
-        - label: 我已搜索过现有 Issue，没有发现相同的建议。
+        - label: 我已搜索过现有 Issue，没有发现相同建议。/ I searched existing issues and found no duplicate.
           required: true
-        - label: 我知道 GitHub Issue 的响应时间可能长达数周。
+        - label: 我知道 GitHub Issue 的响应时间可能长达数周。/ I understand GitHub issues may take weeks to answer.
           required: true
 
   - type: dropdown
     id: kind
     attributes:
-      label: 建议类型
+      label: 建议类型 / Type of suggestion
       options:
-        - 新功能
-        - 现有功能改进
-        - 界面 / 交互 / 文案
-        - 兼容性（MindustryX、安卓、联机等）
-        - 性能优化
-        - 其他
+        - 新功能 / New feature
+        - 现有功能改进 / Improve an existing feature
+        - 界面、交互或文案 / UI, interaction or wording
+        - 兼容性（MindustryX、安卓、联机等）/ Compatibility (MindustryX, Android, multiplayer)
+        - 性能优化 / Performance
+        - 其他 / Other
     validations:
       required: true
 
   - type: textarea
     id: scenario
     attributes:
-      label: 使用场景
-      description: 你在什么情况下需要它？现在是怎么绕过这个问题的？
-      placeholder: 例如 在联机建造时，我需要快速确认 ...，现在只能手动 ...
+      label: 使用场景 / Use case
+      description: 你在什么情况下需要它？现在是怎么绕过这个问题的？/ When do you need this? How do you work around it today?
+      placeholder: 例如 联机建造时需要快速确认 ...，现在只能手动 ...；e.g. while building online I need to check ..., today I do it by hand
     validations:
       required: true
 
   - type: textarea
     id: proposal
     attributes:
-      label: 期望的效果
-      description: 描述你希望 Neon 怎么做。如果有参考模组、截图或界面草图，可以贴在下面。
+      label: 期望的效果 / What you want
+      description: 描述你希望 Neon 怎么做。有参考模组、截图或界面草图可以贴在下面。/ Describe how Neon should behave. Reference mods, screenshots or mockups are welcome.
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: 考虑过的替代方案
-      description: 是否已经有其他模组或做法能部分解决问题？为什么不够用？
+      label: 考虑过的替代方案 / Alternatives considered
+      description: 是否已有其他模组或做法能部分解决？为什么不够用？/ Any mod or workflow that partially solves it? Why is it not enough?
     validations:
       required: false
 
   - type: textarea
     id: extra
     attributes:
-      label: 补充信息
-      description: 这个功能是否只对特定玩法重要？是否愿意参与测试或提供更多细节？
+      label: 补充信息 / Additional context
+      description: 该功能是否只对特定玩法重要？是否愿意参与测试或补充细节？/ Is it only important for a specific playstyle? Willing to test it or add details?
     validations:
       required: false

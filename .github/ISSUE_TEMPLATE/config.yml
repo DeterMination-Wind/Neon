@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 📧 邮件反馈（推荐，最快）
+  - name: 📧 邮件反馈（推荐，最快）/ Email (fastest)
     url: mailto:bugsoc@qq.com
-    about: 强烈建议直接发邮件到 bugsoc@qq.com。GitHub Issue 的响应时间可能长达数周。
-  - name: 💬 BEK 辅助 mod 反馈群（QQ）
+    about: 强烈建议直接发邮件到 bugsoc@qq.com，GitHub Issue 的响应时间可能长达数周。/ Please email bugsoc@qq.com. Responses to GitHub issues may take weeks.
+  - name: 💬 BEK 辅助 mod 反馈群（QQ）/ QQ feedback group
     url: https://qm.qq.com/q/cZWzPa4cTu
-    about: 在 QQ 群里提问通常比 GitHub Issue 更快得到回应。
+    about: 在 QQ 群里提问通常比 GitHub Issue 更快得到回应。/ The QQ group usually answers faster than a GitHub issue.

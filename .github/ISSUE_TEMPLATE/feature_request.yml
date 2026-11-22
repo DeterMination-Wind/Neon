@@ -7,18 +7,13 @@ body:
       value: |
         ## 📧 建议优先发邮件到 bugsoc@qq.com
 
-        本仓库的 Issue 由作者在空闲时间处理，**响应时间可能长达数周**。
-        如果希望建议尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，说明使用场景和期望效果。
-        也可以加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 讨论。
+        本仓库的 Issue 由作者在空闲时间处理，**响应时间可能长达数周**。如果希望建议尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，说明使用场景和期望效果。也可以加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 讨论。
 
         ---
 
         ## 📧 Please email bugsoc@qq.com first
 
-        Issues here are handled in the author's spare time and **responses may take weeks**.
-        If you want your suggestion seen sooner, email **bugsoc@qq.com** with the use case
-        and the behavior you want. You can also discuss it in the
-        [BEK mod feedback QQ group](https://qm.qq.com/q/cZWzPa4cTu).
+        Issues here are handled in the author's spare time and **responses may take weeks**. If you want your suggestion seen sooner, email **bugsoc@qq.com** with the use case and the behavior you want. You can also discuss it in the [BEK mod feedback QQ group](https://qm.qq.com/q/cZWzPa4cTu).
 
   - type: checkboxes
     id: precheck

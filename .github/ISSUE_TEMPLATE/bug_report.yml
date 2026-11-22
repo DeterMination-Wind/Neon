@@ -7,10 +7,7 @@ body:
       value: |
         ## 📧 建议优先发邮件到 bugsoc@qq.com
 
-        本仓库的 Issue 由作者在空闲时间处理，**响应时间可能长达数周**，也可能长时间没有回复。
-        如果希望问题尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，并在邮件里附上：
-        Neon 版本、Mindustry 版本与平台、复现步骤、报错日志和截图。
-        也可以加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 提问。
+        本仓库的 Issue 由作者在空闲时间处理，**响应时间可能长达数周**，也可能长时间没有回复。如果希望问题尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，并在邮件里附上：Neon 版本、Mindustry 版本与平台、复现步骤、报错日志和截图。也可以加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 提问。
 
         仍然要在这里提交 Issue 的话，请把下面内容填完整，信息越全越容易定位问题。
 
@@ -18,14 +15,9 @@ body:
 
         ## 📧 Please email bugsoc@qq.com first
 
-        Issues here are handled by the author in spare time and **responses may take weeks**,
-        sometimes with no reply at all. If you want it seen sooner, email **bugsoc@qq.com**
-        and include: Neon version, Mindustry version and platform, reproduction steps,
-        error logs and screenshots. You can also ask in the
-        [BEK mod feedback QQ group](https://qm.qq.com/q/cZWzPa4cTu).
+        Issues here are handled by the author in spare time and **responses may take weeks**, sometimes with no reply at all. If you want it seen sooner, email **bugsoc@qq.com** and include: Neon version, Mindustry version and platform, reproduction steps, error logs and screenshots. You can also ask in the [BEK mod feedback QQ group](https://qm.qq.com/q/cZWzPa4cTu).
 
-        If you still open an issue here, please fill in everything below — the more complete
-        the report, the easier it is to track down.
+        If you still open an issue here, please fill in everything below — the more complete the report, the easier it is to track down.
 
   - type: checkboxes
     id: precheck
@@ -114,12 +106,7 @@ body:
     id: logs
     attributes:
       label: 日志 / 截图 / 录屏 - Logs, screenshots, recordings
-      description: |
-        请粘贴 `logs/` 下的报错堆栈（尤其是 `Exception` / `Caused by` 部分），或附上截图、录屏链接。
-        可以直接把图片拖进这个输入框上传。
-
-        Paste the stack trace from `logs/` (especially `Exception` / `Caused by` lines),
-        or link screenshots / recordings. You can drag images straight into this field.
+      description: 请粘贴 `logs/` 下的报错堆栈（尤其是 `Exception` / `Caused by` 部分），或附上截图、录屏链接。可以直接把图片拖进这个输入框上传。/ Paste the stack trace from `logs/` (especially `Exception` / `Caused by` lines), or link screenshots / recordings. You can drag images straight into this field.
       placeholder: 粘贴日志文本，或说明截图、录屏的位置 / Paste log text or describe where the files are
       render: shell
     validations:

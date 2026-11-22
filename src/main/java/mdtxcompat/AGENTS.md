@@ -37,4 +37,5 @@
 - `OverlaySettingsCompat` 在原生 `overlayUI.*` 与内嵌 `neoncompat.overlayUI.*` 之间迁移窗口状态；改键名要保留迁移路径，避免切换运行时丢布局。
 - 桥初始化失败只记录/降级，不让异常向外传播；探测失败不要每帧重试。
 - `neoncompat.overlay` 是 ocb 失败时的冻结兜底，只在 `bundledOverlayActive=false` 路径使用；不要把它与 `mindustryX.features.ui.OverlayUI` 手工同步。
+- `OverlayWindowSizeSeed` 兜底"resizable 窗口从未手动缩放过、重启后 0 尺寸"的情况：内容就绪后 `pack()` 一次，不写设置。新增窗口优先 `resizable=false`；确需缩放的窗口依赖这条兜底，别再为每个窗口手写 pack。
 - 改桥后至少验证原版（ocb / 内嵌兜底）与 MindustryX（mainX）两条路径；无 X 时功能降级但不应崩溃。

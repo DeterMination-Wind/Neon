@@ -65,6 +65,14 @@ ocb 与其它子模组一样有加载期总开关（默认开，重启生效）�
 
 用户侧行为（默认值）：屏幕左侧齿轮按钮或快捷键 `Z` 打开 Overlay 管理器；支持 Overlay 的功能窗口统一在其中出现。这套 UI 是本地客户端界面，与其他玩家无关。
 
+### 窗口尺寸兜底
+
+OverlayUI 只在玩家拖动缩放手柄时持久化窗口 `size`，预览模式又只在 `size` 存在时恢复。resizable 窗口若从未被手动缩放过，重启后会以 0 宽高开始，直到按 `Z` 打开编辑界面把它 `pack()` 一次——这次 pack 不写回设置，所以每次重启都会复发。
+
+`mdtxcompat.OverlayWindowSizeSeed` 因此轮询经 Neon 桥注册的窗口：内容就绪且窗口仍无有效尺寸时调用一次 `pack()`；已经从设置或其他路径拿到尺寸的窗口不会被覆盖。这条兜底只对 Neon 注册的窗口生效，MindustryX 自带窗口需要上游在 `Window.act()` 里做同样的回退（`size == null` 时用内容尺寸）。
+
+模块注册窗口时优先 `resizable=false`（面板按内容自适应）；确需用户手动缩放再开 `resizable`，由上面的兜底保证首次启动也有尺寸。
+
 ## Marker 能力的降级链
 
 customMarker / Tripwire 这类需要放标记的功能：
@@ -75,6 +83,7 @@ customMarker / Tripwire 这类需要放标记的功能：
 ## 排障
 
 - **设置页某功能说明写着"需要 MindustryX"却没接上**：先确认客户端真跑了 `mainX`（X 变体行为是否生效）；若日志出现 `LegacyMindustryXGuard` 的拒绝信息，按提示升级/回退——守卫不做版本比较，别只看版本号。
+- **窗口重启后错位/内容挤压/背景消失**：先确认该窗口是否 resizable 且从未手动缩放过（`overlayUI.*` 中缺少 `size`）。Neon 注册的窗口由 `OverlayWindowSizeSeed` 兜底；MindustryX 自带窗口属 MDtX 上游行为，按 `Z` 只是临时 pack，不会持久化。
 - **窗口出现在错误位置/不吸附**：原版路径查 `AdsorptionSystem` 状态；MDtX 路径属 MDtX 自身行为。
 - **桥抛 ClassNotFoundException**：多为 MDtX 更新后改了内部类名，检查 `MindustryXSchematicShareBridge` 等实现里的目标类是否仍存在。
 - **原版环境 OverlayUI 完全缺失**：两种原因——`ocb-enabled=false`（预期行为：本次会话没有齿轮/`Z`/窗口，重启并在设置里打开即可）或 ocb 模块初始化失败（日志出现"check whether that module failed to initialize"，此时由冻结副本接管）。真 MindustryX 客户端不显示 Neon 的齿轮也是预期行为（用 X 自己的 OverlayUI）。

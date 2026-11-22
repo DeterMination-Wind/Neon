@@ -67,8 +67,7 @@ BekToolsModX extends BekToolsMod     ← MDtX 入口（mainX）
 
 ## 设置页渲染陷阱（MindustryX）
 
-MindustryX 的 `SettingsTable.act()` 在 `list.size` 变化时会自动重建（`lastSize` 短路），与原版行为不同。
-现有几处写法都是为此服务，改动前先读代码注释：
+MindustryX 的 `SettingsTable.act()` 在 `list.size` 变化时会自动重建（`lastSize` 短路），与原版行为不同。现有几处写法都是为此服务，改动前先读代码注释：
 
 - `NestedSettingsTable.build()` 是故意的运行期覆盖，**不加 `@Override`**：原版没有这个可覆盖方法，MindustryX 运行时才会分派到它。
 - `finishBuild()` 会把 `list` 从 0 增长到 N 并只重放 `pref()` 项；不抑制重建会重放内容、折叠子分组并追加原版 reset 按钮。

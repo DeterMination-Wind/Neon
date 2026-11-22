@@ -88,3 +88,4 @@ build.gradle / mod.json / mod.hjson / .github/workflows/  Neon 原生维护
 - 开始任务前仓库应干净；发现无关脏改动先报告，不要静默并入自己的提交。
 - 提交信息 `Neon: <概要>`；同步类提交带子模组名与版本。不要提交 `dist/`、`build/`
   或临时脚本。
+- 文本禁止软换行：文档、Issue 模板、提交信息、PR 描述一律一段一行，由渲染器决定折行，细则见 [docs/conventions.md](docs/conventions.md)。

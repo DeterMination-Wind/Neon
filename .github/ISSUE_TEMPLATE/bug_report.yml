@@ -1,0 +1,117 @@
+name: 🐛 Bug 报告 / Bug Report
+description: 报告 Neon 的功能异常、崩溃或显示问题。反馈前请优先考虑邮件联系。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 📧 建议优先发邮件到 **bugsoc@qq.com**
+
+        本仓库的 Issue 由作者在空闲时间处理，**响应时间可能长达数周**，也可能长时间没有回复。
+        如果你希望问题尽快被看到，请直接发送邮件到 **bugsoc@qq.com**，并在邮件里附上下面这些信息：
+        Neon 版本、Mindustry 版本与平台、复现步骤、报错日志和截图。
+        也可以加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 提问。
+
+        如果你仍然要在这里提交 Issue，请把下面的内容填完整，信息越全越容易定位问题。
+
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: 提交前确认
+      description: 请先确认你已经尝试过以下排查，可以避免大量重复问题。
+      options:
+        - label: 我已在 [Releases](https://github.com/DeterMination-Wind/Neon/releases) 更新到最新版本后仍然能复现。
+          required: true
+        - label: 我已搜索过现有 Issue，没有发现相同问题。
+          required: true
+        - label: 我**没有**同时启用 Neon 和对应的独立版子模组（例如单独安装的 betterMiniMap）。
+          required: true
+        - label: 我知道 GitHub Issue 的响应时间可能长达数周，紧急问题会改发邮件到 bugsoc@qq.com。
+          required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 运行平台
+      options:
+        - Windows（桌面版）
+        - Linux（桌面版）
+        - macOS（桌面版）
+        - Android（手机 / 平板）
+        - 其他（请在描述中说明）
+    validations:
+      required: true
+
+  - type: input
+    id: neon_version
+    attributes:
+      label: Neon 版本
+      description: 在 `设置 → 模组` 中查看，或填写 Release 名称 / 提交哈希。
+      placeholder: 例如 1.9.0 或 190000
+    validations:
+      required: true
+
+  - type: input
+    id: game_version
+    attributes:
+      label: Mindustry 版本
+      placeholder: 例如 v160.1 / BE 版构建号
+    validations:
+      required: true
+
+  - type: input
+    id: mindustryx
+    attributes:
+      label: MindustryX / 兼容环境（如有）
+      description: 是否安装了 MindustryX 或其他提供 OverlayUI 兼容接口的模组？填写名称与版本，没有可以写「无」。
+      placeholder: 例如 MindustryX 2026.xx / 无
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 尽量写成可重复的步骤，从进入游戏或打开某个界面开始。
+      placeholder: |
+        1. 进入单人游戏，加载地图 ...
+        2. 打开设置 → 模组 → Neon，开启 ...
+        3. 按下快捷键 ...
+        4. 出现问题
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你认为正常情况下应该发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么？是否崩溃、卡顿、界面错位或功能无响应？
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图 / 录屏
+      description: |
+        请粘贴 `logs/` 下的报错堆栈（尤其是 `Exception` / `Caused by` 部分），或附上截图、录屏链接。
+        可以直接把图片拖进这个输入框上传。
+      placeholder: 粘贴日志文本，或说明截图/录屏的位置
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 涉及哪些 Neon 功能？是否只在特定地图、服务器或联机模式下出现？做过哪些尝试？
+      placeholder: 例如 只在联机服务器出现 / 关闭某功能后恢复正常 / 已尝试重装 Neon
+    validations:
+      required: false

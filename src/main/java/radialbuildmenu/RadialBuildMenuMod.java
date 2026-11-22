@@ -2581,7 +2581,8 @@ public class RadialBuildMenuMod extends mindustry.mod.Mod{
                     Table content = buildMobileToggleContent();
                     xMobileToggleWindow = xOverlayUi.registerWindow(mobileWindowName, content, () -> state != null && state.isGame());
                     if(xMobileToggleWindow != null && xMobileToggleWindow.asElement() != null){
-                        xMobileToggleWindow.configure(false, true);
+                        // A single toggle button has no resizable content: size it from the button.
+                        xMobileToggleWindow.configure(false, false);
                         // Auto-enable only on first registration; afterwards keep OverlayUI's persisted visibility.
                         if(!hasStoredOverlayWindowState(mobileWindowName)){
                             xMobileToggleWindow.setEnabledAndPinned(true, false);

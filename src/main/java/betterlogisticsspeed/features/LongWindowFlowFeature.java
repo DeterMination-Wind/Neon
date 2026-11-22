@@ -483,12 +483,15 @@ public class LongWindowFlowFeature {
         nextOverlayRegisterAttemptMs = now + 1000L;
 
         ensureOverlayTable();
+        // Content-sized panel: OverlayUI only persists a size after a manual resize, so a resizable
+        // window without one collapses to zero width after every restart. Let the window track its
+        // content instead (same height behaviour as the previous autoHeight flag).
         overlayRegistered = OverlayCompat.tryRegister(
             overlayWindowName,
             overlayTable,
             () -> state != null && state.isGame() && enabled,
-            true,
-            true
+            false,
+            false
         );
         if (!overlayRegistered && !OverlayCompat.hasOverlayUI()) {
             clearMarkedNodes();

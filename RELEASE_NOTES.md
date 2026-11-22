@@ -2,40 +2,26 @@
 > 需要 **Mindustry v160.1+**（桌面 / Android）或对应的 MindustryX；服务器不需要安装。
 > Requires **Mindustry v160.1+** (desktop / Android) or a matching MindustryX. Servers do not need it.
 
-> [!IMPORTANT]
-> 调试功能由 Mlog Dev Tools（MDT）提供：使用 MDT 需要 **Mindustry v160.5+** 与 **MDT 0.12.3+**；Neon 不内置 MDT。
-> Debugging is provided by Mlog Dev Tools (MDT): it requires **Mindustry v160.5+** and **MDT 0.12.3+**; Neon does not bundle MDT.
-
 ## 中文
-
-### 本次新增
-
-- **内置 Build X-ray 更新至 v1.5，遮罩更柔和并支持规划与逻辑配置区域**
-- **内置 PatchViewer 更新至 v2.5.0，显示被数据补丁修改的隐藏词条**
 
 ### 本次修复
 
-- **内置 Power Grid Minimap 更新至 v1.18.4，修复电力表在资源加载线程创建界面的报错**
-- **Random 的 ICU 正则崩溃已修复**
+- **重启后 Overlay 面板尺寸错乱**：Neon 注册的悬浮窗口在未手动缩放过时会以零尺寸开始，面板塌陷、内容重叠，必须按 `Z` 才恢复；现在窗口显示后按内容补一次尺寸，重启即可直接正常显示。
+- **内置 betterLogisticsSpeed 更新至 v2.0.2**：标记节点列表面板按内容定尺寸，重启后不再塌成零宽，内容变窄时也能收回。
+- **内置 Radial Build Menu 更新至 v5.7.2**：移动端 Overlay 开关窗口重启后不再变成零尺寸。
 
 ### 本次改动
 
-- **内置 LogicSugar 更新至 v5.13.0，调试界面与调试指令运行时移至 Mlog Dev Tools**
-- **StealthPath 默认停用**
+- **BetterScreenShot 面板改为按内容定尺寸**，不再保留手动缩放尺寸。
 
 ## English
 
-### Added
-
-- **Bundled Build X-ray is now v1.5, with a softer mask and plan/logic-config areas**
-- **Bundled PatchViewer is now v2.5.0, showing hidden entries changed by datapatches**
-
 ### Fixed
 
-- **Bundled Power Grid Minimap is now v1.18.4, fixing the power table being created on the asset-loading thread**
-- **The bundled Random module no longer fails to load because of an ICU regex error**
+- **Overlay panels keep their size after a restart**: Neon-registered windows that were never manually resized started at zero size, collapsing their content until `Z` was pressed; they are now packed from their content when shown, so a restart needs no workaround.
+- **Bundled betterLogisticsSpeed is now v2.0.2**: the marked-node list sizes itself from its content and no longer collapses to zero width after a restart.
+- **Bundled Radial Build Menu is now v5.7.2**: the mobile overlay toggle no longer becomes zero-sized after a restart.
 
 ### Changed
 
-- **Bundled LogicSugar is now v5.13.0, with the debug UI and debug instruction runtime moved to Mlog Dev Tools**
-- **Stealth Path is now default-off**
+- **The BetterScreenShot panel now sizes itself from its content**; a previously saved manual size is dropped.

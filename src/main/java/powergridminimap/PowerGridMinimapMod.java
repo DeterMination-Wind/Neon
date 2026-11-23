@@ -34,6 +34,7 @@ import arc.graphics.Pixmap;
 import arc.graphics.Texture;
 import arc.graphics.g2d.TextureRegion;
 import arc.math.geom.Vec2;
+import arc.struct.FloatSeq;
 import arc.struct.IntIntMap;
 import arc.struct.IntMap;
 import arc.struct.IntQueue;
@@ -67,8 +68,11 @@ import mindustry.mod.Scripts;
 import mindustry.ui.Fonts;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.ui.Styles;
+import mindustry.world.Block;
 import mindustry.world.blocks.power.PowerNode;
 import mindustry.world.blocks.power.PowerGraph;
+import mindustry.world.consumers.ConsumePower;
+import mindustry.world.consumers.ConsumePowerDynamic;
 import mindustry.mod.Mods;
 import rhino.ScriptableObject;
 
@@ -94,6 +98,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private static final String overlayName = "pgmm-overlay";
     private static final String mi2OverlayName = "pgmm-overlay-mi2-minimap";
     private static final String powerTableName = "pgmm-power-table";
+    private static final String powerChartName = "pgmm-power-chart";
 
     private static final String keyEnabled = "pgmm-enabled";
     private static final String keyGridAlpha = "pgmm-gridalpha";
@@ -122,6 +127,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     private static final String keyPowerTableEnabled = "pgmm-power-table";
     private static final String keyPowerTableThreshold = "pgmm-power-table-threshold";
     private static final String keyPowerTableBgAlpha = "pgmm-power-table-bgalpha";
+    private static final String keyPowerChartEnabled = "pgmm-power-chart";
+    private static final String keyPowerChartWindow = "pgmm-power-chart-window";
+    private static final String keyPowerChartBgAlpha = "pgmm-power-chart-bgalpha";
     private static final String markerCompatType = "PGMM";
     //debounce cache rebuilds after block changes (tenths of a second)
     private static final String keyUpdateWaitTenths = "pgmm-updatewait";
@@ -149,12 +157,15 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
     //Lazily built on the render thread: mod construction runs on the asset-loading thread,
     //and Arc refuses to build scene widgets ("UI should be created in main Thread") off it.
     private PowerTableOverlay powerTable;
+    private PowerChartOverlay powerChart;
     private final MarkerBridge xMarkers;
     private final NativeMarkers nativeMarkers = new NativeMarkers();
     // Optional OverlayUI integration is injected by the dedicated mainX entry or detected in vanilla.
     private final OverlayUiBridge xOverlayUi;
     private OverlayUiBridge.OverlayWindowHandle xPowerTableWindow = null;
     private boolean lastPowerTableEnabled = false;
+    private OverlayUiBridge.OverlayWindowHandle xPowerChartWindow = null;
+    private boolean lastPowerChartEnabled = false;
     private float nextSplitAlertMultiplayerChatAt = 0f;
     private final Mi2MinimapIntegration mi2 = new Mi2MinimapIntegration();
     private final PgmmConsoleApi consoleApi = new PgmmConsoleApi(this);
@@ -195,6 +206,9 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Core.settings.defaults(keyPowerTableEnabled, false);
             Core.settings.defaults(keyPowerTableThreshold, 10000);
             Core.settings.defaults(keyPowerTableBgAlpha, 70);
+            Core.settings.defaults(keyPowerChartEnabled, false);
+            Core.settings.defaults(keyPowerChartWindow, 120);
+            Core.settings.defaults(keyPowerChartBgAlpha, 70);
             Core.settings.defaults(keyUpdateWaitTenths, 10);
             Core.settings.defaults(keyIgnoreAreaTiles, 0);
             if(!bekBundled) GithubUpdateCheck.applyDefaults();
@@ -208,6 +222,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             Time.runTask(10f, this::installConsoleApi);
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensurePowerTableAttached);
+            Time.runTask(10f, this::ensurePowerChartAttached);
             if(!bekBundled) GithubUpdateCheck.checkOnce();
         });
 
@@ -216,8 +231,10 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             rescueAlert.clear();
             rescueAdvisor.reset();
             nextSplitAlertMultiplayerChatAt = 0f;
+            if(powerChart != null) powerChart.resetData();
             Time.runTask(10f, this::ensureOverlayAttached);
             Time.runTask(10f, this::ensurePowerTableAttached);
+            Time.runTask(10f, this::ensurePowerChartAttached);
         });
 
         Events.on(BlockBuildEndEvent.class, e -> cache.invalidateAll());
@@ -234,7 +251,13 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                 nextAttachAttempt = Time.time + 60f;
                 ensureOverlayAttached();
                 ensurePowerTableAttached();
+                ensurePowerChartAttached();
                 mi2.ensureAttached(cache, markerColor, alert, rescueAlert, rescueColor);
+            }
+
+            //Keep collecting chart history even when the OverlayUI window is temporarily hidden.
+            if(powerChart != null && player != null && Core.settings.getBool(keyPowerChartEnabled, false)){
+                powerChart.sample();
             }
 
             //MindustryX OverlayUI integration:
@@ -249,6 +272,18 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
                         xPowerTableWindow.setEnabledAndPinned(true, false);
                     }else{
                         xPowerTableWindow.setEnabledAndPinned(false, false);
+                    }
+                }
+            }
+
+            if(xPowerChartWindow != null && xPowerChartWindow.asElement() != null){
+                boolean enabled = Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyPowerChartEnabled, false);
+                if(enabled != lastPowerChartEnabled){
+                    lastPowerChartEnabled = enabled;
+                    if(enabled){
+                        xPowerChartWindow.setEnabledAndPinned(true, false);
+                    }else{
+                        xPowerChartWindow.setEnabledAndPinned(false, false);
                     }
                 }
             }
@@ -410,6 +445,12 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         }
 
         try{
+            if(powerChart != null) powerChart.resetData();
+            ensurePowerChartAttached();
+        }catch(Throwable ignored){
+        }
+
+        try{
             mi2.ensureAttached(cache, markerColor, alert, rescueAlert, rescueColor);
         }catch(Throwable ignored){
         }
@@ -488,6 +529,11 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyPowerTableEnabled, false, Icon.listSmall, null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyPowerTableThreshold, 10000, 0, 200000, 1000, Icon.powerSmall, v -> v + "/s", null));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyPowerTableBgAlpha, 70, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
+
+            table.pref(new PgmmSettingsWidgets.HeaderSetting("@setting.pgmm.powerchart.section", Icon.chartBarSmall));
+            table.pref(new PgmmSettingsWidgets.IconCheckSetting(keyPowerChartEnabled, false, Icon.chartBarSmall, null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyPowerChartWindow, 120, 30, 600, 30, Icon.refreshSmall, v -> v + "s", null));
+            table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyPowerChartBgAlpha, 70, 0, 100, 5, Icon.imageSmall, v -> v + "%", null));
 
             table.pref(new PgmmSettingsWidgets.HeaderSetting(Core.bundle.get("pgmm.section.performance", "Performance"), Icon.wrenchSmall));
             table.pref(new PgmmSettingsWidgets.IconSliderSetting(keyUpdateWaitTenths, 10, 0, 50, 1, Icon.refreshSmall, v -> Strings.autoFixed(v / 10f, 1) + "s", null));
@@ -629,6 +675,55 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         table.setHostedByOverlayUI(false);
         ui.hudGroup.addChild(table);
         table.toFront();
+    }
+
+    /** Lazily creates the power chart; see {@link #powerTable()} for the thread-safety rationale. */
+    private PowerChartOverlay powerChart(){
+        if(powerChart == null){
+            powerChart = new PowerChartOverlay();
+        }
+        return powerChart;
+    }
+
+    private void ensurePowerChartAttached(){
+        if(ui == null || ui.hudGroup == null) return;
+
+        //Same strategy as the power table: prefer MindustryX OverlayUI, fall back to the HUD group.
+        if(xOverlayUi.isSupported()){
+            if(xPowerChartWindow == null){
+                try{
+                    PowerChartOverlay chart = powerChart();
+                    chart.setHostedByOverlayUI(true);
+                    xPowerChartWindow = xOverlayUi.registerWindow(powerChartName, chart, () -> state != null && state.isGame());
+                    if(xPowerChartWindow != null && xPowerChartWindow.asElement() != null){
+                        xPowerChartWindow.configure(false, true);
+                        //Force the first enabled/pinned sync to reflect the PGMM setting.
+                        lastPowerChartEnabled = !Core.settings.getBool(keyPowerChartEnabled, false);
+                        Log.info("PGMM: power chart registered to MindustryX OverlayUI.");
+                        return;
+                    }
+                }catch(Throwable t){
+                    Log.err("PGMM: failed to register power chart to MindustryX OverlayUI; falling back to HUD attachment.", t);
+                    xPowerChartWindow = null;
+                    powerChart().setHostedByOverlayUI(false);
+                }
+            }else if(xPowerChartWindow.asElement() != null){
+                return;
+            }
+        }
+
+        if(ui.hudGroup.find(powerChartName) != null) return;
+
+        PowerChartOverlay chart = powerChart();
+        try{
+            chart.remove();
+        }catch(Throwable ignored){
+        }
+
+        chart.name = powerChartName;
+        chart.setHostedByOverlayUI(false);
+        ui.hudGroup.addChild(chart);
+        chart.toFront();
     }
 
     private void focusGridCenter(GridInfo info){
@@ -2966,6 +3061,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         private TextureRegionDrawable whiteDrawable;
         //true = this table is inside MindustryX OverlayUI.Window; false = attached directly to hudGroup and anchored near minimap.
         private boolean hostedByOverlayUI = false;
+        private float lastHostedWidth = -1f, lastHostedHeight = -1f;
 
         private final Color cId = Color.valueOf("9cdcfe"); //VS Code: variable
         private final Color cKey = Color.valueOf("d4d4d4"); //VS Code: default text
@@ -2976,6 +3072,22 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             touchable = Touchable.disabled;
             left().top();
             margin(6f);
+            visible(this::powerTableEnabled);
+        }
+
+        private boolean powerTableEnabled(){
+            boolean enabled = Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyPowerTableEnabled, false);
+            return enabled && state != null && state.isGame() && world != null && !world.isGenerating() && player != null;
+        }
+
+        /** Clears OverlayUI's cached Window pref size when the window is being resized. */
+        private void syncHostedSize(){
+            if(!hostedByOverlayUI || width <= 0.001f) return;
+            if(width != lastHostedWidth || height != lastHostedHeight){
+                lastHostedWidth = width;
+                lastHostedHeight = height;
+                if(parent != null) parent.invalidateHierarchy();
+            }
         }
 
         void setHostedByOverlayUI(boolean hosted){
@@ -2995,29 +3107,26 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
 
         @Override
         public float getPrefWidth(){
-            if(!hostedByOverlayUI) return super.getPrefWidth();
-            float pref = super.getPrefWidth();
-            float w = parent != null ? parent.getWidth() : width;
-            return w > 0.001f ? Math.max(pref, w) : pref;
+            if(hostedByOverlayUI && width > 0.001f){
+                return width;
+            }
+            return super.getPrefWidth();
         }
 
         @Override
         public float getPrefHeight(){
-            if(!hostedByOverlayUI) return super.getPrefHeight();
-            float pref = super.getPrefHeight();
-            float h = parent != null ? parent.getHeight() : height;
-            return h > 0.001f ? Math.max(pref, h) : pref;
+            if(hostedByOverlayUI && height > 0.001f){
+                return height;
+            }
+            return super.getPrefHeight();
         }
 
         @Override
         public void act(float delta){
             super.act(delta);
+            syncHostedSize();
 
-            boolean enabled = Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyPowerTableEnabled, false);
-            enabled &= state != null && state.isGame() && world != null && !world.isGenerating() && player != null;
-            if(!hostedByOverlayUI){
-                visible = enabled;
-            }
+            boolean enabled = powerTableEnabled();
             if(!enabled) return;
 
             //rebuild periodically (avoid heavy UI churn)
@@ -3159,6 +3268,725 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
             if(shown == 0){
                 add(Core.bundle.get("pgmm.powertable.none", "No grids above threshold.")).color(cKey).padTop(4f).row();
             }
+        }
+    }
+
+    private class PowerChartOverlay extends Table{
+        private final PowerChartData data = new PowerChartData();
+        private PowerChartCanvas canvas;
+        private Label totalLabel;
+        private TextButton modeButton;
+        private Element minimapRef;
+        private boolean hostedByOverlayUI = false;
+        private boolean shareMode = false;
+        private long lastTotalShown = Long.MIN_VALUE;
+        private int lastModeShown = -1;
+        private float lastHostedWidth = -1f, lastHostedHeight = -1f;
+
+        PowerChartOverlay(){
+            touchable = Touchable.childrenOnly;
+            left().top();
+            margin(6f);
+            //Arc skips act() for invisible elements, so visibility must be a provider that is
+            //re-evaluated every frame; writing the `visible` field inside act() would make the
+            //chart impossible to re-enable without restarting the game.
+            visible(this::chartEnabled);
+            rebuildStatic();
+        }
+
+        void setHostedByOverlayUI(boolean hosted){
+            hostedByOverlayUI = hosted;
+            touchable = Touchable.childrenOnly;
+        }
+
+        private boolean chartEnabled(){
+            boolean enabled = Core.settings.getBool(keyEnabled, true) && Core.settings.getBool(keyPowerChartEnabled, false);
+            return enabled && state != null && state.isGame() && world != null && !world.isGenerating() && player != null;
+        }
+
+        /** Clears OverlayUI's cached Window pref size when the window is being resized. */
+        private void syncHostedSize(){
+            if(!hostedByOverlayUI || width <= 0.001f) return;
+            if(width != lastHostedWidth || height != lastHostedHeight){
+                lastHostedWidth = width;
+                lastHostedHeight = height;
+                if(parent != null) parent.invalidateHierarchy();
+            }
+        }
+
+        void resetData(){
+            data.reset();
+        }
+
+        void sample(){
+            if(player != null){
+                data.update(player.team(), cache);
+            }
+        }
+
+        @Override
+        public float getMinWidth(){
+            return hostedByOverlayUI ? 0f : super.getMinWidth();
+        }
+
+        @Override
+        public float getMinHeight(){
+            return hostedByOverlayUI ? 0f : super.getMinHeight();
+        }
+
+        @Override
+        public float getPrefWidth(){
+            if(hostedByOverlayUI){
+                return width > 0.001f ? width : super.getPrefWidth();
+            }
+            float screen = Core.graphics == null ? 380f : Core.graphics.getWidth() - Scl.scl(8f);
+            float pref = Math.max(380f, super.getPrefWidth());
+            return Math.max(180f, Math.min(pref, screen));
+        }
+
+        @Override
+        public float getPrefHeight(){
+            //Hosted mode must report its own current size, not parent.height: OverlayUI packs the
+            //content table after a resize, and parent.height would add the header again each pack.
+            if(hostedByOverlayUI && height > 0.001f){
+                return height;
+            }
+            return super.getPrefHeight();
+        }
+
+        private void rebuildStatic(){
+            clearChildren();
+            defaults().left();
+
+            table(header -> {
+                header.left();
+                header.add("[accent]" + Core.bundle.get("pgmm.powerchart.title", "Power Generation") + "[]").left();
+
+                totalLabel = header.add("").color(Pal.power).padLeft(8f).get();
+                totalLabel.setAlignment(Align.left);
+
+                header.add().growX();
+
+                header.button(Core.bundle.get("pgmm.powerchart.mode.line", "Lines"), Styles.cleart, () -> {
+                    shareMode = !shareMode;
+                    updateModeButton();
+                }).padLeft(8f).height(28f).right().with(b -> {
+                    modeButton = b;
+                    b.getLabel().setColor(Pal.accent);
+                    b.getLabel().setWrap(false);
+                });
+            }).growX().row();
+
+            canvas = new PowerChartCanvas(data, this);
+            canvas.touchable = Touchable.disabled;
+            add(canvas).grow().padTop(4f).row();
+
+            Label hint = add(Core.bundle.get("pgmm.powerchart.hint", "Hover the chart for details."))
+                .color(Color.gray).padTop(2f).left().get();
+            hint.touchable = Touchable.disabled;
+            row();
+
+            updateModeButton();
+        }
+
+        private void updateModeButton(){
+            int mode = shareMode ? 1 : 0;
+            if(modeButton != null && mode != lastModeShown){
+                lastModeShown = mode;
+                modeButton.setText(Core.bundle.get(shareMode ? "pgmm.powerchart.mode.share" : "pgmm.powerchart.mode.line", shareMode ? "Share" : "Lines"));
+            }
+        }
+
+        @Override
+        public void act(float delta){
+            super.act(delta);
+            syncHostedSize();
+
+            boolean enabled = chartEnabled();
+            if(!enabled) return;
+
+            if(totalLabel != null){
+                long amount = (long)data.currentTotal;
+                if(amount != lastTotalShown){
+                    lastTotalShown = amount;
+                    totalLabel.setText("+" + UI.formatAmount(amount) + "/s");
+                }
+            }
+            updateModeButton();
+
+            if(hostedByOverlayUI) return;
+
+            //Fallback HUD mode: sit to the left of the vanilla minimap (top-right), or below it
+            //when the screen is too narrow. Never cover the minimap itself.
+            if(minimapRef == null || minimapRef.getScene() == null){
+                try{
+                    minimapRef = ui != null && ui.hudGroup != null ? ui.hudGroup.find("minimap") : null;
+                }catch(Throwable ignored){
+                    minimapRef = null;
+                }
+            }
+
+            pack();
+            float pad = Scl.scl(4f);
+            float maxY = Core.graphics.getHeight() - pad;
+            if(minimapRef != null){
+                float top = Math.min(maxY, minimapRef.y + minimapRef.getHeight());
+                float right = minimapRef.x - pad;
+                if(right - width >= pad){
+                    setPosition(right, top, Align.topRight);
+                }else{
+                    float belowTop = minimapRef.y - pad;
+                    if(belowTop - height >= pad){
+                        setPosition(minimapRef.x, belowTop, Align.topLeft);
+                    }else{
+                        setPosition(pad, maxY, Align.topLeft);
+                    }
+                }
+            }else{
+                setPosition(pad, maxY, Align.topLeft);
+            }
+        }
+
+        @Override
+        public void draw(){
+            if(!visible && !hostedByOverlayUI) return;
+            float alpha = Mathf.clamp(Core.settings.getInt(keyPowerChartBgAlpha, 70) / 100f) * parentAlpha;
+            if(alpha > 0.001f){
+                Draw.color(0f, 0f, 0f, alpha);
+                Fill.rect(x + width / 2f, y + height / 2f, width, height);
+                Draw.color();
+            }
+            super.draw();
+        }
+    }
+
+    private static class PowerChartSeries{
+        final int blockId;
+        final String name;
+        final Color color = new Color();
+        final FloatSeq values = new FloatSeq();
+        float current;
+        boolean active;
+
+        PowerChartSeries(int blockId, String name, Color color){
+            this.blockId = blockId;
+            this.name = name;
+            this.color.set(color);
+        }
+    }
+
+    private static class PowerChartData{
+        private static final Color[] palette = {
+            Color.valueOf("4ec9b0"), Color.valueOf("f2c14e"), Color.valueOf("ff8c69"),
+            Color.valueOf("9cdcfe"), Color.valueOf("c792ea"), Color.valueOf("a3e635"),
+            Color.valueOf("f472b6"), Color.valueOf("38bdf8"), Color.valueOf("fb923c"),
+            Color.valueOf("e5e7eb")
+        };
+
+        final Seq<PowerChartSeries> series = new Seq<>();
+        final IntMap<PowerChartSeries> byBlock = new IntMap<>();
+        final FloatSeq totals = new FloatSeq();
+        // Time.time (ticks) of each sample; keeps the X axis honest across pauses/disabled periods.
+        final FloatSeq times = new FloatSeq();
+        final Seq<String> topConsumers = new Seq<>();
+        final FloatSeq topConsumerPowers = new FloatSeq();
+        final Seq<PowerChartSeries> legend = new Seq<>();
+
+        private float[] scratch = new float[0];
+        private float nextSampleAt = 0f;
+        private int maxSamples = 120;
+        private Team lastTeam;
+        float currentTotal = 0f;
+        float lineMax = 1f;
+        int version = 0;
+
+        int sampleCount(){
+            return totals.size;
+        }
+
+        void reset(){
+            series.clear();
+            byBlock.clear();
+            totals.clear();
+            times.clear();
+            topConsumers.clear();
+            topConsumerPowers.clear();
+            legend.clear();
+            currentTotal = 0f;
+            lineMax = 1f;
+            nextSampleAt = 0f;
+            version++;
+        }
+
+        void update(Team team, PowerGridCache cache){
+            int window = Mathf.clamp(Core.settings.getInt(keyPowerChartWindow, 120), 30, 600);
+            if(window != maxSamples){
+                maxSamples = window;
+                trim();
+            }
+
+            if(team == null || state == null || !state.isGame() || state.isPaused() || world == null || world.isGenerating()){
+                return;
+            }
+
+            if(lastTeam != team){
+                lastTeam = team;
+                reset();
+            }
+
+            //If the chart was disabled/paused for more than two windows, old history would compress
+            //the new data into a sliver; start fresh instead.
+            if(times.size > 0 && Time.time - times.get(times.size - 1) > maxSamples * 120f){
+                reset();
+            }
+
+            if(Time.time < nextSampleAt) return;
+            nextSampleAt = Time.time + 60f;
+
+            cache.updateBasic();
+
+            int blockCount = mindustry.Vars.content.blocks().size;
+            if(scratch.length < blockCount){
+                scratch = new float[blockCount];
+            }else{
+                Arrays.fill(scratch, 0f);
+            }
+
+            float total = 0f;
+            Building topBuild = null;
+            float topPower = 0f;
+
+            for(PowerGraph graph : cache.graphs){
+                if(graph == null || graph.all == null) continue;
+
+                Seq<Building> producers = graph.producers;
+                for(int p = 0; p < producers.size; p++){
+                    Building b = producers.get(p);
+                    if(b == null || b.block == null || b.team != team) continue;
+                    float value = b.getPowerProduction() * 60f * b.timeScale();
+                    if(value <= 0.001f) continue;
+                    int id = b.block.id;
+                    if(id >= 0 && id < scratch.length){
+                        scratch[id] += value;
+                    }
+                    total += value;
+                }
+
+                Seq<Building> consumers = graph.consumers;
+                for(int c = 0; c < consumers.size; c++){
+                    Building b = consumers.get(c);
+                    if(b == null || b.block == null || b.team != team || b.block.consPower == null) continue;
+                    float value = consumerPower(b);
+                    if(value > topPower){
+                        topPower = value;
+                        topBuild = b;
+                    }
+                }
+            }
+
+            String topName = null;
+            if(topBuild != null && topBuild.block != null){
+                int tx = topBuild.tile == null ? -1 : topBuild.tile.x;
+                int ty = topBuild.tile == null ? -1 : topBuild.tile.y;
+                topName = topBuild.block.localizedName + " (" + tx + ", " + ty + ")";
+            }
+
+            //Create series for generator block types seen for the first time.
+            for(int id = 0; id < scratch.length; id++){
+                float value = scratch[id];
+                if(value <= 0.001f) continue;
+                PowerChartSeries s = byBlock.get(id);
+                if(s == null){
+                    Block block = mindustry.Vars.content.block(id);
+                    String name = block == null ? ("#" + id) : block.localizedName;
+                    s = new PowerChartSeries(id, name, colorForSeries(id));
+                    for(int k = 0; k < totals.size; k++){
+                        s.values.add(0f);
+                    }
+                    byBlock.put(id, s);
+                    series.add(s);
+                }
+            }
+
+            for(int i = 0; i < series.size; i++){
+                PowerChartSeries s = series.get(i);
+                float value = (s.blockId >= 0 && s.blockId < scratch.length) ? scratch[s.blockId] : 0f;
+                s.current = value;
+                s.values.add(value);
+            }
+
+            totals.add(total);
+            times.add(Time.time);
+            topConsumers.add(topName);
+            topConsumerPowers.add(topPower);
+            currentTotal = total;
+
+            trim();
+            pruneInactive();
+            recompute();
+            version++;
+        }
+
+        private static float consumerPower(Building b){
+            ConsumePower cons = b.block.consPower;
+            if(cons == null) return 0f;
+            if(cons instanceof ConsumePowerDynamic){
+                return cons.requestedPower(b) * 60f;
+            }
+            return Mathf.zero(cons.requestedPower(b)) ? 0f
+                : cons.usage * (b.shouldConsume() ? b.efficiency * b.timeScale() : 0f) * 60f;
+        }
+
+        private static Color colorForSeries(int blockId){
+            if(blockId >= 0){
+                return palette[blockId % palette.length];
+            }
+            float hue = (blockId * 47f) % 360f;
+            return Color.HSVtoRGB(hue, 0.62f, 1f);
+        }
+
+        private void trim(){
+            while(totals.size > maxSamples){
+                totals.removeIndex(0);
+                times.removeIndex(0);
+                topConsumers.remove(0);
+                topConsumerPowers.removeIndex(0);
+                for(int i = 0; i < series.size; i++){
+                    PowerChartSeries s = series.get(i);
+                    if(s.values.size > 0){
+                        s.values.removeIndex(0);
+                    }
+                }
+            }
+        }
+
+        private void pruneInactive(){
+            if(series.size <= 24) return;
+            for(int i = series.size - 1; i >= 0; i--){
+                PowerChartSeries s = series.get(i);
+                boolean any = false;
+                for(int k = 0; k < s.values.size; k++){
+                    if(s.values.get(k) > 0.01f){
+                        any = true;
+                        break;
+                    }
+                }
+                if(!any){
+                    byBlock.remove(s.blockId);
+                    series.remove(i);
+                }
+            }
+        }
+
+        private void recompute(){
+            lineMax = 1f;
+            for(int i = 0; i < series.size; i++){
+                PowerChartSeries s = series.get(i);
+                boolean any = false;
+                for(int k = 0; k < s.values.size; k++){
+                    float value = s.values.get(k);
+                    if(value > 0.01f){
+                        any = true;
+                        if(value > lineMax) lineMax = value;
+                    }
+                }
+                s.active = any;
+            }
+            lineMax *= 1.15f;
+
+            legend.clear();
+            for(int i = 0; i < series.size; i++){
+                PowerChartSeries s = series.get(i);
+                if(s.active) legend.add(s);
+            }
+            legend.sort((a, b) -> Float.compare(b.current, a.current));
+        }
+    }
+
+    private static class PowerChartCanvas extends Element{
+        private final PowerChartData data;
+        private final PowerChartOverlay owner;
+        private final Vec2 mouse = new Vec2();
+        private final Seq<PowerChartSeries> hoverOrder = new Seq<>();
+        private final Seq<String> tipLines = new Seq<>();
+        private final Seq<Color> tipColors = new Seq<>();
+
+        private int hoverIndex = -1;
+        private int hoverVersion = -1;
+        private float tipWidth = 0f;
+
+        PowerChartCanvas(PowerChartData data, PowerChartOverlay owner){
+            this.data = data;
+            this.owner = owner;
+        }
+
+        @Override
+        public float getPrefWidth(){
+            return 320f;
+        }
+
+        @Override
+        public float getPrefHeight(){
+            return 190f;
+        }
+
+        @Override
+        public void draw(){
+            float alpha = parentAlpha;
+            float width = getWidth(), height = getHeight();
+            if(width < 40f || height < 40f) return;
+
+            float axisWidth = 38f;
+            float legendWidth = width >= 320f ? Math.min(142f, width * 0.38f) : 0f;
+            float lx = axisWidth;
+            float ly = 14f;
+            float lw = width - axisWidth - legendWidth - 6f;
+            float lh = height - 22f;
+            if(lw < 20f || lh < 20f) return;
+
+            Draw.color(0f, 0f, 0f, 0.28f * alpha);
+            Fill.rect(x + width / 2f, y + height / 2f, width, height);
+            Draw.color(1f, 1f, 1f, 0.05f * alpha);
+            Fill.rect(x + lx + lw / 2f, y + ly + lh / 2f, lw, lh);
+
+            Font font = Fonts.outline;
+            if(font == null) return;
+            boolean ints = font.usesIntegerPositions();
+            float oldScale = font.getData().scaleX;
+            font.setUseIntegerPositions(false);
+            font.getData().setScale(0.62f);
+
+            try{
+            int n = data.sampleCount();
+            if(n < 2){
+                font.setColor(1f, 1f, 1f, 0.6f * alpha);
+                font.draw(Core.bundle.get("pgmm.powerchart.empty", "Collecting data..."), x + width / 2f, y + height / 2f, 0f, Align.center, false);
+                return;
+            }
+
+            float oldest = data.times.get(0);
+            float newest = data.times.get(n - 1);
+            float span = Math.max(1f, newest - oldest);
+
+            float yMax = 100f;
+            if(!shareMode()){
+                yMax = Math.max(1f, data.lineMax);
+            }
+
+            //Horizontal grid + Y labels.
+            Lines.stroke(1f);
+            for(int i = 0; i <= 4; i++){
+                float t = i / 4f;
+                float gy = y + ly + lh * t;
+                Draw.color(1f, 1f, 1f, (i == 0 ? 0.24f : 0.1f) * alpha);
+                Lines.line(x + lx, gy, x + lx + lw, gy);
+                String label = shareMode() ? Math.round(t * 100f) + "%" : UI.formatAmount((long)(yMax * t));
+                font.setColor(1f, 1f, 1f, 0.5f * alpha);
+                font.draw(label, x + lx - 4f, gy + 4f, 0f, Align.right, false);
+            }
+
+            //Time labels.
+            font.setColor(1f, 1f, 1f, 0.45f * alpha);
+            font.draw("-" + Math.round(span / 60f) + "s", x + lx, y + 10f, 0f, Align.left, false);
+            font.draw(Core.bundle.get("pgmm.powerchart.now", "now"), x + lx + lw, y + 10f, 0f, Align.right, false);
+
+            //Lines.
+            float plotLeft = x + lx;
+            float plotBottom = y + ly;
+            float plotW = lw;
+            float plotH = lh;
+            for(int i = 0; i < data.series.size; i++){
+                PowerChartSeries s = data.series.get(i);
+                if(!s.active) continue;
+
+                Draw.color(s.color.r, s.color.g, s.color.b, 0.95f * alpha);
+                Lines.stroke(2f);
+                Lines.beginLine();
+                for(int k = 0; k < n; k++){
+                    float value = s.values.get(k);
+                    if(shareMode()){
+                        float total = data.totals.get(k);
+                        value = total > 0.001f ? value / total * 100f : 0f;
+                    }
+                    float px = plotLeft + (data.times.get(k) - oldest) / span * plotW;
+                    float py = plotBottom + Mathf.clamp(value / yMax) * plotH;
+                    Lines.linePoint(px, py);
+                }
+                Lines.endLine();
+            }
+
+            //Legend.
+            if(legendWidth > 0f){
+                drawLegend(font, alpha, x + width - legendWidth + 4f, y + height - 4f, legendWidth - 4f);
+            }
+
+            //Hover crosshair + tooltip.
+            Vec2 local = screenToLocalCoordinates(mouse.set(Core.input.mouseX(), Core.input.mouseY()));
+            if(local.x >= lx && local.x <= lx + lw && local.y >= ly && local.y <= ly + lh){
+                float targetTime = oldest + (local.x - lx) / lw * span;
+                int index = 0;
+                float best = Float.MAX_VALUE;
+                for(int k = 0; k < n; k++){
+                    float dist = Math.abs(data.times.get(k) - targetTime);
+                    if(dist < best){
+                        best = dist;
+                        index = k;
+                    }
+                }
+                if(index != hoverIndex || data.version != hoverVersion){
+                    hoverIndex = index;
+                    hoverVersion = data.version;
+                    buildTooltip(index);
+                }
+
+                float cx = plotLeft + (data.times.get(index) - oldest) / span * plotW;
+                Draw.color(1f, 1f, 1f, 0.35f * alpha);
+                Lines.stroke(1f);
+                Lines.line(cx, plotBottom, cx, plotBottom + plotH);
+
+                for(int i = 0; i < data.series.size; i++){
+                    PowerChartSeries s = data.series.get(i);
+                    if(!s.active) continue;
+                    float value = s.values.get(index);
+                    if(shareMode()){
+                        float total = data.totals.get(index);
+                        value = total > 0.001f ? value / total * 100f : 0f;
+                    }
+                    float py = plotBottom + Mathf.clamp(value / yMax) * plotH;
+                    Draw.color(s.color);
+                    Fill.circle(cx, py, 2.5f);
+                }
+
+                drawTooltip(font, alpha, local.x, local.y, width, height);
+            }else{
+                hoverIndex = -1;
+            }
+            }finally{
+                restoreFont(font, ints, oldScale);
+            }
+        }
+
+        private boolean shareMode(){
+            return owner != null && owner.shareMode;
+        }
+
+        private void drawLegend(Font font, float alpha, float lx, float top, float maxWidth){
+            int maxEntries = Math.max(1, (int)((getHeight() - 22f) / 13f));
+            int count = Math.min(data.legend.size, maxEntries);
+            boolean more = data.legend.size > count;
+            if(more) count = Math.max(0, count - 1);
+
+            for(int i = 0; i < count; i++){
+                PowerChartSeries s = data.legend.get(i);
+                float ly = top - 8f - i * 13f;
+
+                Draw.color(s.color);
+                Fill.rect(lx + 4f, ly + 4f, 7f, 7f);
+
+                String name = s.name == null ? "" : s.name;
+                if(name.length() > 13) name = name.substring(0, 12) + "..";
+                String value = shareMode() && data.currentTotal > 0.001f
+                    ? Math.round(s.current / data.currentTotal * 100f) + "%"
+                    : UI.formatAmount((long)s.current);
+                font.setColor(1f, 1f, 1f, 0.85f * alpha);
+                font.draw(name + " " + value, lx + 14f, ly + 11f, 0f, Align.left, false);
+            }
+
+            if(more){
+                font.setColor(1f, 1f, 1f, 0.45f * alpha);
+                font.draw("+" + (data.legend.size - count), lx + 4f, top - 8f - count * 13f + 11f, 0f, Align.left, false);
+            }
+        }
+
+        private void buildTooltip(int index){
+            tipLines.clear();
+            tipColors.clear();
+
+            int ago = Math.max(0, Math.round((data.times.get(data.times.size - 1) - data.times.get(index)) / 60f));
+            addTip(Core.bundle.format("pgmm.powerchart.time", ago), Color.lightGray);
+
+            float total = data.totals.get(index);
+            addTip(Core.bundle.format("pgmm.powerchart.total", UI.formatAmount((long)total)), Pal.power);
+
+            hoverOrder.clear();
+            for(int i = 0; i < data.series.size; i++){
+                PowerChartSeries s = data.series.get(i);
+                if(s.active) hoverOrder.add(s);
+            }
+            hoverOrder.sort((a, b) -> Float.compare(b.values.get(index), a.values.get(index)));
+
+            int shown = 0;
+            for(int i = 0; i < hoverOrder.size; i++){
+                PowerChartSeries s = hoverOrder.get(i);
+                float value = s.values.get(index);
+                if(value <= 0.001f) continue;
+                float percent = total > 0.001f ? value / total * 100f : 0f;
+                addTip(s.name + ": " + UI.formatAmount((long)value) + "/s (" + Strings.autoFixed(percent, 1) + "%)", s.color);
+                if(++shown >= 9) break;
+            }
+            if(shown < hoverOrder.size){
+                addTip("+" + (hoverOrder.size - shown) + "...", Color.gray);
+            }
+
+            String top = data.topConsumers.get(index);
+            if(top != null){
+                addTip(Core.bundle.get("pgmm.powerchart.topconsumer", "Top consumer") + ": " + top
+                    + "  -" + UI.formatAmount((long)data.topConsumerPowers.get(index)) + "/s", Color.orange);
+            }
+
+            Font font = Fonts.outline;
+            if(font == null){
+                tipWidth = 120f;
+                return;
+            }
+            GlyphLayout layout = Pools.obtain(GlyphLayout.class, GlyphLayout::new);
+            float max = 0f;
+            for(int i = 0; i < tipLines.size; i++){
+                layout.setText(font, tipLines.get(i));
+                max = Math.max(max, layout.width);
+            }
+            Pools.free(layout);
+            tipWidth = max + 12f;
+        }
+
+        private void addTip(String text, Color color){
+            if(text == null) return;
+            if(text.length() > 48){
+                text = text.substring(0, 45) + "...";
+            }
+            tipLines.add(text);
+            tipColors.add(color);
+        }
+
+        private void drawTooltip(Font font, float alpha, float mx, float my, float width, float height){
+            if(tipLines.isEmpty()) return;
+
+            float lineH = 13f;
+            float th = tipLines.size * lineH + 8f;
+            float tw = Math.min(tipWidth, width - 8f);
+            float tx = mx + 12f;
+            if(tx + tw > width - 4f) tx = mx - 12f - tw;
+            if(tx < 4f) tx = 4f;
+            float ty = Math.min(height - th - 4f, Math.max(4f, my + 8f));
+
+            Draw.color(0f, 0f, 0f, 0.84f * alpha);
+            Fill.rect(x + tx + tw / 2f, y + ty + th / 2f, tw, th);
+            Draw.color(1f, 1f, 1f, 0.12f * alpha);
+            Lines.stroke(1f);
+            Lines.rect(x + tx, y + ty, tw, th);
+
+            for(int i = 0; i < tipLines.size; i++){
+                Color color = i < tipColors.size ? tipColors.get(i) : Color.white;
+                font.setColor(color.r, color.g, color.b, alpha);
+                font.draw(tipLines.get(i), x + tx + 6f, y + ty + th - 6f - i * lineH, 0f, Align.left, false);
+            }
+        }
+
+        private static void restoreFont(Font font, boolean ints, float oldScale){
+            font.getData().setScale(oldScale);
+            font.setColor(Color.white);
+            font.setUseIntegerPositions(ints);
+            Draw.reset();
         }
     }
 

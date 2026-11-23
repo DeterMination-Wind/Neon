@@ -6,20 +6,22 @@
 
 ### 本次新增
 
-- **内置 Power Grid Minimap 更新至 v1.19.1，新增按发电机类型汇总的发电折线图**
+- **内置 Power Grid Minimap 更新至 v1.19.2，新增按发电机类型汇总的发电折线图**
 
 ### 本次修复
 
-- **发电折线图与电力表的 OverlayUI 窗口现在可以正常缩放，图表会随窗口大小铺满内容区**
-- **HUD 电力表关闭后可以再次开启**
+- **OverlayUI 窗口左下角缩放手柄无法拖动**
+- **缩放过后的 OverlayUI 窗口不再回弹到原尺寸**
+- **发电折线图会随窗口大小铺满内容区**
 
 ## English
 
 ### Added
 
-- **Bundled Power Grid Minimap is now v1.19.1, adding a power generation chart grouped by generator type**
+- **Bundled Power Grid Minimap is now v1.19.2, adding a power generation chart grouped by generator type**
 
 ### Fixed
 
-- **The power chart and power table OverlayUI windows now resize correctly, and the chart fills the available content area**
-- **The HUD power table can be re-enabled after being turned off**
+- **The OverlayUI bottom-left resize handle could not be dragged**
+- **Resized OverlayUI windows no longer snap back to their previous size**
+- **The power chart now fills the available content area when the window is resized**

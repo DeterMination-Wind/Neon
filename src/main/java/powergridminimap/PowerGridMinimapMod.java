@@ -14,9 +14,12 @@ import arc.math.Mathf;
 import arc.math.geom.Point2;
 import arc.math.geom.Rect;
 import arc.scene.Element;
+import arc.scene.Group;
 import arc.scene.event.ClickListener;
+import arc.scene.event.EventListener;
 import arc.scene.event.InputEvent;
 import arc.scene.event.Touchable;
+import arc.scene.ui.ImageButton;
 import arc.scene.style.TextureRegionDrawable;
 import arc.scene.ui.Label;
 import arc.scene.ui.TextButton;
@@ -910,6 +913,39 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         font.setColor(Color.white);
         font.setUseIntegerPositions(ints);
         Pools.free(layout);
+    }
+
+    /**
+     * OverlayUI's bottom-left resize handle is an ImageButton. Its inner Image is touchable by
+     * default, so the handle's FixedResizeListener sees targetActor != listenerActor and never
+     * starts dragging. Disable the Image's touch so the event targets the ImageButton itself.
+     * This is a runtime shim for MindustryX versions that still have this bug.
+     */
+    private static void fixOverlayResizeHandle(Element content){
+        Group parent = content == null ? null : content.parent;
+        if(parent == null) return;
+
+        Seq<Element> children = parent.getChildren();
+        for(int i = 0; i < children.size; i++){
+            Element child = children.get(i);
+            if(!(child instanceof ImageButton)) continue;
+            ImageButton button = (ImageButton)child;
+            if(button.getImage() == null) continue;
+
+            boolean resizeHandle = button.x <= 1f && button.y <= 1f;
+            if(!resizeHandle){
+                Seq<EventListener> listeners = button.getListeners();
+                for(int l = 0; l < listeners.size; l++){
+                    if(listeners.get(l).getClass().getSimpleName().contains("FixedResizeListener")){
+                        resizeHandle = true;
+                        break;
+                    }
+                }
+            }
+            if(resizeHandle){
+                button.getImage().touchable = Touchable.disabled;
+            }
+        }
     }
 
     private static boolean tryParseHexColor(String text, Color out){
@@ -3125,6 +3161,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         public void act(float delta){
             super.act(delta);
             syncHostedSize();
+            fixOverlayResizeHandle(this);
 
             boolean enabled = powerTableEnabled();
             if(!enabled) return;
@@ -3401,6 +3438,7 @@ public class PowerGridMinimapMod extends mindustry.mod.Mod{
         public void act(float delta){
             super.act(delta);
             syncHostedSize();
+            fixOverlayResizeHandle(this);
 
             boolean enabled = chartEnabled();
             if(!enabled) return;

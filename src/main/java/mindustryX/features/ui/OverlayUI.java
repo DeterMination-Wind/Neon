@@ -577,11 +577,14 @@ public class OverlayUI {
                 Cell<Table> cell = add(table);
                 if (data.getValue().getSize() != null) {
                     Vec2 size = data.getValue().getSize();
+                    //Temporarily force the saved content size so pack() restores the dragged
+                    //size even when the content's own pref is smaller.
+                    cell.minSize(size.x / Scl.scl(), size.y / Scl.scl());
                     cell.maxSize(size.x / Scl.scl(), size.y / Scl.scl());
                 }
                 pack();
 
-                cell.grow().maxSize(Float.NEGATIVE_INFINITY);
+                cell.minWidth(0f).minHeight(0f).grow().maxSize(Float.NEGATIVE_INFINITY);
                 layout();
 
                 addChild(new Element() {
@@ -597,6 +600,16 @@ public class OverlayUI {
                         Lines.rect(x, y, width, height);
                     }
                 });
+
+                if (resizable) {
+                    ImageButton handle = new ImageButton(Icon.resize);
+                    handle.setSize(Vars.iconMed);
+                    //The ImageButton's inner Image otherwise becomes the event target and
+                    //FixedResizeListener's targetActor==listenerActor check never passes.
+                    handle.getImage().touchable = Touchable.disabled;
+                    handle.addListener(new FixedResizeListener(Align.left | Align.bottom));
+                    addChild(handle);
+                }
 
             } else {
                 background((arc.scene.style.Drawable)null);
@@ -628,7 +641,9 @@ public class OverlayUI {
 
         public void endResize() {
             if (parent == null) return;
-            pack();
+            //Do not pack() here: pack uses the Window's cached pref size and snaps the
+            //window back to its content size. Lay out at the dragged size and persist it.
+            layout();
 
             WindowData next = data.getValue().copy();
             next.size = new Vec2(table.getWidth(), table.getHeight());
@@ -758,7 +773,11 @@ public class OverlayUI {
             @Override
             public boolean touchDown(InputEvent event, float x, float y, int pointer, KeyCode button) {
                 if (Core.app.isMobile() && pointer != 0) return false;
-                if (event.targetActor != event.listenerActor) return false;
+                Element target = event.targetActor;
+                if (target != event.listenerActor
+                    && (target == null || target.parent != event.listenerActor)) {
+                    return false;
+                }
                 last.set(event.stageX, event.stageY);
                 toFront();
                 return true;

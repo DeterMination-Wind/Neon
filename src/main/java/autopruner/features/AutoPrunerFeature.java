@@ -199,28 +199,131 @@ public class AutoPrunerFeature {
         showToast(Core.bundle.format("ap.toast.prune.summary", removed, skippedProtected, skippedInvalid));
     }
 
+    /**
+     * 冗余电力节点判定：把己方电力网络当作无向图（顶点 = 带电建筑，边 = power.links），
+     * 只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
+     *
+     * 结构性保证：
+     * 1. 剩余节点的诱导子图与拆除前保持同样的连通关系，任何一段电网都不会被拆散；
+     * 2. 最终保留的每个节点都是当前网络的割点，单独再拆就会断开电网。
+     *
+     * 非电力节点（电池、用电器、电力二极管、电力束节点等）以及受保护 / 不可拆的电力节点
+     * 不参与拆除，只作为连通性约束顶点参与判定（它们本身度数不减少）。
+     */
     private static Seq<Building> collectRedundantPowerNodesSnapshot() {
         Seq<Building> out = new Seq<>();
-        IntSet added = new IntSet();
+
+        Seq<Building> builds = new Seq<>();
+        LongMap<Integer> indices = new LongMap<>();
 
         Groups.build.each(build -> {
-            if (build == null || !build.isValid() || build.team != player.team()) return;
-            if (!(build.block instanceof PowerNode)) return;
-            if (build.power == null) return;
-
-            IntSeq links = build.power.links;
-            if (links == null || links.size != 1) return;
-
-            Building other = world.build(links.first());
-            if (other == null || !other.isValid() || other.power == null || other.power.links == null) return;
-            if (other.power.links.size >= 2) return;
-
-            if (added.add(build.pos())) {
-                out.add(build);
-            }
+            if (build == null || !build.isValid() || build.team != player.team() || build.power == null) return;
+            if (indices.containsKey(build.pos())) return;
+            indices.put(build.pos(), builds.size);
+            builds.add(build);
         });
 
+        int count = builds.size;
+        if (count == 0) return out;
+
+        IntSeq[] adjacency = new IntSeq[count];
+        for (int i = 0; i < count; i++) adjacency[i] = new IntSeq();
+
+        for (int i = 0; i < count; i++) {
+            IntSeq links = builds.get(i).power.links;
+            if (links == null) continue;
+            for (int l = 0; l < links.size; l++) {
+                Integer other = indices.get(links.get(l));
+                if (other == null) continue;
+                addNeighbor(adjacency[i], other);
+                addNeighbor(adjacency[other], i);
+            }
+        }
+
+        boolean[] removable = new boolean[count];
+        boolean anyRemovable = false;
+        for (int i = 0; i < count; i++) {
+            if (isPrunablePowerNode(builds.get(i))) {
+                removable[i] = true;
+                anyRemovable = true;
+            }
+        }
+        if (!anyRemovable) return out;
+
+        boolean[] removed = new boolean[count];
+        int[] queue = new int[count];
+        int[] visitStamp = new int[count];
+        int stamp = 0;
+
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (int i = 0; i < count; i++) {
+                if (removed[i] || !removable[i]) continue;
+
+                int neighbor = -1;
+                IntSeq neighbors = adjacency[i];
+                for (int k = 0; k < neighbors.size; k++) {
+                    int other = neighbors.get(k);
+                    if (removed[other]) continue;
+                    neighbor = other;
+                    break;
+                }
+
+                int componentSize = reachableCount(i, -1, adjacency, removed, queue, visitStamp, ++stamp);
+                if (neighbor >= 0 && reachableCount(neighbor, i, adjacency, removed, queue, visitStamp, ++stamp) != componentSize - 1) {
+                    continue;
+                }
+
+                removed[i] = true;
+                out.add(builds.get(i));
+                changed = true;
+            }
+        }
+
         return out;
+    }
+
+    private static void addNeighbor(IntSeq neighbors, int index) {
+        if (!neighbors.contains(index)) neighbors.add(index);
+    }
+
+    /** 判断这个建筑是否允许作为拆除目标：己方、可拆的电力节点、且通过 validBreak。 */
+    private static boolean isPrunablePowerNode(Building build) {
+        if (build == null || !build.isValid()) return false;
+        if (!(build.block instanceof PowerNode)) return false;
+        if (isProtectedBuilding(build)) return false;
+        if (control == null || control.input == null) return false;
+        return control.input.validBreak(build.tileX(), build.tileY());
+    }
+
+    /**
+     * 从 start 出发统计可达顶点数，跳过 removed 与 excluded。
+     * visitStamp 用时间戳复用数组，避免每次判定都重新分配 / 清空。
+     */
+    private static int reachableCount(int start, int excluded, IntSeq[] adjacency, boolean[] removed,
+                                      int[] queue, int[] visitStamp, int stamp) {
+        int head = 0;
+        int tail = 0;
+        int total = 0;
+
+        queue[tail++] = start;
+        visitStamp[start] = stamp;
+
+        while (head < tail) {
+            int index = queue[head++];
+            total++;
+
+            IntSeq neighbors = adjacency[index];
+            for (int k = 0; k < neighbors.size; k++) {
+                int other = neighbors.get(k);
+                if (other == excluded || removed[other] || visitStamp[other] == stamp) continue;
+                visitStamp[other] = stamp;
+                queue[tail++] = other;
+            }
+        }
+
+        return total;
     }
 
     private static void runRemoveByTimeRule() {

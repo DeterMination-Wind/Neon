@@ -1,7 +1,6 @@
 package smartplacement;
 
-
-import mindustry.ui.dialogs.SettingsMenuDialog;
+import arc.Core;
 import arc.Events;
 import arc.math.Mathf;
 import arc.math.geom.Geometry;
@@ -12,14 +11,18 @@ import mindustry.Vars;
 import mindustry.content.Blocks;
 import mindustry.content.Planets;
 import mindustry.entities.units.BuildPlan;
+import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.Trigger;
 import mindustry.gen.Building;
+import mindustry.gen.Icon;
 import mindustry.input.DesktopInput;
 import mindustry.input.InputHandler;
 import mindustry.input.MobileInput;
 import mindustry.mod.Mod;
+import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
 import mindustry.world.blocks.distribution.Conveyor;
+import mindustry.world.blocks.distribution.DirectionBridge;
 import mindustry.world.blocks.distribution.Duct;
 import mindustry.world.blocks.distribution.StackConveyor;
 
@@ -27,27 +30,86 @@ public final class SmartPlacementMod extends Mod{
     /** When true, this mod is running as a bundled component inside Neon. */
     public static boolean bekBundled = false;
 
+    /** 传送带类 × 传送带类交叉改放空选反向分类器的开关。 */
+    static final String settingCrossConveyorConveyor = "smartplacement-cross-cc";
+    /** 传送带类 × 管道类交叉。 */
+    static final String settingCrossConveyorDuct = "smartplacement-cross-cd";
+    /** 管道类 × 传送带类交叉。 */
+    static final String settingCrossDuctConveyor = "smartplacement-cross-dc";
+    /** 管道类 × 管道类交叉。 */
+    static final String settingCrossDuctDuct = "smartplacement-cross-dd";
+    /** 管道交叉的阻挡带宽超过 2 格时改放物品管道桥。 */
+    static final String settingDuctBridgeOverWide = "smartplacement-duct-bridge-wide";
+    /** 只在行星为“任意”（混合科技）时生效。 */
+    static final String settingMixedPlanetOnly = "smartplacement-mixed-only";
+
+    /** 宽阻挡带改用管道桥的阈值：超过该格数才换桥。 */
+    private static final int wideBandThreshold = 2;
 
     private final ObjectMap<Block, PlacementProxy> proxies = new ObjectMap<Block, PlacementProxy>();
+    private boolean proxiesBuilt;
+    private boolean settingsRegistered;
 
     @Override
     public void init(){
-        Seq<Block> lineBlocks = Vars.content.blocks().select(SmartPlacementMod::isItemLine);
+        // Standalone loads content before mod init(), so this usually builds right away.
+        // Bundled inside Neon the module is initialized before content exists; updatePlacementBlock()
+        // retries lazily once blocks are loaded, otherwise the proxy table would stay empty forever.
+        ensureProxies();
+
+        Events.run(Trigger.update, this::updatePlacementBlock);
+        Events.on(ClientLoadEvent.class, e -> registerSettings());
+    }
+
+    private void registerSettings(){
+        if(settingsRegistered) return;
+        settingsRegistered = true;
+        if(bekBundled) return;
+        if(Vars.ui == null || Vars.ui.settings == null) return;
+
+        Vars.ui.settings.addCategory("@smartplacement.settings", Icon.rightOpen, this::bekBuildSettings);
+    }
+
+    /**
+     * Populates a {@link mindustry.ui.dialogs.SettingsMenuDialog.SettingsTable} with this mod's settings.
+     * Neon calls this from its unified settings page while {@link #bekBundled} is true.
+     */
+    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
+        table.checkPref(settingCrossConveyorConveyor, true);
+        table.checkPref(settingCrossConveyorDuct, true);
+        table.checkPref(settingCrossDuctConveyor, true);
+        table.checkPref(settingCrossDuctDuct, true);
+        table.checkPref(settingDuctBridgeOverWide, true);
+        table.checkPref(settingMixedPlanetOnly, true);
+    }
+
+    /**
+     * Builds the proxy table for every item-line block. Safe to call every frame: it does nothing
+     * until content exists and only runs once afterwards.
+     */
+    private void ensureProxies(){
+        if(proxiesBuilt) return;
+        if(Vars.content == null) return;
+
+        Seq<Block> blocks = Vars.content.blocks();
+        if(blocks == null || blocks.isEmpty()) return;
+
+        proxiesBuilt = true;
+        Seq<Block> lineBlocks = blocks.select(SmartPlacementMod::isItemLine);
         for(Block source : lineBlocks){
             PlacementProxy proxy = new PlacementProxy(source);
             Vars.content.remove(proxy);
             proxies.put(source, proxy);
         }
-
-        Events.run(Trigger.update, this::updatePlacementBlock);
     }
 
     private void updatePlacementBlock(){
+        ensureProxies();
         if(Vars.control == null || Vars.control.input == null) return;
 
         InputHandler input = Vars.control.input;
         if(input.block instanceof PlacementProxy){
-            if(!replacementEnabled() || !isDrawingLine(input)){
+            if(!replacementActive(input)){
                 input.block = ((PlacementProxy)input.block).source;
             }
             return;
@@ -56,10 +118,16 @@ public final class SmartPlacementMod extends Mod{
         if(input.block == null) return;
 
         PlacementProxy proxy = proxies.get(input.block);
-        if(proxy != null && replacementEnabled() && isDrawingLine(input)){
+        if(proxy != null && replacementActive(input)){
             input.block = proxy;
             invalidateLineEnd(input);
         }
+    }
+
+    private static boolean replacementActive(InputHandler input){
+        // getReplacement() only runs while vanilla block replacement is on; swapping the selected
+        // block without it would try to place the unregistered proxy itself.
+        return replacementEnabled() && lineReplacementEnabled() && isDrawingLine(input);
     }
 
     private static boolean isDrawingLine(InputHandler input){
@@ -78,16 +146,43 @@ public final class SmartPlacementMod extends Mod{
         }
     }
 
+    private static boolean lineReplacementEnabled(){
+        return Core.settings == null || Core.settings.getBool("blockreplace", true);
+    }
+
+    private static boolean settingEnabled(String key, boolean def){
+        return Core.settings == null ? def : Core.settings.getBool(key, def);
+    }
+
+    /** @return the line family of a transport block, or null if it is not an item line. */
+    static LineKind kindOf(Block block){
+        if(block instanceof Duct) return LineKind.duct;
+        if(block instanceof Conveyor || block instanceof StackConveyor) return LineKind.conveyor;
+        return null;
+    }
+
     private static boolean isItemLine(Block block){
-        return block instanceof Conveyor || block instanceof StackConveyor || block instanceof Duct;
+        return kindOf(block) != null;
+    }
+
+    static CrossingOptions crossingOptions(){
+        return new CrossingOptions(
+            settingEnabled(settingCrossConveyorConveyor, true),
+            settingEnabled(settingCrossConveyorDuct, true),
+            settingEnabled(settingCrossDuctConveyor, true),
+            settingEnabled(settingCrossDuctDuct, true)
+        );
     }
 
     private static boolean replacementEnabled(){
-        return Vars.state != null && replacementEnabled(Vars.state.rules.planet == Planets.sun);
+        return Vars.state != null && replacementEnabled(
+            Vars.state.rules.planet == Planets.sun,
+            settingEnabled(settingMixedPlanetOnly, true)
+        );
     }
 
-    static boolean replacementEnabled(boolean sunPlanet){
-        return sunPlanet;
+    static boolean replacementEnabled(boolean sunPlanet, boolean mixedPlanetOnly){
+        return !mixedPlanetOnly || sunPlanet;
     }
 
     private static final class PlacementProxy extends Block{
@@ -128,13 +223,18 @@ public final class SmartPlacementMod extends Mod{
         @Override
         public Block getReplacement(BuildPlan req, Seq<BuildPlan> plans){
             Block fallback = sourceReplacement(req, plans);
+            if(!replacementEnabled() || req.tile() == null) return fallback;
+
             boolean hasFront = containsPlan(plans, req.x + Geometry.d4x(req.rotation), req.y + Geometry.d4y(req.rotation));
             boolean hasBack = containsPlan(plans, req.x + Geometry.d4x(req.rotation + 2), req.y + Geometry.d4y(req.rotation + 2));
-            if(!replacementEnabled() || !hasFront || !hasBack || req.tile() == null) return fallback;
+            if(!hasFront || !hasBack) return fallback;
 
             Building existing = req.tile().build;
-            return existing == null ? fallback : crossingReplacement(
-                source, existing.block, existing.rotation, req.rotation, hasFront, hasBack, true, fallback
+            if(existing == null) return fallback;
+
+            return crossingReplacement(
+                source, existing.block, existing.rotation, req.rotation, hasFront, hasBack, true,
+                crossingOptions(), fallback
             );
         }
 
@@ -154,7 +254,55 @@ public final class SmartPlacementMod extends Mod{
 
         @Override
         public void handlePlacementLine(Seq<BuildPlan> plans){
+            // Vanilla bridging first (it also removes plans that cannot be placed), then the
+            // wide-band rule can turn a 3+ tile duct crossing into a single item duct bridge.
             source.handlePlacementLine(plans);
+            applyWideDuctBridge(plans);
+        }
+
+        private void applyWideDuctBridge(Seq<BuildPlan> plans){
+            if(kindOf(source) != LineKind.duct) return;
+            if(!settingEnabled(settingDuctBridgeOverWide, true)) return;
+
+            Block bridge = Blocks.ductBridge;
+            if(bridge == null || !bridge.unlockedNow()) return;
+            if(plans.size < wideBandThreshold + 2) return;
+
+            BuildPlan first = plans.first();
+            if(first.x != plans.peek().x && first.y != plans.peek().y) return;
+
+            boolean[] blocked = new boolean[plans.size];
+            for(int i = 0; i < blocked.length; i++){
+                blocked[i] = isCrossingPlan(plans.get(i));
+            }
+
+            Seq<int[]> runs = wideBlockedRuns(blocked, wideBandThreshold);
+            if(runs.isEmpty()) return;
+
+            int maxSpan = bridge instanceof DirectionBridge ? ((DirectionBridge)bridge).range : 4;
+            for(int r = runs.size - 1; r >= 0; r--){
+                int[] run = runs.get(r);
+                int before = run[0] - 1, after = run[1] + 1;
+                if(before < 0 || after >= plans.size) continue;
+                if(after - before > maxSpan) continue;
+
+                BuildPlan start = plans.get(before), end = plans.get(after);
+                if(Vars.player != null && (!start.placeable(Vars.player.team()) || !end.placeable(Vars.player.team()))) continue;
+
+                start.block = bridge;
+                end.block = bridge;
+                for(int i = run[1]; i >= run[0]; i--){
+                    plans.remove(i);
+                }
+            }
+        }
+
+        private static boolean isCrossingPlan(BuildPlan plan){
+            if(plan.block != Blocks.invertedSorter) return false;
+            Building existing = plan.build();
+            return existing != null
+                && kindOf(existing.block) != null
+                && Mathf.mod(existing.rotation - plan.rotation, 2) == 1;
         }
 
         @Override
@@ -163,16 +311,66 @@ public final class SmartPlacementMod extends Mod{
         }
     }
 
-    static Block crossingReplacement(Block source, Block existing, int existingRotation, int planRotation,
-                                     boolean hasFront, boolean hasBack, boolean dualTech, Block fallback){
-        if(!dualTech || !hasFront || !hasBack || Mathf.mod(existingRotation - planRotation, 2) != 1) return fallback;
-        if(isItemLine(source) && isItemLine(existing)){
-            return Blocks.invertedSorter;
+    /**
+     * @return runs {@code {start, end}} of consecutive blocked tiles whose length is greater than
+     * {@code threshold}. Pure so the wide-band rule stays unit-testable.
+     */
+    static Seq<int[]> wideBlockedRuns(boolean[] blocked, int threshold){
+        Seq<int[]> runs = new Seq<int[]>();
+        int start = -1;
+        for(int i = 0; i <= blocked.length; i++){
+            boolean flag = i < blocked.length && blocked[i];
+            if(flag && start == -1){
+                start = i;
+            }else if(!flag && start != -1){
+                if(i - start > threshold){
+                    runs.add(new int[]{start, i - 1});
+                }
+                start = -1;
+            }
         }
-        return fallback;
+        return runs;
     }
 
-    /** This bundled module has no configurable settings. */
-    public void bekBuildSettings(SettingsMenuDialog.SettingsTable table){
+    static Block crossingReplacement(Block source, Block existing, int existingRotation, int planRotation,
+                                     boolean hasFront, boolean hasBack, boolean dualTech, CrossingOptions options,
+                                     Block fallback){
+        if(!dualTech || !hasFront || !hasBack || Mathf.mod(existingRotation - planRotation, 2) != 1) return fallback;
+
+        LineKind sourceKind = kindOf(source);
+        LineKind existingKind = kindOf(existing);
+        if(sourceKind == null || existingKind == null) return fallback;
+        if(options == null || !options.allows(sourceKind, existingKind)) return fallback;
+
+        return Blocks.invertedSorter;
+    }
+
+    enum LineKind{
+        conveyor("conveyor"),
+        duct("duct");
+
+        final String id;
+
+        LineKind(String id){
+            this.id = id;
+        }
+    }
+
+    static final class CrossingOptions{
+        final boolean conveyorConveyor, conveyorDuct, ductConveyor, ductDuct;
+
+        CrossingOptions(boolean conveyorConveyor, boolean conveyorDuct, boolean ductConveyor, boolean ductDuct){
+            this.conveyorConveyor = conveyorConveyor;
+            this.conveyorDuct = conveyorDuct;
+            this.ductConveyor = ductConveyor;
+            this.ductDuct = ductDuct;
+        }
+
+        boolean allows(LineKind source, LineKind existing){
+            if(source == LineKind.conveyor){
+                return existing == LineKind.conveyor ? conveyorConveyor : conveyorDuct;
+            }
+            return existing == LineKind.conveyor ? ductConveyor : ductDuct;
+        }
     }
 }

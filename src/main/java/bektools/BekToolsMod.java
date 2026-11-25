@@ -585,7 +585,9 @@ public class BekToolsMod extends Mod{
         entries.add(new ModuleEntry(moduleScreenshot, !isModuleFailed(moduleScreenshot) && !isModuleGated(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings));
         entries.add(new ModuleEntry(moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, st -> radialBuildMenu.bekBuildSettings(st)));
         entries.add(new ModuleEntry(moduleBetterRtsFormation, betterRtsFormation != null, Core.bundle.get("bektools.section.brf", "Better RTS Formation"), Icon.commandRally, st -> betterRtsFormation.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleSmartPlacement, smartPlacement != null, Core.bundle.get("bektools.section.smp", "Smart Placement"), Icon.rightOpen, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.smp.none"))));
+        entries.add(new ModuleEntry(moduleSmartPlacement, smartPlacement != null, Core.bundle.get("bektools.section.smp", "Smart Placement"), Icon.rightOpen, st -> {
+            if(smartPlacement != null) smartPlacement.bekBuildSettings(st);
+        }));
         entries.add(new ModuleEntry(moduleHideWhatProcessorsShow, hideWhatProcessorsShow != null, Core.bundle.get("bektools.section.hwps", "Hide What Processors Show"), Icon.logic, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hwps.none"))));
         entries.add(new ModuleEntry(modulePatrolCancel, patrolCancel != null, Core.bundle.get("bektools.section.pc", "Patrol Cancel"), Icon.commandRally, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.pc.none"))));
         entries.add(new ModuleEntry(moduleBetterTerrainGen, betterTerrainGen != null, Core.bundle.get("bektools.section.btg", "Better Terrain Gen V2"), Icon.map, st -> {

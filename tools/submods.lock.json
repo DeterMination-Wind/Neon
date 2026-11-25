@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-11-23T11:29:54Z",
+  "generatedAtUtc": "2026-11-25T13:22:59Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -316,8 +316,8 @@
     },
     "smp": {
       "sourceKind": "git",
-      "syncedHead": "49fdf155e853ec4cf0fea1247c2658c5d47c9da1",
-      "workspaceHeadAtSync": "49fdf155e853ec4cf0fea1247c2658c5d47c9da1",
+      "syncedHead": "aff7762c3738957f8952583a1eb0bb371c8dea9b",
+      "workspaceHeadAtSync": "aff7762c3738957f8952583a1eb0bb371c8dea9b",
       "workspaceDirtyAtSync": false,
       "upstreamRef": null,
       "upstreamHeadAtSync": null,

@@ -8,6 +8,9 @@ import java.util.LinkedHashSet;
 public final class LegacyMindustryXGuard {
     public static final String MINIMUM_VERSION = "2026.04.03.B439";
     private static final String[] MINDUSTRYX_MARKER_CLASSES = {"mindustryX.VarsX", "mindustryX.loader.Main"};
+    private static volatile ClassLoader cachedCoreLoader;
+    private static volatile boolean cachedRuntimeResolved;
+    private static volatile boolean cachedMindustryXRuntime;
 
     private LegacyMindustryXGuard() {
     }
@@ -18,7 +21,15 @@ public final class LegacyMindustryXGuard {
      * mods, and Neon's own same-FQCN overlay copy lives in a mod loader, never on the core.
      */
     public static boolean isMindustryXRuntime() {
-        return hasMindustryXMarker(Vars.class.getClassLoader());
+        ClassLoader core = Vars.class.getClassLoader();
+        if (cachedRuntimeResolved && cachedCoreLoader == core) {
+            return cachedMindustryXRuntime;
+        }
+        boolean detected = hasMindustryXMarker(core);
+        cachedCoreLoader = core;
+        cachedMindustryXRuntime = detected;
+        cachedRuntimeResolved = true;
+        return detected;
     }
 
     /**
@@ -29,7 +40,7 @@ public final class LegacyMindustryXGuard {
      */
     public static Class<?> loadMindustryXClass(String name) throws ClassNotFoundException {
         ClassLoader core = Vars.class.getClassLoader();
-        if (hasMindustryXMarker(core)) {
+        if (isMindustryXRuntime()) {
             return Class.forName(name, false, core);
         }
 

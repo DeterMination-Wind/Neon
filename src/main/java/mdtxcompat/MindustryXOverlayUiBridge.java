@@ -17,6 +17,7 @@ import java.util.Map;
 public class MindustryXOverlayUiBridge implements OverlayUiBridge {
     private static final long missingRetryMillis = 5000L;
     private static final long bindRetryMillis = 250L;
+    private static final Object[] emptyArgs = new Object[0];
 
     private enum State {
         UNRESOLVED,
@@ -259,6 +260,10 @@ public class MindustryXOverlayUiBridge implements OverlayUiBridge {
             + ", state=" + mod.state
             + ", loader=" + mod.loader
             + ", file=" + mod.file;
+    }
+
+    private Object invoke(Method method, Object target) {
+        return invoke(method, target, emptyArgs);
     }
 
     private Object invoke(Method method, Object target, Object... args) {

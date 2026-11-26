@@ -15,7 +15,7 @@ import mindustry.ui.Styles;
 
 /**
  * Right-hand detail pane (or full-width DETAIL screen in narrow mode) hosting the selected
- * sub-mod's pinned header, unified master switch, lifecycle status banner, and scrollable settings body.
+ * sub-mod's gold-rule flat futuristic header, square master switch, lifecycle banner, and settings body.
  */
 public class NeonSubmodDetailPane extends Table{
     private final NeonSettingsContext context;
@@ -39,7 +39,7 @@ public class NeonSubmodDetailPane extends Table{
         Runnable onBackRequested,
         Runnable onStateMutated
     ){
-        super(VscodeSettingsStyle.panelBackground());
+        super(VscodeSettingsStyle.sidebarBackground());
         this.context = context;
         this.onBackRequested = onBackRequested;
         this.onStateMutated = onStateMutated;
@@ -79,7 +79,6 @@ public class NeonSubmodDetailPane extends Table{
 
     public void refreshHeaderOnly(){
         rebuildHeader();
-        // If module was not loaded at startup, its unloaded placeholder text depends on switch state.
         if(currentModule != null && !currentModule.available){
             rebuildBody(false);
         }
@@ -93,13 +92,13 @@ public class NeonSubmodDetailPane extends Table{
         backBar.clearChildren();
         if(!narrowMode || currentModule == null) return;
 
-        backBar.table(VscodeSettingsStyle.headerBackground(), bar -> {
-            bar.left().margin(6f);
-            bar.button(Core.bundle.get("bektools.ui.nav.back", "Back"), Icon.left, Styles.flatt, () -> {
+        backBar.table(VscodeSettingsStyle.sectionHeaderBackground(), bar -> {
+            bar.left().margin(6f, 8f, 8f, 8f);
+            bar.button(Core.bundle.get("bektools.ui.nav.back", "Back"), Icon.left, VscodeSettingsStyle.flatButtonStyle(), () -> {
                 if(onBackRequested != null) onBackRequested.run();
             }).height(34f).padRight(10f);
-            bar.add(currentModule.tab.title() + " / " + currentModule.title)
-                .color(VscodeSettingsStyle.mutedColor())
+            bar.add(currentModule.tab.title() + "  /  " + currentModule.title)
+                .color(VscodeSettingsStyle.accentColor())
                 .left()
                 .growX()
                 .minWidth(0f)
@@ -114,12 +113,12 @@ public class NeonSubmodDetailPane extends Table{
         final NeonSettingsModule module = currentModule;
         ModuleRuntimeState state = module.runtimeState(context);
 
-        headerHost.table(VscodeSettingsStyle.headerBackground(), card -> {
+        headerHost.table(VscodeSettingsStyle.hudCardBackground(), card -> {
             card.top().left().margin(10f);
 
-            // Row 1: Icon + Title + Status badge
-            card.table(topRow -> {
-                topRow.left();
+            // Row 1: Icon + Title + Metadata + Geometric Status Badge, underscored by gold rule
+            card.table(VscodeSettingsStyle.titleRuleBackground(), topRow -> {
+                topRow.left().margin(0f, 0f, 8f, 0f);
                 if(module.icon != null){
                     Image ic = new Image(module.icon);
                     ic.setScaling(Scaling.fit);
@@ -130,36 +129,38 @@ public class NeonSubmodDetailPane extends Table{
                 Table titles = new Table();
                 titles.left();
                 Label nameLabel = new Label(module.title);
-                nameLabel.setColor(VscodeSettingsStyle.primaryTextColor());
+                nameLabel.setColor(VscodeSettingsStyle.accentColor());
                 nameLabel.setWrap(true);
                 titles.add(nameLabel).left().growX().minWidth(0f).row();
 
-                Label metaLabel = new Label(module.tab.title() + "  ·  " + module.moduleId);
-                metaLabel.setFontScale(0.84f);
+                Label metaLabel = new Label(module.tab.title() + "  //  " + module.moduleId.toUpperCase(java.util.Locale.ROOT));
+                metaLabel.setFontScale(0.82f);
                 metaLabel.setColor(VscodeSettingsStyle.mutedColor());
                 titles.add(metaLabel).left().growX().minWidth(0f).padTop(2f).row();
 
                 topRow.add(titles).left().growX().minWidth(0f);
 
-                // Status badge pill
+                // Flat futuristic rectangular status badge
                 topRow.table(VscodeSettingsStyle.bannerBackground(state), badge -> {
-                    badge.margin(4f, 8f, 4f, 8f);
+                    badge.margin(4f, 9f, 4f, 9f);
                     Image dot = new Image(Tex.whiteui);
                     dot.setColor(state.color());
-                    badge.add(dot).size(7f).padRight(6f);
+                    badge.add(dot).size(6f).padRight(6f);
                     Label statusLabel = new Label(state.badgeText());
-                    statusLabel.setFontScale(0.86f);
+                    statusLabel.setFontScale(0.85f);
                     statusLabel.setColor(state.color());
                     badge.add(statusLabel);
                 }).right().padLeft(8f);
             }).growX().minWidth(0f).row();
 
-            // Row 2: Unified master switch (when module has an enableKey and didn't fail)
+            // Row 2: Unified flat-futuristic master switch
             if(module.enableKey != null && state != ModuleRuntimeState.FAILED){
-                card.image(VscodeSettingsStyle.dividerDrawable()).height(1f).growX().padTop(8f).padBottom(8f).row();
-                CheckBox masterSwitch = new CheckBox(Core.bundle.get("bektools.module.switch", "Master switch: enable this module"));
+                CheckBox masterSwitch = new CheckBox(
+                    Core.bundle.get("bektools.module.switch", "Master switch: enable this module"),
+                    VscodeSettingsStyle.flatCheckBoxStyle()
+                );
                 masterSwitch.getLabel().setWrap(true);
-                masterSwitch.getLabelCell().growX().minWidth(0f);
+                masterSwitch.getLabelCell().padLeft(8f).growX().minWidth(0f);
                 masterSwitch.setChecked(module.isSwitchOn());
                 masterSwitch.update(() -> {
                     boolean stored = module.isSwitchOn();
@@ -189,13 +190,13 @@ public class NeonSubmodDetailPane extends Table{
                     swRow.left().margin(8f);
                     swRow.image(Icon.power).size(18f).color(state.color()).padRight(8f);
                     swRow.add(masterSwitch).left().growX().minWidth(0f);
-                }).growX().minWidth(0f).row();
+                }).growX().minWidth(0f).padTop(8f).row();
             }
 
             // Row 3: Contextual lifecycle banner (only for non-ACTIVE states)
             if(state != ModuleRuntimeState.ACTIVE){
                 card.table(VscodeSettingsStyle.bannerBackground(state), banner -> {
-                    banner.left().margin(8f);
+                    banner.left().margin(8f, 10f, 8f, 10f);
                     Image icon = new Image(state == ModuleRuntimeState.FAILED ? Icon.warningSmall : Icon.infoSmall);
                     icon.setColor(state.color());
                     banner.add(icon).size(18f).padRight(8f).top();
@@ -218,7 +219,7 @@ public class NeonSubmodDetailPane extends Table{
             case PENDING_ENABLE:
                 return Core.bundle.get("bektools.module.restart", "The master switch is on, but the module was not loaded in this session. Restart the game to load it.");
             case PENDING_DISABLE:
-                return Core.bundle.get("bektools.ui.banner.pending_disable", "The master switch is off. This module remains loaded in this session and will stop loading after a restart.");
+                return Core.bundle.get("bektools.ui.banner.pending_disable", "The master switch is off. This module stays loaded in this session and will stop loading after a restart.");
             case ACTIVE:
             default:
                 return "";
@@ -302,9 +303,9 @@ public class NeonSubmodDetailPane extends Table{
     }
 
     private void addInfoCard(String text){
-        bodyHost.table(VscodeSettingsStyle.cardBackground(), card -> {
+        bodyHost.table(VscodeSettingsStyle.hudCardBackground(), card -> {
             card.left().margin(14f);
-            card.image(Icon.infoSmall).size(18f).color(VscodeSettingsStyle.mutedColor()).padRight(10f).top();
+            card.image(Icon.infoSmall).size(18f).color(VscodeSettingsStyle.accentColor()).padRight(10f).top();
             Label label = new Label(text);
             label.setColor(VscodeSettingsStyle.mutedColor());
             label.setWrap(true);

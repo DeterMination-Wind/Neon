@@ -77,12 +77,12 @@ public class CustomMarkerFeature {
     private static final int maxChatMarks = 300;
     private static final float markCooldown = 30f;
     private static final float overlaySyncIntervalTicks = 30f;
-    private static final Color panelBackgroundColor = Color.valueOf("111821");
+    private static final Color panelBackgroundColor = Color.valueOf("141414");
 
     private static final String[] defaultFirst = {"Mark", "Gather", "Attack", "Defend", "What"};
     private static final String[] defaultSecond = {"标记", "集合", "攻击", "防御", "问号"};
     private static final Color[] markerColors = {
-        Color.valueOf("4ea8ff"),
+        Color.valueOf("f6d495"),
         Color.valueOf("7dd9c4"),
         Color.valueOf("ff9b71"),
         Color.valueOf("9ad06b"),
@@ -711,39 +711,39 @@ public class CustomMarkerFeature {
             secondEdit[i] = secondParts[i];
         }
 
-        dialog.cont.table(VscodeSettingsStyle.headerBackground(), header -> {
+        dialog.cont.table(VscodeSettingsStyle.sectionHeaderBackground(), header -> {
             header.left().margin(8f);
-            header.add(Core.bundle.get("cm.templates.col.first", "First content")).growX().left().pad(6f);
-            header.add(Core.bundle.get("cm.templates.col.second", "Second content")).growX().left().pad(6f);
+            header.add(Core.bundle.get("cm.templates.col.first", "First content")).color(VscodeSettingsStyle.accentColor()).growX().left().pad(6f);
+            header.add(Core.bundle.get("cm.templates.col.second", "Second content")).color(VscodeSettingsStyle.accentColor()).growX().left().pad(6f);
         }).growX().row();
 
         dialog.cont.pane(Styles.noBarPane, body -> {
             body.defaults().growX().pad(4f);
             for (int i = 0; i < templateCount; i++) {
                 final int index = i;
-                body.table(VscodeSettingsStyle.cardBackground(), line -> {
+                body.table(VscodeSettingsStyle.hudCardBackground(), line -> {
                     line.left().margin(6f);
-                    line.add((index + 1) + ".").width(28f).color(Pal.accent);
+                    line.add((index + 1) + ".").width(28f).color(VscodeSettingsStyle.accentColor());
 
-                    firstFields[index] = line.field(firstEdit[index], text -> firstEdit[index] = text).growX().get();
+                    firstFields[index] = line.field(firstEdit[index], VscodeSettingsStyle.flatFieldStyle(), text -> firstEdit[index] = text).growX().height(34f).get();
                     firstFields[index].setMessageText(Core.bundle.get("cm.templates.first.hint", "First content in <...>"));
 
                     line.add(" ").width(8f);
 
-                    secondFields[index] = line.field(secondEdit[index], text -> secondEdit[index] = text).growX().get();
+                    secondFields[index] = line.field(secondEdit[index], VscodeSettingsStyle.flatFieldStyle(), text -> secondEdit[index] = text).growX().height(34f).get();
                     secondFields[index].setMessageText(Core.bundle.get("cm.templates.second.hint", "Second content in <...>"));
                 }).growX().row();
             }
         }).grow().maxHeight(Math.min(440f, Core.graphics.getHeight() * 0.75f)).row();
 
         dialog.buttons.defaults().size(220f, 54f).pad(4f);
-        dialog.buttons.button("@cm.templates.reset", Icon.refresh, Styles.flatt, () -> {
+        dialog.buttons.button("@cm.templates.reset", Icon.refresh, VscodeSettingsStyle.flatButtonStyle(), () -> {
             for (int i = 0; i < templateCount; i++) {
                 firstFields[i].setText(defaultFirst[i]);
                 secondFields[i].setText(defaultSecond[i]);
             }
         });
-        dialog.buttons.button("@cm.templates.save", Icon.ok, Styles.flatt, () -> {
+        dialog.buttons.button("@cm.templates.save", Icon.ok, VscodeSettingsStyle.flatButtonStyle(), () -> {
             Seq<String> out = new Seq<>();
             for (int i = 0; i < templateCount; i++) {
                 String first = sanitizeToken(firstFields[i].getText(), defaultFirst[i]);

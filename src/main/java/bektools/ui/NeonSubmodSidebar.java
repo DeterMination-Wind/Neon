@@ -5,6 +5,7 @@ import arc.func.Cons;
 import arc.scene.event.Touchable;
 import arc.scene.ui.Button;
 import arc.scene.ui.Image;
+import arc.scene.ui.ImageButton;
 import arc.scene.ui.Label;
 import arc.scene.ui.ScrollPane;
 import arc.scene.ui.TextButton;
@@ -19,7 +20,10 @@ import mindustry.ui.Styles;
 
 import java.util.Locale;
 
-/** Left navigation rail (or full-width master list in narrow mode) listing sub-mods with live status dots, search, and state filters. */
+/**
+ * Left navigation rail (or full-width master list in narrow mode) with flat underline search bar,
+ * gold-framed square filter chips, and translucent flat-futuristic sub-mod tiles.
+ */
 public class NeonSubmodSidebar extends Table{
     public enum FilterMode{
         ALL("bektools.ui.filter.all", "All"),
@@ -49,6 +53,8 @@ public class NeonSubmodSidebar extends Table{
     private final Table listTable;
     private final ScrollPane scrollPane;
     private TextField searchField;
+    private Image searchIcon;
+    private ImageButton clearSearchBtn;
 
     private NeonSettingsTab activeTab = NeonSettingsTab.BUILD_LOGISTICS;
     private String selectedModuleId;
@@ -71,40 +77,45 @@ public class NeonSubmodSidebar extends Table{
 
         top().left().margin(8f);
 
-        // Search bar
-        table(VscodeSettingsStyle.headerBackground(), bar -> {
-            bar.left().margin(6f);
-            bar.image(Icon.zoom).size(16f).color(VscodeSettingsStyle.mutedColor()).padRight(6f);
-            searchField = bar.field(searchQuery, text -> {
+        // Reference 1 search bar: crisp white/gold zoom icon + flat underline input field
+        table(bar -> {
+            bar.left().margin(2f, 2f, 4f, 2f);
+            searchIcon = new Image(Icon.zoom);
+            searchIcon.setScaling(Scaling.fit);
+            searchIcon.setColor(VscodeSettingsStyle.primaryTextColor());
+            bar.add(searchIcon).size(18f).padRight(6f).bottom().padBottom(5f);
+
+            searchField = bar.field(searchQuery, VscodeSettingsStyle.flatSearchFieldStyle(), text -> {
                 searchQuery = text == null ? "" : text;
+                syncSearchDecorations();
                 if(onSearchChanged != null){
                     onSearchChanged.get(searchQuery);
                 }
                 rebuildList();
-            }).growX().minWidth(0f).get();
-            searchField.setMessageText(Core.bundle.get("bektools.ui.search.hint", "Search sub-mods..."));
+            }).growX().minWidth(0f).height(32f).get();
+            searchField.setMessageText(Core.bundle.get("bektools.ui.search.hint", "Search:"));
 
-            bar.button(Icon.cancel, Styles.emptyi, () -> {
+            clearSearchBtn = bar.button(Icon.cancelSmall, VscodeSettingsStyle.flatIconButtonStyle(), () -> {
                 if(!searchQuery.isEmpty()){
                     searchQuery = "";
                     searchField.setText("");
+                    syncSearchDecorations();
                     if(onSearchChanged != null){
                         onSearchChanged.get("");
                     }
                     rebuildList();
                 }
-            }).size(26f).padLeft(4f);
-        }).growX().minWidth(0f).padBottom(6f).row();
+            }).size(26f).padLeft(4f).bottom().padBottom(2f).get();
+            syncSearchDecorations();
+        }).growX().minWidth(0f).padBottom(8f).row();
 
-        // Filter chips row
+        // Square gold-bordered filter chips row
         filterBar = new Table();
         filterBar.left();
-        add(filterBar).growX().minWidth(0f).padBottom(6f).row();
+        add(filterBar).growX().minWidth(0f).padBottom(8f).row();
         rebuildFilterBar();
 
-        image(VscodeSettingsStyle.dividerDrawable()).height(1f).growX().padBottom(6f).row();
-
-        // Scrollable submod list
+        // Scrollable sub-mod list
         listTable = new Table();
         listTable.top().left();
         scrollPane = new ScrollPane(listTable, Styles.noBarPane);
@@ -113,6 +124,16 @@ public class NeonSubmodSidebar extends Table{
         scrollPane.setOverscroll(false, false);
         scrollPane.update(() -> savedScrollY = scrollPane.getScrollY());
         add(scrollPane).grow().minHeight(0f).row();
+    }
+
+    private void syncSearchDecorations(){
+        boolean hasText = searchQuery != null && !searchQuery.trim().isEmpty();
+        if(searchIcon != null){
+            searchIcon.setColor(hasText ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.primaryTextColor());
+        }
+        if(clearSearchBtn != null){
+            clearSearchBtn.visible = hasText;
+        }
     }
 
     public void configure(NeonSettingsTab tab, String selectedId, String query, boolean narrow){
@@ -125,6 +146,7 @@ public class NeonSubmodSidebar extends Table{
             if(searchField != null && !safeQuery.equals(searchField.getText())){
                 searchField.setText(safeQuery);
             }
+            syncSearchDecorations();
         }
         rebuildFilterBar();
         rebuildList();
@@ -187,7 +209,9 @@ public class NeonSubmodSidebar extends Table{
         filterBar.clearChildren();
         boolean hasFailures = hasAnyFailures();
 
-        for(FilterMode mode : FilterMode.values()){
+        FilterMode[] modes = FilterMode.values();
+        for(int i = 0; i < modes.length; i++){
+            FilterMode mode = modes[i];
             if(mode == FilterMode.FAILED && !hasFailures && filterMode != FilterMode.FAILED){
                 continue;
             }
@@ -198,7 +222,7 @@ public class NeonSubmodSidebar extends Table{
                 rebuildFilterBar();
                 rebuildList();
             });
-            filterBar.add(chip).growX().minWidth(0f).height(28f).padRight(3f);
+            filterBar.add(chip).growX().minWidth(0f).height(28f).padRight(4f);
         }
     }
 
@@ -219,7 +243,7 @@ public class NeonSubmodSidebar extends Table{
 
         if(globalSearch){
             listTable.add(Core.bundle.format("bektools.ui.search.results", shown.size))
-                .color(VscodeSettingsStyle.mutedColor())
+                .color(VscodeSettingsStyle.accentColor())
                 .left()
                 .padLeft(4f)
                 .padBottom(6f)
@@ -260,40 +284,40 @@ public class NeonSubmodSidebar extends Table{
 
         Button rowButton = new Button(VscodeSettingsStyle.sidebarItemStyle(selected));
         rowButton.touchable = Touchable.enabled;
-        rowButton.left().margin(8f, 8f, 8f, 8f);
+        rowButton.left().margin(7f, 8f, 7f, 8f);
         rowButton.clicked(() -> {
             if(onSelect != null){
                 onSelect.get(module);
             }
         });
 
-        // Left selection accent stripe
+        // Left vertical geometric status/selection bar
         Image accentBar = new Image(Tex.whiteui);
         accentBar.touchable = Touchable.disabled;
         accentBar.setColor(selected ? VscodeSettingsStyle.accentColor() : state.color());
-        rowButton.add(accentBar).width(selected ? 3f : 2f).height(24f).padRight(8f);
+        rowButton.add(accentBar).width(selected ? 3f : 2f).height(22f).padRight(8f);
 
         // Module icon
         if(module.icon != null){
             Image iconImg = new Image(module.icon);
             iconImg.touchable = Touchable.disabled;
             iconImg.setScaling(Scaling.fit);
-            iconImg.setColor(state == ModuleRuntimeState.DISABLED
-                ? VscodeSettingsStyle.mutedColor()
-                : (selected ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.primaryTextColor()));
+            iconImg.setColor(selected
+                ? VscodeSettingsStyle.accentColor()
+                : (state == ModuleRuntimeState.DISABLED ? VscodeSettingsStyle.mutedColor() : VscodeSettingsStyle.primaryTextColor()));
             rowButton.add(iconImg).size(18f).padRight(8f);
         }
 
-        // Title + optional tab subtitle (when searching globally) or restart/failed hint
+        // Title + optional tab or restart/failed hint
         Table textCol = new Table();
         textCol.touchable = Touchable.disabled;
         textCol.left();
         Label titleLabel = new Label(module.title);
         titleLabel.setWrap(true);
         titleLabel.setAlignment(Align.left);
-        titleLabel.setColor(state == ModuleRuntimeState.DISABLED
-            ? VscodeSettingsStyle.mutedColor()
-            : (selected ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.primaryTextColor()));
+        titleLabel.setColor(selected
+            ? VscodeSettingsStyle.accentColor()
+            : (state == ModuleRuntimeState.DISABLED ? VscodeSettingsStyle.mutedColor() : VscodeSettingsStyle.primaryTextColor()));
         textCol.add(titleLabel).left().growX().minWidth(0f).row();
 
         if(showTabHint || state == ModuleRuntimeState.FAILED || state.needsRestart()){
@@ -309,16 +333,16 @@ public class NeonSubmodSidebar extends Table{
         }
         rowButton.add(textCol).left().growX().minWidth(0f);
 
-        // Compact status dot + narrow chevron
+        // Crisp square status pixel + narrow chevron
         Image dot = new Image(Tex.whiteui);
         dot.touchable = Touchable.disabled;
         dot.setColor(state.color());
-        rowButton.add(dot).size(7f).padLeft(6f);
+        rowButton.add(dot).size(6f).padLeft(6f);
 
         if(narrowMode){
             Image arrow = new Image(Icon.rightOpen);
             arrow.touchable = Touchable.disabled;
-            arrow.setColor(VscodeSettingsStyle.mutedColor());
+            arrow.setColor(VscodeSettingsStyle.accentColor());
             rowButton.add(arrow).size(14f).padLeft(6f);
         }
 

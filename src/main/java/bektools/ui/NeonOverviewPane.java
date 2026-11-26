@@ -17,8 +17,8 @@ import mindustry.gen.Tex;
 import mindustry.ui.Styles;
 
 /**
- * Overview tab pane presenting module counts, runtime environment badge, pending-restart notice,
- * failure diagnostics, quick module switchboard grouped by tab, and issue feedback entry.
+ * Overview tab pane in translucent obsidian-and-gold flat futuristic style:
+ * HUD stat counters, runtime badge, pending-restart notice, failure diagnostics, and quick module switchboard.
  */
 public class NeonOverviewPane extends Table{
     private final Seq<NeonSettingsModule> modules;
@@ -38,7 +38,7 @@ public class NeonOverviewPane extends Table{
         Cons<NeonSettingsModule> onOpenModule,
         Runnable onStateMutated
     ){
-        super(VscodeSettingsStyle.panelBackground());
+        super(VscodeSettingsStyle.sidebarBackground());
         this.modules = modules;
         this.context = context;
         this.onOpenModule = onOpenModule;
@@ -115,19 +115,19 @@ public class NeonOverviewPane extends Table{
             ? Core.bundle.get("bektools.ui.runtime.mdtx", "MindustryX")
             : Core.bundle.get("bektools.ui.runtime.vanilla", "Vanilla Mindustry");
 
-        contentTable.table(VscodeSettingsStyle.headerBackground(), header -> {
+        contentTable.table(VscodeSettingsStyle.hudCardBackground(), header -> {
             header.top().left().margin(12f);
 
-            header.table(topRow -> {
-                topRow.left();
-                topRow.image(Icon.settings).size(22f).color(VscodeSettingsStyle.accentColor()).padRight(8f);
+            header.table(VscodeSettingsStyle.titleRuleBackground(), topRow -> {
+                topRow.left().margin(0f, 0f, 8f, 0f);
+                topRow.image(Icon.settings).size(20f).color(VscodeSettingsStyle.accentColor()).padRight(8f);
                 Label title = new Label(Core.bundle.get("bektools.ui.overview.title", "Neon Module Overview"));
-                title.setColor(VscodeSettingsStyle.primaryTextColor());
+                title.setColor(VscodeSettingsStyle.accentColor());
                 title.setWrap(true);
                 topRow.add(title).left().growX().minWidth(0f);
 
-                topRow.table(VscodeSettingsStyle.cardBackground(), badge -> {
-                    badge.margin(4f, 8f, 4f, 8f);
+                topRow.table(VscodeSettingsStyle.selectedBackground(), badge -> {
+                    badge.margin(4f, 9f, 4f, 9f);
                     Label rt = new Label(runtimeText);
                     rt.setFontScale(0.84f);
                     rt.setColor(VscodeSettingsStyle.accentColor());
@@ -149,10 +149,10 @@ public class NeonOverviewPane extends Table{
     }
 
     private void addStatTile(Table parent, String label, String value, arc.graphics.Color color){
-        parent.table(VscodeSettingsStyle.cardBackground(), tile -> {
-            tile.left().margin(8f);
+        parent.table(VscodeSettingsStyle.hudCardBackground(), tile -> {
+            tile.left().margin(8f, 10f, 8f, 10f);
             Label val = new Label(value);
-            val.setFontScale(1.2f);
+            val.setFontScale(1.22f);
             val.setColor(color);
             tile.add(val).left().row();
 
@@ -192,7 +192,7 @@ public class NeonOverviewPane extends Table{
                 NeonSettingsModule module = failedModules.get(i);
                 Throwable err = context.getModuleFailure(module.moduleId);
                 String reason = err == null ? "" : (err.getClass().getSimpleName() + (err.getMessage() == null ? "" : ": " + err.getMessage()));
-                box.table(VscodeSettingsStyle.headerBackground(), row -> {
+                box.table(VscodeSettingsStyle.cardBackground(), row -> {
                     row.left().margin(8f);
                     Table leftCol = new Table();
                     leftCol.left();
@@ -205,7 +205,7 @@ public class NeonOverviewPane extends Table{
                         leftCol.add(r).left().growX().minWidth(0f).padTop(2f).row();
                     }
                     row.add(leftCol).left().growX().minWidth(0f);
-                    row.button(Core.bundle.get("bektools.ui.overview.inspect", "Details"), Styles.flatt, () -> {
+                    row.button(Core.bundle.get("bektools.ui.overview.inspect", "Details"), VscodeSettingsStyle.flatButtonStyle(), () -> {
                         if(onOpenModule != null) onOpenModule.get(module);
                     }).height(34f).padLeft(8f);
                 }).growX().minWidth(0f).padTop(4f).row();
@@ -214,8 +214,8 @@ public class NeonOverviewPane extends Table{
     }
 
     private void buildQuickSwitchboard(boolean hasFailures){
-        contentTable.table(VscodeSettingsStyle.headerBackground(), bar -> {
-            bar.left().margin(8f);
+        contentTable.table(VscodeSettingsStyle.sectionHeaderBackground(), bar -> {
+            bar.left().margin(8f, 10f, 9f, 10f);
             Label title = new Label(Core.bundle.get("bektools.ui.overview.switchboard", "Quick Module Switches"));
             title.setColor(VscodeSettingsStyle.accentColor());
             bar.add(title).left().growX().minWidth(0f).wrap();
@@ -260,13 +260,13 @@ public class NeonOverviewPane extends Table{
             if(group.isEmpty()) continue;
 
             totalRendered += group.size;
-            contentTable.table(secHead -> {
-                secHead.left();
+            contentTable.table(VscodeSettingsStyle.titleRuleBackground(), secHead -> {
+                secHead.left().margin(6f, 4f, 6f, 4f);
                 if(tab.icon() != null){
                     secHead.image(tab.icon()).size(16f).color(VscodeSettingsStyle.accentColor()).padRight(6f);
                 }
                 secHead.add(tab.title()).color(VscodeSettingsStyle.accentColor()).left();
-            }).growX().minWidth(0f).padTop(6f).padBottom(4f).row();
+            }).growX().minWidth(0f).padTop(8f).padBottom(5f).row();
 
             for(int i = 0; i < group.size; i++){
                 addQuickModuleRow(group.get(i));
@@ -285,17 +285,17 @@ public class NeonOverviewPane extends Table{
 
     private void addQuickModuleRow(NeonSettingsModule module){
         ModuleRuntimeState state = module.runtimeState(context);
-        contentTable.table(VscodeSettingsStyle.cardBackground(), row -> {
+        contentTable.table(VscodeSettingsStyle.hudCardBackground(), row -> {
             row.left().margin(8f);
 
             Image dot = new Image(Tex.whiteui);
             dot.setColor(state.color());
-            row.add(dot).size(7f).padRight(8f);
+            row.add(dot).size(6f).padRight(8f);
 
             if(module.icon != null){
                 Image ic = new Image(module.icon);
                 ic.setScaling(Scaling.fit);
-                ic.setColor(state == ModuleRuntimeState.DISABLED ? VscodeSettingsStyle.mutedColor() : VscodeSettingsStyle.primaryTextColor());
+                ic.setColor(state == ModuleRuntimeState.DISABLED ? VscodeSettingsStyle.mutedColor() : VscodeSettingsStyle.accentColor());
                 row.add(ic).size(18f).padRight(8f);
             }
 
@@ -315,28 +315,28 @@ public class NeonOverviewPane extends Table{
             row.add(info).left().growX().minWidth(0f).padRight(8f);
 
             if(module.enableKey != null && state != ModuleRuntimeState.FAILED){
-                CheckBox toggle = new CheckBox("");
+                CheckBox toggle = new CheckBox("", VscodeSettingsStyle.flatCheckBoxStyle());
                 toggle.setChecked(module.isSwitchOn());
                 toggle.changed(() -> {
                     module.setSwitchOn(toggle.isChecked());
                     if(onStateMutated != null) onStateMutated.run();
                 });
-                row.add(toggle).padRight(6f);
+                row.add(toggle).padRight(8f);
             }
 
-            row.button(Icon.rightOpen, Styles.emptyi, () -> {
+            row.button(Icon.rightOpen, VscodeSettingsStyle.flatTileIconButtonStyle(), () -> {
                 if(onOpenModule != null) onOpenModule.get(module);
-            }).size(34f);
+            }).size(32f);
         }).growX().minWidth(0f).padBottom(4f).row();
     }
 
     private void buildFooterSection(){
-        contentTable.image(VscodeSettingsStyle.dividerDrawable()).height(1f).growX().padTop(10f).padBottom(10f).row();
+        contentTable.image(VscodeSettingsStyle.goldRuleDrawable()).height(1.5f).growX().padTop(12f).padBottom(10f).row();
         contentTable.table(footer -> {
             footer.left();
-            footer.button("@bektools.feedback", Icon.chat, Styles.flatt, context::openFeedback)
+            footer.button("@bektools.feedback", Icon.chat, VscodeSettingsStyle.flatButtonStyle(), context::openFeedback)
                 .margin(10f)
-                .height(42f)
+                .height(40f)
                 .minWidth(180f)
                 .left();
         }).growX().minWidth(0f).padBottom(8f).row();

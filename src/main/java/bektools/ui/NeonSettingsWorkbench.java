@@ -10,17 +10,19 @@ import arc.scene.ui.ScrollPane;
 import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
+import arc.util.Align;
 import arc.util.Scaling;
 import mdtxcompat.LegacyMindustryXGuard;
-import mindustry.gen.Tex;
+import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 
 import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Unified Neon settings workbench: top category tabs + left sub-mod sidebar + right detail pane
- * on wide viewports, gracefully degrading to a Master-Detail stack on narrow / Android viewports.
+ * Unified Neon settings workbench in translucent black-and-gold flat futuristic style:
+ * Mindustry gold-line header + square gold-framed toolbar tiles with vertical gold group dividers,
+ * paired with a responsive left sub-mod rail and right detail pane.
  */
 public class NeonSettingsWorkbench extends Table{
     private static final float wideBreakpointDp = 720f;
@@ -39,6 +41,7 @@ public class NeonSettingsWorkbench extends Table{
     private final NeonSettingsContext context;
     private final Map<NeonSettingsTab, String> lastSelectedByTab = new EnumMap<>(NeonSettingsTab.class);
 
+    private final Label headerTitleLabel;
     private final Table tabBarRow;
     private final ScrollPane tabScrollPane;
     private final Table workspaceHost;
@@ -76,16 +79,27 @@ public class NeonSettingsWorkbench extends Table{
 
         top().left();
 
-        // Top tab bar wrapped in a horizontal-only ScrollPane so tabs never clip on narrow screens.
-        tabBarRow = new Table(VscodeSettingsStyle.tabBarBackground());
-        tabBarRow.left().margin(4f, 6f, 0f, 6f);
+        // Reference 2 motif: centered warm-gold title over a full-width crisp 2dp gold horizontal line.
+        headerTitleLabel = new Label("");
+        headerTitleLabel.setColor(VscodeSettingsStyle.accentColor());
+        headerTitleLabel.setAlignment(Align.center);
+        table(VscodeSettingsStyle.titleRuleBackground(), titleStrip -> {
+            titleStrip.center().margin(6f, 12f, 8f, 12f);
+            titleStrip.add(headerTitleLabel).center().growX().minWidth(0f);
+        }).growX().minWidth(0f).row();
+
+        // Reference 1 motif: dark translucent square-edged tiles with 2dp gold active frame & vertical gold group bars.
+        tabBarRow = new Table();
+        tabBarRow.left().margin(6f, 8f, 6f, 8f);
         tabScrollPane = new ScrollPane(tabBarRow, Styles.noBarPane);
         tabScrollPane.setFadeScrollBars(true);
         tabScrollPane.setScrollingDisabled(false, true);
         tabScrollPane.setOverscroll(false, false);
 
-        add(tabScrollPane).growX().minWidth(0f).height(46f).row();
-        image(VscodeSettingsStyle.dividerDrawable()).height(2f).growX().row();
+        table(VscodeSettingsStyle.tabBarBackground(), barHost -> {
+            barHost.left();
+            barHost.add(tabScrollPane).growX().minWidth(0f).height(50f);
+        }).growX().minWidth(0f).row();
 
         workspaceHost = new Table();
         workspaceHost.top().left();
@@ -187,36 +201,85 @@ public class NeonSettingsWorkbench extends Table{
         }
     }
 
+    private void updateHeaderBannerText(){
+        String catName = Core.bundle == null ? "Neon" : Core.bundle.get("bektools.category", "Neon");
+        headerTitleLabel.setText(catName + "  ·  " + activeTab.title());
+    }
+
     private void rebuildTabBar(){
+        updateHeaderBannerText();
         tabBarRow.clearChildren();
-        for(NeonSettingsTab tab : NeonSettingsTab.values()){
-            boolean active = tab == activeTab;
-            Button btn = new Button(VscodeSettingsStyle.tabButtonStyle(active));
-            btn.touchable = Touchable.enabled;
-            btn.margin(6f, 12f, 4f, 12f);
-            btn.clicked(() -> selectTab(tab));
 
-            Table inner = new Table();
-            inner.touchable = Touchable.disabled;
-            inner.center();
-            if(tab.icon() != null){
-                Image ic = new Image(tab.icon());
-                ic.setScaling(Scaling.fit);
-                ic.setColor(active ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.mutedColor());
-                inner.add(ic).size(16f).padRight(6f);
-            }
-            Label label = new Label(tab.title());
-            label.setColor(active ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.mutedColor());
-            inner.add(label).row();
+        // Group 1: Overview hub tile (left of first gold vertical separator bar)
+        addToolbarTabTile(NeonSettingsTab.OVERVIEW);
 
-            btn.add(inner).row();
-            Image underline = new Image(Tex.whiteui);
-            underline.touchable = Touchable.disabled;
-            underline.setColor(active ? VscodeSettingsStyle.accentColor() : arc.graphics.Color.clear);
-            btn.add(underline).height(2f).growX().padTop(4f).row();
+        addGoldGroupSeparator();
 
-            tabBarRow.add(btn).height(42f).padRight(4f);
+        // Group 2: Four functional domain category tiles
+        NeonSettingsTab[] domainTabs = {
+            NeonSettingsTab.BUILD_LOGISTICS,
+            NeonSettingsTab.COMBAT_HUD,
+            NeonSettingsTab.LOGIC_EDITOR,
+            NeonSettingsTab.TOOLS_CORE
+        };
+        for(int i = 0; i < domainTabs.length; i++){
+            addToolbarTabTile(domainTabs[i]);
         }
+
+        addGoldGroupSeparator();
+
+        // Group 3: Right-hand quick action tile (Feedback), echoing the trailing text tile in Reference 1
+        Button feedbackBtn = new Button(VscodeSettingsStyle.toolbarTileStyle(false));
+        feedbackBtn.touchable = Touchable.enabled;
+        feedbackBtn.margin(6f, 10f, 6f, 10f);
+        feedbackBtn.clicked(context::openFeedback);
+
+        Table fbInner = new Table();
+        fbInner.touchable = Touchable.disabled;
+        fbInner.center();
+        Image fbIcon = new Image(Icon.chat);
+        fbIcon.setScaling(Scaling.fit);
+        fbIcon.setColor(VscodeSettingsStyle.primaryTextColor());
+        fbInner.add(fbIcon).size(16f).padRight(wideMode ? 6f : 0f);
+        if(wideMode){
+            Label fbLabel = new Label(Core.bundle.get("bektools.feedback", "Feedback"));
+            fbLabel.setColor(VscodeSettingsStyle.primaryTextColor());
+            fbInner.add(fbLabel);
+        }
+        feedbackBtn.add(fbInner);
+        tabBarRow.add(feedbackBtn).height(38f);
+    }
+
+    private void addToolbarTabTile(NeonSettingsTab tab){
+        boolean active = tab == activeTab;
+        Button btn = new Button(VscodeSettingsStyle.toolbarTileStyle(active));
+        btn.touchable = Touchable.enabled;
+        btn.margin(6f, 11f, 6f, 11f);
+        btn.clicked(() -> selectTab(tab));
+
+        Table inner = new Table();
+        inner.touchable = Touchable.disabled;
+        inner.center();
+        if(tab.icon() != null){
+            Image ic = new Image(tab.icon());
+            ic.setScaling(Scaling.fit);
+            ic.setColor(active ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.primaryTextColor());
+            inner.add(ic).size(17f).padRight(6f);
+        }
+        Label label = new Label(tab.title());
+        label.setColor(active ? VscodeSettingsStyle.accentColor() : VscodeSettingsStyle.primaryTextColor());
+        inner.add(label);
+
+        btn.add(inner);
+        tabBarRow.add(btn).height(38f).padRight(5f);
+    }
+
+    private void addGoldGroupSeparator(){
+        tabBarRow.image(VscodeSettingsStyle.goldRuleDrawable())
+            .width(2f)
+            .height(28f)
+            .padLeft(3f)
+            .padRight(8f);
     }
 
     private void selectTab(NeonSettingsTab tab){
@@ -298,7 +361,7 @@ public class NeonSettingsWorkbench extends Table{
             detailPane.showModule(selected, false, rightW, resetDetailScroll);
 
             workspaceHost.add(sidebar).width(sideW).growY().minHeight(0f);
-            workspaceHost.image(VscodeSettingsStyle.dividerDrawable()).width(2f).growY();
+            workspaceHost.image(VscodeSettingsStyle.dividerDrawable()).width(1.5f).growY();
             workspaceHost.add(detailPane).width(rightW).grow().minHeight(0f);
         }else if(narrowPage == NarrowPage.DETAIL && selected != null){
             detailPane.showModule(selected, true, currentWidthDp - 4f, resetDetailScroll);

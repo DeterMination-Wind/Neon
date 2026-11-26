@@ -205,9 +205,9 @@ public class AutoPrunerFeature {
     /**
      * 冗余电力节点判定：把己方电力网络当作无向图，只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
      *
-     * 边取自 Building.getPowerConnections：这就是游戏自己建 PowerGraph 时用的那套关系（相邻通电建筑 + power.links 连线），所以连“贴着电池/发电机”的节点也会被算成连通，不会被误判成割点。
+     * 顶点 = 世界内所有带 PowerModule 的有效建筑（不限队伍，队伍的合法性交给 validBreak 判），边 = Building.getPowerConnections（游戏建 PowerGraph 用的同一套关系：相邻通电建筑 + power.links 连线），再并上显式的 power.links 兜底，保证不会因为对方模块/队伍过滤而被误判成割点。
      *
-     * 顶点是本队所有带 PowerModule 的建筑；可拆的只有 PowerNode 与 BeamNode（含其子类），电池、发电机、用电器、电力二极管、电力束塔等一律作为固定顶点保留。
+     * 可拆的只有 PowerNode 与 BeamNode（含其子类），并且必须能通过 validBreak（本队或 derelict 中立建筑）。电池、发电机、用电器、电力二极管、电力束塔等一律作为固定顶点保留。
      *
      * 结构性保证：
      * 1. 剩余节点的诱导子图与拆除前保持同样的连通关系，任何一段电网都不会被拆散；
@@ -218,17 +218,22 @@ public class AutoPrunerFeature {
 
         Seq<Building> builds = new Seq<>();
         LongMap<Integer> indices = new LongMap<>();
+        Seq<Building> ownPowered = new Seq<>();
+        int[] totalBuilds = new int[1];
 
         Groups.build.each(build -> {
-            if (build == null || !build.isValid() || build.team != player.team() || build.power == null) return;
+            if (build == null) return;
+            totalBuilds[0]++;
+            if (!build.isValid() || build.power == null) return;
             if (indices.containsKey(build.pos())) return;
             indices.put(build.pos(), builds.size);
             builds.add(build);
+            if (player != null && build.team == player.team()) ownPowered.add(build);
         });
 
         int count = builds.size;
         if (count == 0) {
-            Log.info("[AutoPruner] 本队没有带电建筑，跳过拆节点。");
+            Log.info("[AutoPruner] 诊断：世界建筑 @，其中带电且有效 0，跳过。", totalBuilds[0]);
             return out;
         }
 
@@ -240,29 +245,43 @@ public class AutoPrunerFeature {
 
         for (int i = 0; i < count; i++) {
             Building build = builds.get(i);
+
+            // 1) 游戏自己的电网关系：相邻通电建筑 + 连线，含二极管方向与绝缘判定
             build.getPowerConnections(connections);
             for (int c = 0; c < connections.size; c++) {
-                Building other = connections.get(c);
-                if (other == null) continue;
-                Integer otherIndex = indices.get(other.pos());
-                if (otherIndex == null || otherIndex == i) continue;
-                if (!adjacency[i].contains(otherIndex)) edges++;
-                addNeighbor(adjacency[i], otherIndex);
-                addNeighbor(adjacency[otherIndex], i);
+                edges += connectEdge(i, connections.get(c), indices, adjacency);
+            }
+
+            // 2) 显式连线兜底：对方即使因为队伍 / 模块原因没进顶点集，也不能丢边
+            IntSeq links = build.power.links;
+            if (links != null) {
+                for (int l = 0; l < links.size; l++) {
+                    edges += connectEdge(i, world.build(links.get(l)), indices, adjacency);
+                }
             }
         }
 
         boolean[] removable = new boolean[count];
-        int candidates = 0;
+        int candidates = 0, wrongType = 0, protectedCount = 0, blocked = 0;
+
         for (int i = 0; i < count; i++) {
-            if (isPrunablePowerNode(builds.get(i))) {
+            int verdict = prunableVerdict(builds.get(i));
+            if (verdict == 0) {
                 removable[i] = true;
                 candidates++;
+            } else if (verdict == 1) {
+                wrongType++;
+            } else if (verdict == 2) {
+                protectedCount++;
+            } else {
+                blocked++;
             }
         }
 
+        Log.info("[AutoPruner] 诊断：世界建筑 @，本队带电 @，图顶点 @，连线 @；非节点 @，受保护 @，不可拆 @，可拆节点 @。", totalBuilds[0], ownPowered.size, count, edges, wrongType, protectedCount, blocked, candidates);
+
         if (candidates == 0) {
-            Log.info("[AutoPruner] 没有可拆的电力节点：带电建筑 @，连线 @，本队电力节点 0 或全部受保护/不可拆。", count, edges);
+            Log.info("[AutoPruner] 诊断：本队带电方块样本 @", blockSample(ownPowered, 10));
             return out;
         }
 
@@ -297,22 +316,42 @@ public class AutoPrunerFeature {
             }
         }
 
-        Log.info("[AutoPruner] 电力网络：带电建筑 @，连线 @，可拆节点 @，判定多余 @。", count, edges, candidates, out.size);
+        Log.info("[AutoPruner] 电力网络：图顶点 @，连线 @，可拆节点 @，判定多余 @。", count, edges, candidates, out.size);
 
         return out;
+    }
+
+    /** 把 from 与 other 之间的边加进无向邻接表，返回新增边数（0 或 1）。 */
+    private static int connectEdge(int from, Building other, LongMap<Integer> indices, IntSeq[] adjacency) {
+        if (other == null) return 0;
+        Integer to = indices.get(other.pos());
+        if (to == null || to == from) return 0;
+        if (adjacency[from].contains(to)) return 0;
+        addNeighbor(adjacency[from], to);
+        addNeighbor(adjacency[to], from);
+        return 1;
+    }
+
+    private static String blockSample(Seq<Building> list, int limit) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size && i < limit; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(list.get(i).block.name);
+        }
+        return sb.toString();
     }
 
     private static void addNeighbor(IntSeq neighbors, int index) {
         if (!neighbors.contains(index)) neighbors.add(index);
     }
 
-    /** 判断这个建筑是否允许作为拆除目标：己方、可拆的电力节点（PowerNode / BeamNode）、且通过 validBreak。 */
-    private static boolean isPrunablePowerNode(Building build) {
-        if (build == null || !build.isValid()) return false;
-        if (!(build.block instanceof PowerNode) && !(build.block instanceof BeamNode)) return false;
-        if (isProtectedBuilding(build)) return false;
-        if (control == null || control.input == null) return false;
-        return control.input.validBreak(build.tileX(), build.tileY());
+    /** 判定结论：0 = 可拆的电力节点；1 = 不是电力节点；2 = 受保护；3 = 当前不可拆（权限 / 不可破坏 / 无输入）。 */
+    private static int prunableVerdict(Building build) {
+        if (build == null || !build.isValid() || build.block == null) return 3;
+        if (!(build.block instanceof PowerNode) && !(build.block instanceof BeamNode)) return 1;
+        if (isProtectedBuilding(build)) return 2;
+        if (control == null || control.input == null) return 3;
+        return control.input.validBreak(build.tileX(), build.tileY()) ? 0 : 3;
     }
 
     /**
@@ -427,10 +466,10 @@ public class AutoPrunerFeature {
 
     private static boolean canAutoBreak(Building build) {
         if (build == null || !build.isValid()) return false;
-        if (build.team != player.team()) return false;
         if (control == null || control.input == null) return false;
         if (build.tile == null) return false;
         if (isProtectedBuilding(build)) return false;
+        // validBreak 已经包含队伍判定：本队建筑与 derelict 中立建筑都可通过
         return control.input.validBreak(build.tileX(), build.tileY());
     }
 

@@ -11,12 +11,14 @@ import arc.struct.LongMap;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Interval;
+import arc.util.Log;
 import arc.util.Time;
 import autopruner.AutoPrunerMod;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.ui.dialogs.SettingsMenuDialog;
+import mindustry.world.blocks.power.BeamNode;
 import mindustry.world.blocks.power.PowerNode;
 import mindustry.world.blocks.storage.CoreBlock;
 
@@ -67,6 +69,7 @@ public class AutoPrunerFeature {
 
         applyDefaults();
         refreshSettings();
+        Log.info("[AutoPruner] init：按电网连通性削多余电力节点（getPowerConnections 图，含 BeamNode）。");
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
             registerKeybinds();
@@ -200,15 +203,15 @@ public class AutoPrunerFeature {
     }
 
     /**
-     * 冗余电力节点判定：把己方电力网络当作无向图（顶点 = 带电建筑，边 = power.links），
-     * 只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
+     * 冗余电力节点判定：把己方电力网络当作无向图，只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
+     *
+     * 边取自 Building.getPowerConnections：这就是游戏自己建 PowerGraph 时用的那套关系（相邻通电建筑 + power.links 连线），所以连“贴着电池/发电机”的节点也会被算成连通，不会被误判成割点。
+     *
+     * 顶点是本队所有带 PowerModule 的建筑；可拆的只有 PowerNode 与 BeamNode（含其子类），电池、发电机、用电器、电力二极管、电力束塔等一律作为固定顶点保留。
      *
      * 结构性保证：
      * 1. 剩余节点的诱导子图与拆除前保持同样的连通关系，任何一段电网都不会被拆散；
-     * 2. 最终保留的每个节点都是当前网络的割点，单独再拆就会断开电网。
-     *
-     * 非电力节点（电池、用电器、电力二极管、电力束节点等）以及受保护 / 不可拆的电力节点
-     * 不参与拆除，只作为连通性约束顶点参与判定（它们本身度数不减少）。
+     * 2. 最终保留的每个可拆节点都是当前网络的割点，单独再拆就会断开电网。
      */
     private static Seq<Building> collectRedundantPowerNodesSnapshot() {
         Seq<Building> out = new Seq<>();
@@ -224,31 +227,44 @@ public class AutoPrunerFeature {
         });
 
         int count = builds.size;
-        if (count == 0) return out;
+        if (count == 0) {
+            Log.info("[AutoPruner] 本队没有带电建筑，跳过拆节点。");
+            return out;
+        }
 
         IntSeq[] adjacency = new IntSeq[count];
         for (int i = 0; i < count; i++) adjacency[i] = new IntSeq();
 
+        Seq<Building> connections = new Seq<>();
+        int edges = 0;
+
         for (int i = 0; i < count; i++) {
-            IntSeq links = builds.get(i).power.links;
-            if (links == null) continue;
-            for (int l = 0; l < links.size; l++) {
-                Integer other = indices.get(links.get(l));
+            Building build = builds.get(i);
+            build.getPowerConnections(connections);
+            for (int c = 0; c < connections.size; c++) {
+                Building other = connections.get(c);
                 if (other == null) continue;
-                addNeighbor(adjacency[i], other);
-                addNeighbor(adjacency[other], i);
+                Integer otherIndex = indices.get(other.pos());
+                if (otherIndex == null || otherIndex == i) continue;
+                if (!adjacency[i].contains(otherIndex)) edges++;
+                addNeighbor(adjacency[i], otherIndex);
+                addNeighbor(adjacency[otherIndex], i);
             }
         }
 
         boolean[] removable = new boolean[count];
-        boolean anyRemovable = false;
+        int candidates = 0;
         for (int i = 0; i < count; i++) {
             if (isPrunablePowerNode(builds.get(i))) {
                 removable[i] = true;
-                anyRemovable = true;
+                candidates++;
             }
         }
-        if (!anyRemovable) return out;
+
+        if (candidates == 0) {
+            Log.info("[AutoPruner] 没有可拆的电力节点：带电建筑 @，连线 @，本队电力节点 0 或全部受保护/不可拆。", count, edges);
+            return out;
+        }
 
         boolean[] removed = new boolean[count];
         int[] queue = new int[count];
@@ -281,6 +297,8 @@ public class AutoPrunerFeature {
             }
         }
 
+        Log.info("[AutoPruner] 电力网络：带电建筑 @，连线 @，可拆节点 @，判定多余 @。", count, edges, candidates, out.size);
+
         return out;
     }
 
@@ -288,10 +306,10 @@ public class AutoPrunerFeature {
         if (!neighbors.contains(index)) neighbors.add(index);
     }
 
-    /** 判断这个建筑是否允许作为拆除目标：己方、可拆的电力节点、且通过 validBreak。 */
+    /** 判断这个建筑是否允许作为拆除目标：己方、可拆的电力节点（PowerNode / BeamNode）、且通过 validBreak。 */
     private static boolean isPrunablePowerNode(Building build) {
         if (build == null || !build.isValid()) return false;
-        if (!(build.block instanceof PowerNode)) return false;
+        if (!(build.block instanceof PowerNode) && !(build.block instanceof BeamNode)) return false;
         if (isProtectedBuilding(build)) return false;
         if (control == null || control.input == null) return false;
         return control.input.validBreak(build.tileX(), build.tileY());

@@ -13,6 +13,12 @@ public final class VscodeSettingsStyle{
     private static final Color accent = Color.valueOf("4ea8ff");
     private static final Color muted = Color.valueOf("a4b4c6");
 
+    private static Drawable cachedBase;
+    private static Drawable cachedPanelBg;
+    private static Drawable cachedHeaderBg;
+    private static Drawable cachedCardBg;
+    private static Drawable cachedCardAltBg;
+
     private VscodeSettingsStyle(){
     }
 
@@ -25,23 +31,36 @@ public final class VscodeSettingsStyle{
     }
 
     public static Drawable panelBackground(){
-        return tint(bgPanel);
+        ensureDrawablesCached();
+        return cachedPanelBg;
     }
 
     public static Drawable headerBackground(){
-        return tint(bgHeader);
+        ensureDrawablesCached();
+        return cachedHeaderBg;
     }
 
     public static Drawable cardBackground(){
-        return tint(bgCard);
+        ensureDrawablesCached();
+        return cachedCardBg;
     }
 
     public static Drawable cardAltBackground(){
-        return tint(bgCardAlt);
+        ensureDrawablesCached();
+        return cachedCardAltBg;
     }
 
-    private static Drawable tint(Color color){
+    private static void ensureDrawablesCached(){
         Drawable base = Tex.whiteui == null ? Tex.pane : Tex.whiteui;
+        if(base == cachedBase && cachedPanelBg != null) return;
+        cachedBase = base;
+        cachedPanelBg = tint(base, bgPanel);
+        cachedHeaderBg = tint(base, bgHeader);
+        cachedCardBg = tint(base, bgCard);
+        cachedCardAltBg = tint(base, bgCardAlt);
+    }
+
+    private static Drawable tint(Drawable base, Color color){
         if(base instanceof arc.scene.style.TextureRegionDrawable){
             return ((arc.scene.style.TextureRegionDrawable)base).tint(color);
         }

@@ -76,6 +76,8 @@ public class CustomMarkerFeature {
     private static final int templateCount = 5;
     private static final int maxChatMarks = 300;
     private static final float markCooldown = 30f;
+    private static final float overlaySyncIntervalTicks = 30f;
+    private static final Color panelBackgroundColor = Color.valueOf("111821");
 
     private static final String[] defaultFirst = {"Mark", "Gather", "Attack", "Defend", "What"};
     private static final String[] defaultSecond = {"标记", "集合", "攻击", "防御", "问号"};
@@ -102,6 +104,7 @@ public class CustomMarkerFeature {
     private static boolean chatMarksDirty;
     private static float nextMarkAllowedAt;
     private static float nextAttachTryAt;
+    private static float nextOverlaySyncAt;
     private static float lastChatCaptureAt;
     private static String lastCapturedKey = "";
     private static boolean chatModeAccessorsInitialized;
@@ -131,6 +134,7 @@ public class CustomMarkerFeature {
         xOverlayWindow = null;
         xChatListWindow = null;
         lastOverlayVisible = false;
+        nextOverlaySyncAt = 0f;
     }
 
     public static void init() {
@@ -238,7 +242,10 @@ public class CustomMarkerFeature {
             nextAttachTryAt = Time.time + 60f;
             ensureUiAttached();
         }
-        syncOverlayWindowStateFromOverlayUi();
+        if (Time.time >= nextOverlaySyncAt) {
+            nextOverlaySyncAt = Time.time + overlaySyncIntervalTicks;
+            syncOverlayWindowStateFromOverlayUi();
+        }
         syncOverlayButtonWindow(false);
 
         if (!canUseMarkerUi()) {
@@ -863,7 +870,7 @@ public class CustomMarkerFeature {
             int sectors = templateCount - 1;
 
             Draw.z(Layer.overlayUI + 1f);
-            Draw.color(Color.valueOf("111821"), 0.9f);
+            Draw.color(panelBackgroundColor, 0.9f);
             Fill.circle(x, y, outerRadius);
 
             Draw.color(VscodeSettingsStyle.accentColor());

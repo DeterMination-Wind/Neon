@@ -28,7 +28,7 @@
 ## 更新与遥测
 
 - bundled 子模组必须短路自己的 `GithubUpdateCheck`，更新统一由 `modupdater` 负责。
-- `PostHogUsageReporter` 在会话结束时上报 `mod_session_end` 使用快照：稳定玩家标识（UUID）/玩家名、游戏与模组版本、使用分钟数、模块可用性。**其中含标识符，不是匿名遥测**；改聚合入口时保持 `snapshotSubmodStates()` 与实际模块列表一致，改动上报内容前先确认隐私边界。
+- `PostHogUsageReporter` 在会话结束时上报 `mod_session_end` 使用快照：本地 SHA-256 哈希后的玩家标识（`sha256:<hex>`）/玩家名、游戏与模组版本、使用分钟数、模块可用性。原始 UUID 不写设置、不发请求也不进日志；旧版本缓存的原始 UUID 会由 `hashId()` 在首次读取时改写。**玩家名仍是明文，不是完全匿名遥测**；改聚合入口时保持 `snapshotSubmodStates()` 与实际模块列表一致，改动上报内容前先确认隐私边界。
 
 ## 设置页渲染陷阱
 

@@ -86,7 +86,7 @@ MindustryX 的 `SettingsTable.act()` 在 `list.size` 变化时会自动重建（
 不属于玩家功能但由核心管理的两个内部单元：
 
 - `moduleProfiler`：`NeonProfilerFeature`，提供运行时性能剖析指令。
-- `moduleUsageReporter`：`PostHogUsageReporter`，会话结束时上报 `mod_session_end` 使用快照（玩家标识/名称、游戏与模组版本、使用分钟数、模块可用性）；含标识符，**不是匿名遥测**。独立捕获异常（不上报 ≠ 不可玩）。
+- `moduleUsageReporter`：`PostHogUsageReporter`，会话结束时上报 `mod_session_end` 使用快照（本地 SHA-256 哈希后的玩家标识 `sha256:<hex>`、玩家名、游戏与模组版本、使用分钟数、模块可用性）；原始 UUID 不上传，但玩家名仍为明文，**不是完全匿名遥测**。独立捕获异常（不上报 ≠ 不可玩）。
 
 ## 改动守则
 

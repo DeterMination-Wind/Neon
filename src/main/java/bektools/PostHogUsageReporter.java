@@ -17,6 +17,8 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
@@ -26,7 +28,10 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.function.Supplier;
 
-/** Reports an anonymous end-of-session usage event (bundled-module availability snapshot) to PostHog. */
+/**
+ * Reports a pseudonymous end-of-session usage event (bundled-module availability snapshot) to
+ * PostHog. Player UUIDs are hashed locally; the raw identifier is never uploaded or persisted.
+ */
 final class PostHogUsageReporter{
     private static final String logTag = "[Neon/PostHog]";
     private static final String apiKey = "phc_ry3vePCjmUFcy9oQ765tTDA2FagUXVrMcw3DWPsVCkn9";
@@ -35,6 +40,8 @@ final class PostHogUsageReporter{
 
     private static final String keyPendingMinutes = "bek-posthog-pending-minutes";
     private static final String keyStablePlayerId = "bek-posthog-stable-player-id";
+    /** Prefix marking a distinct id that is already a local SHA-256 digest. */
+    private static final String hashedIdPrefix = "sha256:";
     private static final int minFlushMinutes = 2;
 
     private final Class<? extends Mod> modType;
@@ -100,7 +107,7 @@ final class PostHogUsageReporter{
         String playerName = normalize(resolvePlayerName(), "unknown");
         String timestamp = utcTimestamp();
         Map<String, Boolean> submods = resolveSubmodStates();
-        Log.info(logTag + " send prepared. distinct_id=" + distinctId + ", player_id=" + distinctId + ", player_id_source=" + idResolution.source + ", raw_player_uuid=" + idResolution.rawPlayerUuid + ", raw_platform_uuid=" + idResolution.rawPlatformUuid + ", cached_player_id=" + idResolution.cachedPlayerId + ", player_name=" + playerName + ", game_version=" + gameVersion + ", mod_version=" + meta.modVersion + ", usage_minutes=" + nextPending);
+        Log.info(logTag + " send prepared. distinct_id=" + distinctId + ", player_id=" + distinctId + ", player_id_source=" + idResolution.source + ", player_name=" + playerName + ", game_version=" + gameVersion + ", mod_version=" + meta.modVersion + ", usage_minutes=" + nextPending);
 
         if(sendUsage(distinctId, playerName, gameVersion, meta.modVersion, nextPending, timestamp, submods)){
             persistPendingMinutes(0);
@@ -207,24 +214,47 @@ final class PostHogUsageReporter{
     private PlayerIdResolution resolvePlayerId(){
         String cachedPlayerId = normalizeRaw(Core.settings.getString(keyStablePlayerId, ""));
         if(isOnlineUuid(cachedPlayerId)){
-            return new PlayerIdResolution(cachedPlayerId, "stable-cache", "", "", cachedPlayerId);
+            // Older builds cached the raw UUID; rewrite it as the local hash on first use.
+            String hashed = hashId(cachedPlayerId);
+            persistStablePlayerId(hashed);
+            return new PlayerIdResolution(hashed, "stable-cache");
         }
 
-        String rawPlayerUuid = "";
         if(Vars.player != null){
-            String playerUuid = Vars.player.uuid();
-            rawPlayerUuid = playerUuid == null ? "" : playerUuid.trim();
-            if(isOnlineUuid(playerUuid)){
+            String rawPlayerUuid = normalizeRaw(Vars.player.uuid());
+            if(isOnlineUuid(rawPlayerUuid)){
                 persistStablePlayerId(rawPlayerUuid);
-                return new PlayerIdResolution(rawPlayerUuid, "player.uuid->stable-cache", rawPlayerUuid, "", rawPlayerUuid);
+                return new PlayerIdResolution(hashId(rawPlayerUuid), "player.uuid->stable-cache");
             }
         }
         String platformUuid = Vars.platform == null ? "" : normalizeRaw(Vars.platform.getUUID());
         if(isOnlineUuid(platformUuid)){
             persistStablePlayerId(platformUuid);
-            return new PlayerIdResolution(platformUuid, "platform.uuid->stable-cache", rawPlayerUuid, platformUuid, platformUuid);
+            return new PlayerIdResolution(hashId(platformUuid), "platform.uuid->stable-cache");
         }
-        return new PlayerIdResolution("", "none", rawPlayerUuid, platformUuid, cachedPlayerId);
+        return new PlayerIdResolution("", "none");
+    }
+
+    /**
+     * Hashes a raw player identifier locally so PostHog only ever receives a pseudonymous id.
+     * Idempotent: a value already carrying {@link #hashedIdPrefix} passes through unchanged.
+     */
+    static String hashId(String value){
+        String normalized = normalizeRaw(value);
+        if(normalized.isEmpty() || normalized.startsWith(hashedIdPrefix)) return normalized;
+        byte[] digest;
+        try{
+            digest = MessageDigest.getInstance("SHA-256").digest(normalized.getBytes(StandardCharsets.UTF_8));
+        }catch(NoSuchAlgorithmException e){
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+        StringBuilder out = new StringBuilder(hashedIdPrefix.length() + digest.length * 2);
+        out.append(hashedIdPrefix);
+        for(byte b : digest){
+            int v = b & 0xFF;
+            out.append(Character.forDigit(v >>> 4, 16)).append(Character.forDigit(v & 0x0F, 16));
+        }
+        return out.toString();
     }
 
     private static String resolvePlayerName(){
@@ -320,7 +350,7 @@ final class PostHogUsageReporter{
 
     private void persistStablePlayerId(String value){
         if(!isOnlineUuid(value)) return;
-        String normalized = normalizeRaw(value);
+        String normalized = hashId(value);
         if(normalized.equals(normalizeRaw(Core.settings.getString(keyStablePlayerId, "")))) return;
         Core.settings.put(keyStablePlayerId, normalized);
         try{
@@ -343,16 +373,10 @@ final class PostHogUsageReporter{
     private static final class PlayerIdResolution{
         final String playerId;
         final String source;
-        final String rawPlayerUuid;
-        final String rawPlatformUuid;
-        final String cachedPlayerId;
 
-        PlayerIdResolution(String playerId, String source, String rawPlayerUuid, String rawPlatformUuid, String cachedPlayerId){
+        PlayerIdResolution(String playerId, String source){
             this.playerId = playerId;
             this.source = source;
-            this.rawPlayerUuid = rawPlayerUuid == null ? "" : rawPlayerUuid;
-            this.rawPlatformUuid = rawPlatformUuid == null ? "" : rawPlatformUuid;
-            this.cachedPlayerId = cachedPlayerId == null ? "" : cachedPlayerId;
         }
     }
 }

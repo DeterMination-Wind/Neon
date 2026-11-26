@@ -10,13 +10,14 @@ import arc.scene.ui.CheckBox;
 import arc.scene.ui.Label;
 import arc.scene.ui.Slider;
 import arc.scene.ui.TextField;
+import arc.scene.ui.layout.Scl;
 import arc.scene.ui.layout.Table;
 import mindustry.ui.Styles;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
 import java.util.Locale;
 
-/** Shared Neon settings-row widgets (sub-headers, checks, sliders, text rows, spacers) used by every bundled module's settings builder. */
+/** Shared Neon settings-row widgets (sub-headers, checks, sliders, text rows, spacers) used by bundled modules and the settings workbench. */
 public final class RbmStyle{
     private static final float defaultButtonHeight = 42f;
     private static final float dialogEdgePadding = 56f;
@@ -25,15 +26,42 @@ public final class RbmStyle{
     private static final float settingTopPad = 6f;
     private static final float settingIconSize = 20f;
 
+    /** Optional container-scoped logical width override set by {@link NeonSubmodDetailPane} while building settings. */
+    private static final ThreadLocal<Float> activeRowWidth = new ThreadLocal<>();
+
     private RbmStyle(){
     }
 
+    public static void runWithRowWidth(float logicalWidth, Runnable action){
+        Float previous = activeRowWidth.get();
+        activeRowWidth.set(Math.max(240f, logicalWidth));
+        try{
+            action.run();
+        }finally{
+            if(previous == null){
+                activeRowWidth.remove();
+            }else{
+                activeRowWidth.set(previous);
+            }
+        }
+    }
+
+    private static float logicalScreenWidth(){
+        if(Core.graphics == null) return 1024f;
+        float scale = Scl.scl(1f);
+        return scale > 0f ? Core.graphics.getWidth() / scale : Core.graphics.getWidth();
+    }
+
     public static float prefWidth(){
-        return Math.min(Core.graphics.getWidth() - dialogEdgePadding, 980f);
+        return Math.max(300f, Math.min(logicalScreenWidth() - dialogEdgePadding, 980f));
     }
 
     public static float rowWidth(){
-        return Math.max(320f, Math.min(prefWidth() - settingsRowInset, dialogContentWidth()));
+        Float scoped = activeRowWidth.get();
+        if(scoped != null && scoped > 0f){
+            return scoped;
+        }
+        return Math.max(260f, Math.min(prefWidth() - settingsRowInset, dialogContentWidth()));
     }
 
     public static float buttonHeight(){
@@ -41,7 +69,7 @@ public final class RbmStyle{
     }
 
     public static float dialogContentWidth(){
-        return Math.max(420f, Math.min(Core.graphics.getWidth() - dialogEdgePadding, 960f));
+        return Math.max(300f, Math.min(logicalScreenWidth() - dialogEdgePadding, 960f));
     }
 
     private static String normalizeHex(String text){
@@ -107,7 +135,7 @@ public final class RbmStyle{
             table.row();
             table.add(titleKeyOrText.startsWith("@") ? Core.bundle.get(titleKeyOrText.substring(1)) : titleKeyOrText)
                 .color(VscodeSettingsStyle.mutedColor())
-                .padTop(6f)
+                .padTop(8f)
                 .padBottom(4f)
                 .left()
                 .growX()
@@ -134,6 +162,10 @@ public final class RbmStyle{
             this.changed = changed;
         }
 
+        Cons<Boolean> changedCallback(){
+            return changed;
+        }
+
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             CheckBox box = new CheckBox(title);
@@ -149,7 +181,7 @@ public final class RbmStyle{
                 t.left().margin(settingMargin);
                 if(icon != null) t.image(icon).size(settingIconSize).padRight(8f);
                 t.add(box).left().growX().minWidth(0f);
-            }).width(rowWidth()).left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
 
             addDesc(box);
             table.row();
@@ -197,8 +229,8 @@ public final class RbmStyle{
 
             Table root = table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(6f);
-                t.stack(slider, content).growX().height(buttonHeight());
-            }).width(rowWidth()).left().padTop(settingTopPad).get();
+                t.stack(slider, content).growX().minWidth(0f).height(buttonHeight());
+            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad).get();
             addDesc(root);
             table.row();
         }
@@ -222,14 +254,14 @@ public final class RbmStyle{
             table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(settingMargin);
                 if(icon != null) t.image(icon).size(settingIconSize).padRight(8f);
-                t.add(title).left().growX().minWidth(0f).wrap();
+                t.add(title).left().growX().minWidth(0f).padRight(8f).wrap();
                 TextField field = t.field(Core.settings.getString(name, def), text -> {
                     Core.settings.put(name, text);
                     if(changed != null) changed.get(text);
-                }).growX().minWidth(140f).get();
+                }).growX().minWidth(110f).get();
                 field.setMessageText(def);
                 fieldRef[0] = field;
-            }).width(rowWidth()).left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
 
             if(fieldRef[0] != null) addDesc(fieldRef[0]);
             table.row();
@@ -263,7 +295,7 @@ public final class RbmStyle{
             table.table(VscodeSettingsStyle.cardBackground(), t -> {
                 t.left().margin(settingMargin);
                 if(icon != null) t.image(icon).size(settingIconSize).padRight(8f);
-                t.add(title).left().growX().minWidth(0f).wrap();
+                t.add(title).left().growX().minWidth(0f).padRight(8f).wrap();
                 TextField field = t.field(String.valueOf(clamped), text -> {
                     if(updatingText[0]) return;
                     int parsed;
@@ -282,11 +314,11 @@ public final class RbmStyle{
                         fieldRef[0].setCursorPosition(normalized.length());
                         updatingText[0] = false;
                     }
-                }).growX().minWidth(140f).get();
+                }).growX().minWidth(110f).get();
                 field.setMessageText(String.valueOf(def));
                 field.setFilter((f, c) -> Character.isDigit(c) || (c == '-' && f.getCursorPosition() == 0 && !f.getText().contains("-")));
                 fieldRef[0] = field;
-            }).width(rowWidth()).left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
 
             if(fieldRef[0] != null) addDesc(fieldRef[0]);
             table.row();
@@ -313,8 +345,8 @@ public final class RbmStyle{
             table.table(VscodeSettingsStyle.cardBackground(), row -> {
                 row.left().margin(6f);
                 if(icon != null) row.image(icon).size(settingIconSize).padRight(8f);
-                row.button(title, Styles.flatt, action).growX().height(buttonHeight()).padLeft(icon == null ? 8f : 0f);
-            }).width(rowWidth()).left().padTop(settingTopPad);
+                row.button(title, Styles.flatt, action).growX().minWidth(0f).height(buttonHeight()).padLeft(icon == null ? 8f : 0f);
+            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
             table.row();
         }
     }

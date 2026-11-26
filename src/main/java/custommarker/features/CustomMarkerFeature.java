@@ -19,7 +19,6 @@ import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
 import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.CheckBox;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Scl;
@@ -31,6 +30,7 @@ import arc.util.Time;
 import arc.util.Tmp;
 import arc.util.pooling.Pools;
 import bektools.profiler.NeonProfiler;
+import bektools.ui.RbmStyle;
 import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -175,51 +175,9 @@ public class CustomMarkerFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting(keyEnabled) {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                CheckBox box = new CheckBox(title);
-                box.getLabel().setWrap(true);
-                box.getLabelCell().growX().minWidth(0f);
-                box.update(() -> box.setChecked(Core.settings.getBool(name, true)));
-                box.changed(() -> Core.settings.put(name, box.isChecked()));
-
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(10f);
-                    row.add(box).left().growX().minWidth(0f);
-                }).growX().padTop(6f);
-                addDesc(box);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("cm-edit-templates") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(6f);
-                    row.button(title, Styles.flatt, CustomMarkerFeature::showTemplateEditor)
-                        .growX()
-                        .height(42f)
-                        .padLeft(8f);
-                }).growX().padTop(6f);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("cm-reset-templates") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(6f);
-                    row.button(title, Styles.flatt, CustomMarkerFeature::resetTemplatesToDefaults)
-                        .growX()
-                        .height(42f)
-                        .padLeft(8f);
-                }).growX().padTop(6f);
-                t.row();
-            }
-        });
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.mapSmall, null));
+        table.pref(new RbmStyle.ActionButtonSetting("cm-edit-templates", Icon.edit, CustomMarkerFeature::showTemplateEditor));
+        table.pref(new RbmStyle.ActionButtonSetting("cm-reset-templates", Icon.refreshSmall, CustomMarkerFeature::resetTemplatesToDefaults));
 
         reloadRuntimeSettings();
         reloadTemplatesFromSettings();

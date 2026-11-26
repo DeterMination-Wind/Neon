@@ -15,6 +15,7 @@ import arc.util.Log;
 import arc.util.Time;
 import autopruner.AutoPrunerMod;
 import mindustry.game.EventType;
+import mindustry.game.Team;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.ui.dialogs.SettingsMenuDialog;
@@ -203,11 +204,11 @@ public class AutoPrunerFeature {
     }
 
     /**
-     * 冗余电力节点判定：把己方电力网络当作无向图，只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
+     * 冗余电力节点判定：把电力网络当作无向图，只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
      *
-     * 顶点 = 世界内所有带 PowerModule 的有效建筑（不限队伍，队伍的合法性交给 validBreak 判），边 = Building.getPowerConnections（游戏建 PowerGraph 用的同一套关系：相邻通电建筑 + power.links 连线），再并上显式的 power.links 兜底，保证不会因为对方模块/队伍过滤而被误判成割点。
+     * 顶点来自世界瓦片扫描（`world.tiles.eachTile` + 中心格），不依赖 Groups.build：Mindustry 自己的编辑器代码里就注明过 "Groups.build can be empty"，用瓦片才是权威来源。边 = Building.getPowerConnections（游戏建 PowerGraph 用的同一套关系：相邻通电建筑 + power.links 连线），再并上显式 power.links 兜底。
      *
-     * 可拆的只有 PowerNode 与 BeamNode（含其子类），并且必须能通过 validBreak（本队或 derelict 中立建筑）。电池、发电机、用电器、电力二极管、电力束塔等一律作为固定顶点保留。
+     * 可拆的只有 PowerNode / BeamNode / LongPowerNode（含子类），并且必须能通过 validBreak（本队与 derelict 中立建筑可拆，敌对建筑不可拆）。电池、发电机、用电器、电力二极管、电力束塔等一律作为固定顶点保留。
      *
      * 结构性保证：
      * 1. 剩余节点的诱导子图与拆除前保持同样的连通关系，任何一段电网都不会被拆散；
@@ -219,21 +220,29 @@ public class AutoPrunerFeature {
         Seq<Building> builds = new Seq<>();
         LongMap<Integer> indices = new LongMap<>();
         Seq<Building> ownPowered = new Seq<>();
-        int[] totalBuilds = new int[1];
+        int[] stats = new int[3]; // 0 = 世界中心建筑，1 = Groups.build 数，2 = 本队带电
 
         Groups.build.each(build -> {
-            if (build == null) return;
-            totalBuilds[0]++;
+            if (build != null) stats[1]++;
+        });
+
+        world.tiles.eachTile(tile -> {
+            if (tile == null || !tile.isCenter() || tile.build == null) return;
+            Building build = tile.build;
+            stats[0]++;
             if (!build.isValid() || build.power == null) return;
             if (indices.containsKey(build.pos())) return;
             indices.put(build.pos(), builds.size);
             builds.add(build);
-            if (player != null && build.team == player.team()) ownPowered.add(build);
+            if (player != null && build.team == player.team()) {
+                stats[2]++;
+                ownPowered.add(build);
+            }
         });
 
         int count = builds.size;
         if (count == 0) {
-            Log.info("[AutoPruner] 诊断：世界建筑 @，其中带电且有效 0，跳过。", totalBuilds[0]);
+            Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，其中带电且有效 0，跳过。", stats[0], stats[1]);
             return out;
         }
 
@@ -278,7 +287,7 @@ public class AutoPrunerFeature {
             }
         }
 
-        Log.info("[AutoPruner] 诊断：世界建筑 @，本队带电 @，图顶点 @，连线 @；非节点 @，受保护 @，不可拆 @，可拆节点 @。", totalBuilds[0], ownPowered.size, count, edges, wrongType, protectedCount, blocked, candidates);
+        Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，本队 @（带电 @），图顶点 @，连线 @；队伍分布 @；非节点 @，受保护 @，不可拆 @，可拆节点 @。", stats[0], stats[1], player == null ? "?" : player.team().name, stats[2], count, edges, teamHistogram(builds), wrongType, protectedCount, blocked, candidates);
 
         if (candidates == 0) {
             Log.info("[AutoPruner] 诊断：本队带电方块样本 @", blockSample(ownPowered, 10));
@@ -337,6 +346,37 @@ public class AutoPrunerFeature {
         for (int i = 0; i < list.size && i < limit; i++) {
             if (i > 0) sb.append(", ");
             sb.append(list.get(i).block.name);
+        }
+        return sb.toString();
+    }
+
+    /** 诊断用：按队伍统计顶点数量，例如 `derelict x33, sharded x8`。 */
+    private static String teamHistogram(Seq<Building> list) {
+        Seq<Team> keys = new Seq<>();
+        IntSeq counts = new IntSeq();
+
+        for (int i = 0; i < list.size; i++) {
+            Team team = list.get(i).team;
+            int index = -1;
+            for (int k = 0; k < keys.size; k++) {
+                if (keys.get(k) == team) {
+                    index = k;
+                    break;
+                }
+            }
+            if (index < 0) {
+                keys.add(team);
+                counts.add(1);
+            } else {
+                counts.set(index, counts.get(index) + 1);
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int k = 0; k < keys.size; k++) {
+            if (k > 0) sb.append(", ");
+            Team team = keys.get(k);
+            sb.append(team == null ? "null" : team.name).append(" x").append(counts.get(k));
         }
         return sb.toString();
     }

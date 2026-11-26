@@ -11,19 +11,15 @@ import arc.struct.LongMap;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Interval;
-import arc.util.Log;
 import arc.util.Time;
 import autopruner.AutoPrunerMod;
-import mindustry.core.Version;
 import mindustry.game.EventType;
-import mindustry.game.Team;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.blocks.power.BeamNode;
 import mindustry.world.blocks.power.PowerNode;
 import mindustry.world.blocks.storage.CoreBlock;
-import mindustry.world.meta.BlockGroup;
 
 import static mindustry.Vars.control;
 import static mindustry.Vars.mobile;
@@ -72,7 +68,6 @@ public class AutoPrunerFeature {
 
         applyDefaults();
         refreshSettings();
-        Log.info("[AutoPruner] init：按电网连通性削多余电力节点（getPowerConnections 图，含 BeamNode）。");
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
             registerKeybinds();
@@ -220,42 +215,24 @@ public class AutoPrunerFeature {
         Seq<Building> out = new Seq<>();
 
         Seq<Building> builds = new Seq<>();
-        Seq<Building> allBuilds = new Seq<>();
         LongMap<Integer> indices = new LongMap<>();
-        Seq<Building> ownPowered = new Seq<>();
-        int[] stats = new int[3]; // 0 = 世界中心建筑，1 = Groups.build 数，2 = 本队带电
-
-        Groups.build.each(build -> {
-            if (build != null) stats[1]++;
-        });
 
         world.tiles.eachTile(tile -> {
             if (tile == null || !tile.isCenter() || tile.build == null) return;
             Building build = tile.build;
-            stats[0]++;
-            allBuilds.add(build);
             if (!build.isValid() || build.power == null) return;
             if (indices.containsKey(build.pos())) return;
             indices.put(build.pos(), builds.size);
             builds.add(build);
-            if (player != null && build.team == player.team()) {
-                stats[2]++;
-                ownPowered.add(build);
-            }
         });
 
-        Log.info("[AutoPruner] 版本 @.@ @；世界中心建筑 @，Groups.build @；电力相关清单（@ 个）@", Version.number, Version.build, Version.modifier, stats[0], stats[1], dumpPowerBlocks(allBuilds), powerBlockDump(allBuilds));
-
         int count = builds.size;
-        if (count == 0) {
-            Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，其中带电且有效 0，跳过。", stats[0], stats[1]);
-            return out;
-        }
+        if (count == 0) return out;
+
         IntSeq[] adjacency = new IntSeq[count];
         for (int i = 0; i < count; i++) adjacency[i] = new IntSeq();
 
         Seq<Building> connections = new Seq<>();
-        int edges = 0;
 
         for (int i = 0; i < count; i++) {
             Building build = builds.get(i);
@@ -263,41 +240,28 @@ public class AutoPrunerFeature {
             // 1) 游戏自己的电网关系：相邻通电建筑 + 连线，含二极管方向与绝缘判定
             build.getPowerConnections(connections);
             for (int c = 0; c < connections.size; c++) {
-                edges += connectEdge(i, connections.get(c), indices, adjacency);
+                connectEdge(i, connections.get(c), indices, adjacency);
             }
 
             // 2) 显式连线兜底：对方即使因为队伍 / 模块原因没进顶点集，也不能丢边
             IntSeq links = build.power.links;
             if (links != null) {
                 for (int l = 0; l < links.size; l++) {
-                    edges += connectEdge(i, world.build(links.get(l)), indices, adjacency);
+                    connectEdge(i, world.build(links.get(l)), indices, adjacency);
                 }
             }
         }
 
         boolean[] removable = new boolean[count];
-        int candidates = 0, wrongType = 0, protectedCount = 0, blocked = 0;
+        boolean anyCandidate = false;
 
         for (int i = 0; i < count; i++) {
-            int verdict = prunableVerdict(builds.get(i));
-            if (verdict == 0) {
+            if (isPrunablePowerNode(builds.get(i))) {
                 removable[i] = true;
-                candidates++;
-            } else if (verdict == 1) {
-                wrongType++;
-            } else if (verdict == 2) {
-                protectedCount++;
-            } else {
-                blocked++;
+                anyCandidate = true;
             }
         }
-
-        Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，本队 @（带电 @），图顶点 @，连线 @；队伍分布 @；非节点 @，受保护 @，不可拆 @，可拆节点 @。", stats[0], stats[1], player == null ? "?" : player.team().name, stats[2], count, edges, teamHistogram(builds), wrongType, protectedCount, blocked, candidates);
-
-        if (candidates == 0) {
-            Log.info("[AutoPruner] 诊断：本队带电方块样本 @", blockSample(ownPowered, 10));
-            return out;
-        }
+        if (!anyCandidate) return out;
 
         boolean[] removed = new boolean[count];
         int[] queue = new int[count];
@@ -330,8 +294,6 @@ public class AutoPrunerFeature {
             }
         }
 
-        Log.info("[AutoPruner] 电力网络：图顶点 @，连线 @，可拆节点 @，判定多余 @。", count, edges, candidates, out.size);
-
         return out;
     }
 
@@ -346,97 +308,25 @@ public class AutoPrunerFeature {
         return 1;
     }
 
-    private static String blockSample(Seq<Building> list, int limit) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < list.size && i < limit; i++) {
-            if (i > 0) sb.append(", ");
-            sb.append(list.get(i).block.name);
-        }
-        return sb.toString();
-    }
-
-    /** 诊断用：这栋建筑是否属于"电力相关"，用来导出清单。 */
-    private static boolean isPowerRelated(Building build) {
-        if (build == null || build.block == null) return false;
-        if (build.power != null) return true;
-        if (build.block.group == BlockGroup.power) return true;
-        String name = build.block.name;
-        return name != null && name.contains("node");
-    }
-
-    private static int dumpPowerBlocks(Seq<Building> list) {
-        int total = 0;
-        for (int i = 0; i < list.size; i++) {
-            if (isPowerRelated(list.get(i))) total++;
-        }
-        return total;
-    }
-
-    /** 诊断用：逐条导出电力相关建筑的真实方块类、队伍、hasPower 与 links 数。 */
-    private static String powerBlockDump(Seq<Building> list) {
-        StringBuilder sb = new StringBuilder();
-        int shown = 0;
-
-        for (int i = 0; i < list.size && shown < 60; i++) {
-            Building build = list.get(i);
-            if (!isPowerRelated(build)) continue;
-
-            sb.append("\n  ").append(build.block.name)
-                .append(" [").append(build.block.getClass().getName()).append(']')
-                .append(" grp=").append(build.block.group)
-                .append(" team=").append(build.team == null ? "?" : build.team.name)
-                .append(" hasPower=").append(build.block.hasPower)
-                .append(" power=").append(build.power != null)
-                .append(" links=").append(build.power == null || build.power.links == null ? "-" : String.valueOf(build.power.links.size))
-                .append(" @").append(build.tileX()).append(',').append(build.tileY());
-            shown++;
-        }
-
-        return sb.toString();
-    }
-
-    /** 诊断用：按队伍统计顶点数量，例如 `derelict x33, sharded x8`。 */
-    private static String teamHistogram(Seq<Building> list) {
-        Seq<Team> keys = new Seq<>();
-        IntSeq counts = new IntSeq();
-
-        for (int i = 0; i < list.size; i++) {
-            Team team = list.get(i).team;
-            int index = -1;
-            for (int k = 0; k < keys.size; k++) {
-                if (keys.get(k) == team) {
-                    index = k;
-                    break;
-                }
-            }
-            if (index < 0) {
-                keys.add(team);
-                counts.add(1);
-            } else {
-                counts.set(index, counts.get(index) + 1);
-            }
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (int k = 0; k < keys.size; k++) {
-            if (k > 0) sb.append(", ");
-            Team team = keys.get(k);
-            sb.append(team == null ? "null" : team.name).append(" x").append(counts.get(k));
-        }
-        return sb.toString();
-    }
-
     private static void addNeighbor(IntSeq neighbors, int index) {
         if (!neighbors.contains(index)) neighbors.add(index);
     }
 
-    /** 判定结论：0 = 可拆的电力节点；1 = 不是电力节点；2 = 受保护；3 = 当前不可拆（权限 / 不可破坏 / 无输入）。 */
-    private static int prunableVerdict(Building build) {
-        if (build == null || !build.isValid() || build.block == null) return 3;
-        if (!(build.block instanceof PowerNode) && !(build.block instanceof BeamNode)) return 1;
-        if (isProtectedBuilding(build)) return 2;
-        if (control == null || control.input == null) return 3;
-        return control.input.validBreak(build.tileX(), build.tileY()) ? 0 : 3;
+    /**
+     * 判断这个建筑是否允许作为拆除目标：必须是输电节点——PowerNode / BeamNode（含子类），且不是发电建筑。
+     *
+     * 发电豁免很重要：沙盒的 PowerSource（电力源）就是 PowerNode 的子类，只按类型判断会把它当冗余节点删掉。
+     * 豁免条件用「只发电、不耗电」（outputsPower && !consumesPower），这样 E 星的 beam-node / beam-tower
+     * 虽然带储能（outputsPower 与 consumesPower 都是 true）仍然会被当成可削节点。
+     */
+    private static boolean isPrunablePowerNode(Building build) {
+        if (build == null || !build.isValid() || build.block == null) return false;
+        if (!(build.block instanceof PowerNode) && !(build.block instanceof BeamNode)) return false;
+        if (build.block.outputsPower && !build.block.consumesPower) return false;
+        if (build.getPowerProduction() > 0f) return false;
+        if (isProtectedBuilding(build)) return false;
+        if (control == null || control.input == null) return false;
+        return control.input.validBreak(build.tileX(), build.tileY());
     }
 
     /**

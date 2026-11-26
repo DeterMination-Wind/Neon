@@ -6,12 +6,14 @@
 
 ### 问题修复
 
-- **电力节点改为按世界瓦片扫描收集**：上一版日志显示 `带电建筑 8、连线 0`，而图里明显有几十个节点，说明 `Groups.build` 没有给全（Mindustry 自己的编辑器代码也注明过 `Groups.build can be empty`）。现在顶点直接扫 `world.tiles` 的中心格，不再依赖这个分组。
-- **诊断日志补上队伍分布**：每次按 `J` 会输出 `世界中心建筑 / Groups.build / 本队（带电）/ 图顶点 / 连线 / 队伍分布 / 非节点 / 受保护 / 不可拆 / 可拆节点`。两处建筑数不一致就说明 `Groups.build` 不完整；`队伍分布` 能直接看出那张电网是本队还是 `derelict`。
+- **智能拆除不再误删发电建筑**：判定加入发电豁免，只发电不耗电的建筑（沙盒 `power-source`、各类发电机）与当前发电量大于 0 的节点一律不参与拆除。沙盒电力源本身就是 `PowerNode` 的子类，之前会被当成多余节点删掉。
+- **Erekir beam nodes are still prunable**: `beam-node` / `beam-tower` set both `outputsPower` and `consumesPower` (they buffer power), so the exemption keys on "producer only" and they keep taking part in the connectivity pruning instead of being mistaken for generators.
+- **去掉按键时的调试日志**：按 `J` 不再往 `last_log.txt` 写电力网络诊断，只保留游戏内的拆除汇总提示。
 
 ## English
 
 ### Fixed
 
-- **Power nodes are now collected by scanning world tiles**: the previous log showed `powered buildings 8, links 0` while dozens of nodes were visible, meaning `Groups.build` was incomplete (Mindustry's own editor code notes that `Groups.build can be empty`). Vertices now come from the centre tiles of `world.tiles` instead of that group.
-- **The diagnostic line now includes a team histogram**: every `J` press logs `world centres / Groups.build / own team (powered) / vertices / links / team histogram / non-nodes / protected / not breakable / prunable nodes`. A mismatch between the two building counts proves `Groups.build` is incomplete, and the histogram shows immediately whether the grid belongs to your team or to `derelict`.
+- **Auto Pruner no longer deletes power sources**: the requirement now exempts pure producers — blocks with `outputsPower && !consumesPower` (sandbox `power-source`, every generator), plus any node whose current power production is above zero. The sandbox power source is a `PowerNode` subclass, so it used to be treated as a redundant node.
+- **Erekir beam nodes are still prunable**: `beam-node` / `beam-tower` set both `outputsPower` and `consumesPower` (they buffer power), so the exemption keys on "producer only" and they keep taking part in the connectivity pruning instead of being mistaken for generators.
+- **The per-press debug logging is gone**: pressing `J` no longer writes power-network diagnostics into `last_log.txt`; only the in-game summary toast remains.

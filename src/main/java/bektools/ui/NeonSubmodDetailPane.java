@@ -257,7 +257,8 @@ public class NeonSubmodDetailPane extends Table{
                 return;
             }
 
-            float innerWidth = Math.max(240f, paneWidth - 28f);
+            // Match the exact horizontal content width of headerHost (paneWidth minus 10dp left + 10dp right margin).
+            float innerWidth = Math.max(240f, paneWidth - 20f);
             SubmodSettingsHostTable host = new SubmodSettingsHostTable(module.enableKey, () -> {
                 if(!rebuildingBody){
                     rebuildBody(false);
@@ -288,7 +289,7 @@ public class NeonSubmodDetailPane extends Table{
                 addInfoCard(module.emptyPlaceholderText());
             }else{
                 SettingsVisualNormalizer.normalize(host, innerWidth);
-                bodyHost.add(host).growX().minWidth(0f).top().left().row();
+                bodyHost.add(host).growX().fillX().minWidth(0f).top().left().row();
                 bodyHost.add().height(12f).row();
             }
         }finally{

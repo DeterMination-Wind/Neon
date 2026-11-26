@@ -28,7 +28,7 @@ import mindustry.ui.Styles;
  *   <li>Semi-transparent neutral obsidian/charcoal surfaces so the Mindustry backdrop breathes through.</li>
  *   <li>Strictly zero blue hues anywhere in surfaces, borders, text, or status semantics.</li>
  *   <li>Warm Mindustry gold ({@code #f6d495}) crisp rectangular selection frames, group dividers, and section rules.</li>
- *   <li>Sharp geometric flat-futuristic controls (square checkboxes, bar sliders, underline search input, HUD corner ticks).</li>
+ *   <li>Sharp geometric flat-futuristic controls (square checkboxes, HUD-framed bar sliders, underline search input, HUD corner ticks).</li>
  * </ul>
  * Kept under the historical {@code VscodeSettingsStyle} class name for binary compatibility across Neon features.
  */
@@ -104,7 +104,8 @@ public final class VscodeSettingsStyle{
     private static final Drawable checkOffDisabledDrawable = new FlatCheckDrawable(false, false, true);
     private static final Drawable checkOnDisabledDrawable = new FlatCheckDrawable(true, false, true);
 
-    private static final Drawable sliderTrackDrawable = new FlatSliderTrackDrawable(bgField, borderSubtle);
+    private static final float sliderRowHeightDp = 40f;
+    private static final Drawable sliderTrackDrawable = new FlatSliderTrackDrawable(bgCard, borderSubtle, accentCorner);
     private static final Drawable sliderFillDrawable = new FlatSliderFillDrawable(accentSoft, accent);
     private static final Drawable sliderKnobIdleDrawable = new FlatSliderKnobDrawable(accent);
     private static final Drawable sliderKnobActiveDrawable = new FlatSliderKnobDrawable(accentBright);
@@ -127,6 +128,16 @@ public final class VscodeSettingsStyle{
     );
     private static final Drawable cursorDrawable = new FlatSolidDrawable(accent, 2f, 16f);
     private static final Drawable selectionDrawable = new FlatSolidDrawable(accentSelection, 2f, 16f);
+
+    private static Slider.SliderStyle sharedSliderStyle;
+    private static CheckBox.CheckBoxStyle sharedCheckBoxStyle;
+    private static CheckBox.CheckBoxStyle sharedHudCardCheckBoxStyle;
+    private static TextField.TextFieldStyle sharedSearchFieldStyle;
+    private static TextField.TextFieldStyle sharedFieldStyle;
+    private static TextButton.TextButtonStyle sharedFlatButtonStyle;
+    private static TextButton.TextButtonStyle sharedFlatToggleButtonStyle;
+    private static TextButton.TextButtonStyle sharedHudCardButtonStyle;
+    private static TextButton.TextButtonStyle sharedHudCardToggleButtonStyle;
 
     private static Drawable cachedBase;
     private static final ObjectMap<Color, Drawable> tintedCache = new ObjectMap<>();
@@ -278,8 +289,12 @@ public final class VscodeSettingsStyle{
     }
 
     public static TextButton.TextButtonStyle flatButtonStyle(){
+        Font font = uiFont();
+        if(sharedFlatButtonStyle != null && sharedFlatButtonStyle.font == font){
+            return sharedFlatButtonStyle;
+        }
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
-        style.font = uiFont();
+        style.font = font;
         style.up = tileIdleBgDrawable;
         style.over = tileHoverBgDrawable;
         style.down = selectedBgDrawable;
@@ -288,15 +303,55 @@ public final class VscodeSettingsStyle{
         style.overFontColor = accent;
         style.downFontColor = accentBright;
         style.disabledFontColor = textDisabled;
+        sharedFlatButtonStyle = style;
         return style;
     }
 
     public static TextButton.TextButtonStyle flatToggleButtonStyle(){
-        TextButton.TextButtonStyle style = flatButtonStyle();
+        Font font = uiFont();
+        if(sharedFlatToggleButtonStyle != null && sharedFlatToggleButtonStyle.font == font){
+            return sharedFlatToggleButtonStyle;
+        }
+        TextButton.TextButtonStyle style = new TextButton.TextButtonStyle(flatButtonStyle());
         style.checked = selectedBgDrawable;
         style.checkedOver = selectedHoverBgDrawable;
         style.checkedFontColor = accent;
         style.checkedOverFontColor = accentBright;
+        sharedFlatToggleButtonStyle = style;
+        return style;
+    }
+
+    /** Full-row HUD card button style for standalone top-level button rows inside sub-mod settings. */
+    public static TextButton.TextButtonStyle hudCardButtonStyle(){
+        Font font = uiFont();
+        if(sharedHudCardButtonStyle != null && sharedHudCardButtonStyle.font == font){
+            return sharedHudCardButtonStyle;
+        }
+        TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
+        style.font = font;
+        style.up = hudCardBgDrawable;
+        style.over = cardAltBgDrawable;
+        style.down = selectedBgDrawable;
+        style.disabled = bannerDisabledDrawable;
+        style.fontColor = textPrimary;
+        style.overFontColor = accent;
+        style.downFontColor = accentBright;
+        style.disabledFontColor = textDisabled;
+        sharedHudCardButtonStyle = style;
+        return style;
+    }
+
+    public static TextButton.TextButtonStyle hudCardToggleButtonStyle(){
+        Font font = uiFont();
+        if(sharedHudCardToggleButtonStyle != null && sharedHudCardToggleButtonStyle.font == font){
+            return sharedHudCardToggleButtonStyle;
+        }
+        TextButton.TextButtonStyle style = new TextButton.TextButtonStyle(hudCardButtonStyle());
+        style.checked = selectedBgDrawable;
+        style.checkedOver = selectedHoverBgDrawable;
+        style.checkedFontColor = accent;
+        style.checkedOverFontColor = accentBright;
+        sharedHudCardToggleButtonStyle = style;
         return style;
     }
 
@@ -329,8 +384,12 @@ public final class VscodeSettingsStyle{
     }
 
     public static CheckBox.CheckBoxStyle flatCheckBoxStyle(){
+        Font font = uiFont();
+        if(sharedCheckBoxStyle != null && sharedCheckBoxStyle.font == font){
+            return sharedCheckBoxStyle;
+        }
         CheckBox.CheckBoxStyle style = new CheckBox.CheckBoxStyle();
-        style.font = uiFont();
+        style.font = font;
         style.fontColor = textPrimary;
         style.overFontColor = accentBright;
         style.downFontColor = accent;
@@ -341,10 +400,39 @@ public final class VscodeSettingsStyle{
         style.checkboxOnOver = checkOnOverDrawable;
         style.checkboxOffDisabled = checkOffDisabledDrawable;
         style.checkboxOnDisabled = checkOnDisabledDrawable;
+        sharedCheckBoxStyle = style;
+        return style;
+    }
+
+    /** Full-row HUD card checkbox style for bare top-level CheckBox rows (e.g. BetterHotKey). */
+    public static CheckBox.CheckBoxStyle hudCardCheckBoxStyle(){
+        Font font = uiFont();
+        if(sharedHudCardCheckBoxStyle != null && sharedHudCardCheckBoxStyle.font == font){
+            return sharedHudCardCheckBoxStyle;
+        }
+        CheckBox.CheckBoxStyle style = new CheckBox.CheckBoxStyle();
+        style.font = font;
+        style.up = hudCardBgDrawable;
+        style.over = cardAltBgDrawable;
+        style.down = cardAltBgDrawable;
+        style.fontColor = textPrimary;
+        style.overFontColor = accentBright;
+        style.downFontColor = accent;
+        style.disabledFontColor = textDisabled;
+        style.checkboxOff = checkOffDrawable;
+        style.checkboxOver = checkOverDrawable;
+        style.checkboxOn = checkOnDrawable;
+        style.checkboxOnOver = checkOnOverDrawable;
+        style.checkboxOffDisabled = checkOffDisabledDrawable;
+        style.checkboxOnDisabled = checkOnDisabledDrawable;
+        sharedHudCardCheckBoxStyle = style;
         return style;
     }
 
     public static Slider.SliderStyle flatSliderStyle(){
+        if(sharedSliderStyle != null){
+            return sharedSliderStyle;
+        }
         Slider.SliderStyle style = new Slider.SliderStyle();
         style.background = sliderTrackDrawable;
         style.disabledBackground = bannerDisabledDrawable;
@@ -354,13 +442,17 @@ public final class VscodeSettingsStyle{
         style.knobOver = sliderKnobActiveDrawable;
         style.knobDown = sliderKnobActiveDrawable;
         style.disabledKnob = sliderKnobDisabledDrawable;
+        sharedSliderStyle = style;
         return style;
     }
 
     /** Minimalist flat search field with bottom horizontal rule (idle #454543 -> focused #f6d495 gold). */
     public static TextField.TextFieldStyle flatSearchFieldStyle(){
-        TextField.TextFieldStyle style = new TextField.TextFieldStyle();
         Font font = uiFont();
+        if(sharedSearchFieldStyle != null && sharedSearchFieldStyle.font == font){
+            return sharedSearchFieldStyle;
+        }
+        TextField.TextFieldStyle style = new TextField.TextFieldStyle();
         style.font = font;
         style.messageFont = font;
         style.fontColor = textPrimary;
@@ -373,12 +465,16 @@ public final class VscodeSettingsStyle{
         style.invalidBackground = bannerFailedDrawable;
         style.cursor = cursorDrawable;
         style.selection = selectionDrawable;
+        sharedSearchFieldStyle = style;
         return style;
     }
 
     public static TextField.TextFieldStyle flatFieldStyle(){
-        TextField.TextFieldStyle style = new TextField.TextFieldStyle();
         Font font = uiFont();
+        if(sharedFieldStyle != null && sharedFieldStyle.font == font){
+            return sharedFieldStyle;
+        }
+        TextField.TextFieldStyle style = new TextField.TextFieldStyle();
         style.font = font;
         style.messageFont = font;
         style.fontColor = textPrimary;
@@ -391,6 +487,7 @@ public final class VscodeSettingsStyle{
         style.invalidBackground = bannerFailedDrawable;
         style.cursor = cursorDrawable;
         style.selection = selectionDrawable;
+        sharedFieldStyle = style;
         return style;
     }
 
@@ -680,15 +777,17 @@ public final class VscodeSettingsStyle{
     private static final class FlatSliderTrackDrawable extends BaseDrawable{
         private final Color fill;
         private final Color border;
+        private final Color corner;
 
-        FlatSliderTrackDrawable(Color fill, Color border){
+        FlatSliderTrackDrawable(Color fill, Color border, Color corner){
             this.fill = fill;
             this.border = border;
+            this.corner = corner;
         }
 
         @Override
         public float getMinHeight(){
-            return Scl.scl(36f);
+            return Scl.scl(sliderRowHeightDp);
         }
 
         @Override
@@ -697,6 +796,9 @@ public final class VscodeSettingsStyle{
             float prev = Draw.getColorPacked();
             drawRectColor(fill, parentAlpha, x, y, width, height);
             drawCrispBorder(border, parentAlpha, x, y, width, height, Math.max(1f, Scl.scl(1f)));
+            if(corner != null){
+                drawCornerBrackets(corner, parentAlpha, x, y, width, height, Scl.scl(5f), Math.max(1f, Scl.scl(1.5f)));
+            }
             Draw.color(prev);
         }
     }
@@ -712,7 +814,7 @@ public final class VscodeSettingsStyle{
 
         @Override
         public float getMinHeight(){
-            return Scl.scl(36f);
+            return Scl.scl(sliderRowHeightDp);
         }
 
         @Override
@@ -740,7 +842,7 @@ public final class VscodeSettingsStyle{
 
         @Override
         public float getMinHeight(){
-            return Scl.scl(36f);
+            return Scl.scl(sliderRowHeightDp);
         }
 
         @Override

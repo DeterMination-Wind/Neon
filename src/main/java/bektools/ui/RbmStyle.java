@@ -12,6 +12,7 @@ import arc.scene.ui.Label;
 import arc.scene.ui.Slider;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Scl;
+import arc.scene.ui.layout.Stack;
 import arc.scene.ui.layout.Table;
 import arc.util.Scaling;
 import mindustry.ui.Styles;
@@ -64,6 +65,18 @@ public final class RbmStyle{
             return scoped;
         }
         return Math.max(260f, Math.min(prefWidth() - settingsRowInset, dialogContentWidth()));
+    }
+
+    /**
+     * Inside NeonSubmodDetailPane, the host table already owns the exact pane width; returning
+     * {@link Float#NEGATIVE_INFINITY} (Arc Cell's unset sentinel) lets rows grow flush to the host.
+     */
+    private static float cellMaxWidthCap(){
+        return activeRowWidth.get() != null ? Float.NEGATIVE_INFINITY : rowWidth();
+    }
+
+    private static float inlineFieldWidth(){
+        return Math.min(220f, Math.max(120f, rowWidth() * 0.32f));
     }
 
     public static float buttonHeight(){
@@ -144,7 +157,7 @@ public final class RbmStyle{
                 lbl.setColor(VscodeSettingsStyle.accentColor());
                 lbl.setWrap(true);
                 head.add(lbl).left().growX().minWidth(0f);
-            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(10f).padBottom(2f);
+            }).minWidth(0f).maxWidth(cellMaxWidthCap()).growX().fillX().left().padTop(10f).padBottom(2f).padLeft(0f).padRight(0f);
             table.row();
         }
     }
@@ -198,7 +211,7 @@ public final class RbmStyle{
                     t.add(ic).size(settingIconSize).padRight(8f);
                 }
                 t.add(box).left().growX().minWidth(0f);
-            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(cellMaxWidthCap()).growX().fillX().left().padTop(settingTopPad).padLeft(0f).padRight(0f);
 
             addDesc(box);
             table.row();
@@ -254,11 +267,18 @@ public final class RbmStyle{
             });
             slider.change();
 
-            Table root = table.table(VscodeSettingsStyle.hudCardBackground(), t -> {
-                t.left().margin(5f);
-                t.stack(slider, content).growX().minWidth(0f).height(36f);
-            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad).get();
-            addDesc(root);
+            Stack stack = table.stack(slider, content)
+                .minWidth(0f)
+                .maxWidth(cellMaxWidthCap())
+                .growX()
+                .fillX()
+                .height(buttonHeight())
+                .left()
+                .padTop(settingTopPad)
+                .padLeft(0f)
+                .padRight(0f)
+                .get();
+            addDesc(stack);
             table.row();
         }
     }
@@ -278,6 +298,7 @@ public final class RbmStyle{
         @Override
         public void add(SettingsMenuDialog.SettingsTable table){
             final TextField[] fieldRef = {null};
+            float fw = inlineFieldWidth();
             table.table(VscodeSettingsStyle.hudCardBackground(), t -> {
                 t.left().margin(settingMargin);
                 if(icon != null){
@@ -293,10 +314,10 @@ public final class RbmStyle{
                 TextField field = t.field(Core.settings.getString(name, def), VscodeSettingsStyle.flatFieldStyle(), text -> {
                     Core.settings.put(name, text);
                     if(changed != null) changed.get(text);
-                }).growX().minWidth(116f).height(34f).get();
+                }).width(fw).height(34f).right().get();
                 field.setMessageText(def);
                 fieldRef[0] = field;
-            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(cellMaxWidthCap()).growX().fillX().left().padTop(settingTopPad).padLeft(0f).padRight(0f);
 
             if(fieldRef[0] != null) addDesc(fieldRef[0]);
             table.row();
@@ -326,6 +347,7 @@ public final class RbmStyle{
             int stored = Core.settings.getInt(name, def);
             int clamped = Mathf.clamp(stored, min, max);
             if(clamped != stored) Core.settings.put(name, clamped);
+            float fw = inlineFieldWidth();
 
             table.table(VscodeSettingsStyle.hudCardBackground(), t -> {
                 t.left().margin(settingMargin);
@@ -357,11 +379,11 @@ public final class RbmStyle{
                         fieldRef[0].setCursorPosition(normalized.length());
                         updatingText[0] = false;
                     }
-                }).growX().minWidth(116f).height(34f).get();
+                }).width(fw).height(34f).right().get();
                 field.setMessageText(String.valueOf(def));
                 field.setFilter((f, c) -> Character.isDigit(c) || (c == '-' && f.getCursorPosition() == 0 && !f.getText().contains("-")));
                 fieldRef[0] = field;
-            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(cellMaxWidthCap()).growX().fillX().left().padTop(settingTopPad).padLeft(0f).padRight(0f);
 
             if(fieldRef[0] != null) addDesc(fieldRef[0]);
             table.row();
@@ -396,9 +418,9 @@ public final class RbmStyle{
                 row.button(title, VscodeSettingsStyle.flatButtonStyle(), action)
                     .growX()
                     .minWidth(0f)
-                    .height(buttonHeight())
+                    .height(36f)
                     .padLeft(icon == null ? 4f : 0f);
-            }).minWidth(0f).maxWidth(rowWidth()).growX().left().padTop(settingTopPad);
+            }).minWidth(0f).maxWidth(cellMaxWidthCap()).growX().fillX().left().padTop(settingTopPad).padLeft(0f).padRight(0f);
             table.row();
         }
     }

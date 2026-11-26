@@ -14,6 +14,7 @@ import arc.util.Interval;
 import arc.util.Log;
 import arc.util.Time;
 import autopruner.AutoPrunerMod;
+import mindustry.core.Version;
 import mindustry.game.EventType;
 import mindustry.game.Team;
 import mindustry.gen.Building;
@@ -22,6 +23,7 @@ import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.blocks.power.BeamNode;
 import mindustry.world.blocks.power.PowerNode;
 import mindustry.world.blocks.storage.CoreBlock;
+import mindustry.world.meta.BlockGroup;
 
 import static mindustry.Vars.control;
 import static mindustry.Vars.mobile;
@@ -218,6 +220,7 @@ public class AutoPrunerFeature {
         Seq<Building> out = new Seq<>();
 
         Seq<Building> builds = new Seq<>();
+        Seq<Building> allBuilds = new Seq<>();
         LongMap<Integer> indices = new LongMap<>();
         Seq<Building> ownPowered = new Seq<>();
         int[] stats = new int[3]; // 0 = 世界中心建筑，1 = Groups.build 数，2 = 本队带电
@@ -230,6 +233,7 @@ public class AutoPrunerFeature {
             if (tile == null || !tile.isCenter() || tile.build == null) return;
             Building build = tile.build;
             stats[0]++;
+            allBuilds.add(build);
             if (!build.isValid() || build.power == null) return;
             if (indices.containsKey(build.pos())) return;
             indices.put(build.pos(), builds.size);
@@ -240,12 +244,13 @@ public class AutoPrunerFeature {
             }
         });
 
+        Log.info("[AutoPruner] 版本 @.@ @；世界中心建筑 @，Groups.build @；电力相关清单（@ 个）@", Version.number, Version.build, Version.modifier, stats[0], stats[1], dumpPowerBlocks(allBuilds), powerBlockDump(allBuilds));
+
         int count = builds.size;
         if (count == 0) {
             Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，其中带电且有效 0，跳过。", stats[0], stats[1]);
             return out;
         }
-
         IntSeq[] adjacency = new IntSeq[count];
         for (int i = 0; i < count; i++) adjacency[i] = new IntSeq();
 
@@ -347,6 +352,46 @@ public class AutoPrunerFeature {
             if (i > 0) sb.append(", ");
             sb.append(list.get(i).block.name);
         }
+        return sb.toString();
+    }
+
+    /** 诊断用：这栋建筑是否属于"电力相关"，用来导出清单。 */
+    private static boolean isPowerRelated(Building build) {
+        if (build == null || build.block == null) return false;
+        if (build.power != null) return true;
+        if (build.block.group == BlockGroup.power) return true;
+        String name = build.block.name;
+        return name != null && name.contains("node");
+    }
+
+    private static int dumpPowerBlocks(Seq<Building> list) {
+        int total = 0;
+        for (int i = 0; i < list.size; i++) {
+            if (isPowerRelated(list.get(i))) total++;
+        }
+        return total;
+    }
+
+    /** 诊断用：逐条导出电力相关建筑的真实方块类、队伍、hasPower 与 links 数。 */
+    private static String powerBlockDump(Seq<Building> list) {
+        StringBuilder sb = new StringBuilder();
+        int shown = 0;
+
+        for (int i = 0; i < list.size && shown < 60; i++) {
+            Building build = list.get(i);
+            if (!isPowerRelated(build)) continue;
+
+            sb.append("\n  ").append(build.block.name)
+                .append(" [").append(build.block.getClass().getName()).append(']')
+                .append(" grp=").append(build.block.group)
+                .append(" team=").append(build.team == null ? "?" : build.team.name)
+                .append(" hasPower=").append(build.block.hasPower)
+                .append(" power=").append(build.power != null)
+                .append(" links=").append(build.power == null || build.power.links == null ? "-" : String.valueOf(build.power.links.size))
+                .append(" @").append(build.tileX()).append(',').append(build.tileY());
+            shown++;
+        }
+
         return sb.toString();
     }
 

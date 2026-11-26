@@ -2,9 +2,11 @@ package smartplacement;
 
 import arc.Core;
 import arc.Events;
+import arc.func.Boolf;
 import arc.math.Mathf;
 import arc.math.geom.Geometry;
 import arc.math.geom.Point2;
+import arc.struct.IntSet;
 import arc.struct.ObjectMap;
 import arc.struct.Seq;
 import mindustry.Vars;
@@ -18,12 +20,14 @@ import mindustry.gen.Icon;
 import mindustry.input.DesktopInput;
 import mindustry.input.InputHandler;
 import mindustry.input.MobileInput;
+import mindustry.input.Placement;
 import mindustry.mod.Mod;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
 import mindustry.world.blocks.distribution.Conveyor;
 import mindustry.world.blocks.distribution.DirectionBridge;
 import mindustry.world.blocks.distribution.Duct;
+import mindustry.world.blocks.distribution.ItemBridge;
 import mindustry.world.blocks.distribution.StackConveyor;
 
 public final class SmartPlacementMod extends Mod{
@@ -254,10 +258,74 @@ public final class SmartPlacementMod extends Mod{
 
         @Override
         public void handlePlacementLine(Seq<BuildPlan> plans){
-            // Vanilla bridging first (it also removes plans that cannot be placed), then the
+            // Vanilla bridging first, then re-apply crossings it may have flattened, then the
             // wide-band rule can turn a 3+ tile duct crossing into a single item duct bridge.
-            source.handlePlacementLine(plans);
+            if(!handleDuctBridgePass(plans)){
+                source.handlePlacementLine(plans);
+            }
+            restoreCrossings(plans);
             applyWideDuctBridge(plans);
+        }
+
+        /**
+         * Duct has no vanilla junction replacement (the assignment in {@code Duct.init()} is
+         * commented out), so {@code Duct.handlePlacementLine} runs the bridge DP with
+         * {@code hasJunction = false}. That makes a crossing plan look unplaceable, so the DP drops
+         * it and the crossing degrades into a plain duct bridge jump. Conveyor lines pass
+         * {@code hasJunction = true} and keep their plans, which is why only conveyor sources used
+         * to work. Mirror the conveyor path whenever this batch really contains crossings.
+         */
+        private boolean handleDuctBridgePass(Seq<BuildPlan> plans){
+            if(!(source instanceof Duct)) return false;
+            if(!containsCrossing(plans)) return false;
+
+            Block bridge = ((Duct)source).bridgeReplacement == null ? Blocks.ductBridge : ((Duct)source).bridgeReplacement;
+            if(bridge == null) return false;
+
+            Boolf<Block> avoid = b -> b instanceof Duct || b instanceof StackConveyor || b instanceof Conveyor;
+            if(bridge instanceof DirectionBridge){
+                Placement.calculateBridges(plans, (DirectionBridge)bridge, true, avoid);
+                return true;
+            }
+            if(bridge instanceof ItemBridge){
+                Placement.calculateBridges(plans, (ItemBridge)bridge, true, avoid);
+                return true;
+            }
+            return false;
+        }
+
+        private static boolean containsCrossing(Seq<BuildPlan> plans){
+            return plans.contains(plan -> plan.block == Blocks.invertedSorter);
+        }
+
+        /**
+         * Re-applies crossing replacements on plans that survived bridging. Bridging rebuilds the
+         * plan list and can leave a plain line block on a crossing tile; re-deciding here keeps the
+         * sorter without touching vanilla-bridged plans (their block is a bridge, not a line).
+         */
+        private void restoreCrossings(Seq<BuildPlan> plans){
+            if(!replacementEnabled() || plans.isEmpty()) return;
+
+            CrossingOptions options = crossingOptions();
+            IntSet positions = new IntSet(plans.size);
+            for(BuildPlan plan : plans){
+                positions.add(Point2.pack(plan.x, plan.y));
+            }
+
+            for(BuildPlan plan : plans){
+                if(plan.block == Blocks.invertedSorter) continue;
+                if(kindOf(plan.block) == null) continue;
+                if(!positions.contains(Point2.pack(plan.x + Geometry.d4x(plan.rotation), plan.y + Geometry.d4y(plan.rotation)))) continue;
+                if(!positions.contains(Point2.pack(plan.x + Geometry.d4x(plan.rotation + 2), plan.y + Geometry.d4y(plan.rotation + 2)))) continue;
+
+                Building existing = plan.build();
+                if(existing == null) continue;
+
+                Block replacement = crossingReplacement(
+                    source, existing.block, existing.rotation, plan.rotation, true, true, true, options, plan.block
+                );
+                if(replacement != plan.block) plan.block = replacement;
+            }
         }
 
         private void applyWideDuctBridge(Seq<BuildPlan> plans){

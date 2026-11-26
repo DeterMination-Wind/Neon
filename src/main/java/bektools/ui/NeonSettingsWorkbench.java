@@ -12,7 +12,6 @@ import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Scaling;
-import mdtxcompat.LegacyMindustryXGuard;
 import mindustry.gen.Icon;
 import mindustry.ui.Styles;
 
@@ -27,9 +26,12 @@ import java.util.Map;
 public class NeonSettingsWorkbench extends Table{
     private static final float wideBreakpointDp = 720f;
     private static final float minWorkbenchWidthDp = 300f;
-    private static final float maxWorkbenchWidthDp = 1140f;
     private static final float minWorkbenchHeightDp = 360f;
-    private static final float maxWorkbenchHeightDp = 820f;
+    // Only the real dialog chrome is reserved (side margins, title strip, bottom buttons and the
+    // settings table's reset row); the workbench itself always grows to the rest of the viewport.
+    private static final float wideSideInsetDp = 48f;
+    private static final float narrowSideInsetDp = 16f;
+    private static final float workbenchHeightInsetDp = 272f;
 
     private enum NarrowPage{
         LIST,
@@ -116,15 +118,15 @@ public class NeonSettingsWorkbench extends Table{
 
     public float computeWorkbenchWidthDp(){
         float logicalW = logicalScreenWidth();
-        boolean mdtx = LegacyMindustryXGuard.isMindustryXRuntime();
-        // MindustryX renders a persistent category rail on wide screens (~260-280dp).
-        float reservedChrome = mdtx ? (logicalW >= 960f ? 304f : 72f) : 64f;
-        return Mathf.clamp(logicalW - reservedChrome, minWorkbenchWidthDp, maxWorkbenchWidthDp);
+        // The settings dialog shows exactly one pane at a time, so no MindustryX category rail
+        // shares this row; fill the viewport minus the dialog's own side insets.
+        float sideInset = logicalW >= wideBreakpointDp ? wideSideInsetDp : narrowSideInsetDp;
+        return Math.max(minWorkbenchWidthDp, logicalW - sideInset);
     }
 
     public float computeWorkbenchHeightDp(){
         float logicalH = logicalScreenHeight();
-        return Mathf.clamp(logicalH - 176f, minWorkbenchHeightDp, maxWorkbenchHeightDp);
+        return Math.max(minWorkbenchHeightDp, logicalH - workbenchHeightInsetDp);
     }
 
     @Override

@@ -45,7 +45,8 @@
       "trackUpstream": true,
       "javaPackageDir": "src/main/java/smartplacement",
       "mainClassFile": "SmartPlacementMod.java",
-      "bundlesDir": "src/main/resources/bundles"
+      "bundlesDir": "src/main/resources/bundles",
+      "injectBekHooks": false
     },
     {
       "id": "hwps",

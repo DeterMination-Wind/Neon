@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-11-23T11:29:54Z",
+  "generatedAtUtc": "2026-11-26T05:16:32Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -264,8 +264,8 @@
     },
     "ap": {
       "sourceKind": "snapshot",
-      "syncedHead": "nogit-bc7d1198cb5d806521ead894f9659696947d060c",
-      "workspaceHeadAtSync": "nogit-bc7d1198cb5d806521ead894f9659696947d060c",
+      "syncedHead": "nogit-cb25be721f0b04d43981d379802ccf182ddd271c",
+      "workspaceHeadAtSync": "nogit-cb25be721f0b04d43981d379802ccf182ddd271c",
       "workspaceDirtyAtSync": false,
       "upstreamRef": null,
       "upstreamHeadAtSync": null,
@@ -316,8 +316,8 @@
     },
     "smp": {
       "sourceKind": "git",
-      "syncedHead": "49fdf155e853ec4cf0fea1247c2658c5d47c9da1",
-      "workspaceHeadAtSync": "49fdf155e853ec4cf0fea1247c2658c5d47c9da1",
+      "syncedHead": "7308af4fa89b5c5fd6b8e75a34135bcced013b94",
+      "workspaceHeadAtSync": "7308af4fa89b5c5fd6b8e75a34135bcced013b94",
       "workspaceDirtyAtSync": false,
       "upstreamRef": null,
       "upstreamHeadAtSync": null,

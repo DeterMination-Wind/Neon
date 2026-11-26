@@ -12,6 +12,7 @@
 ## 生命周期与隔离
 
 - `moduleGates` 是加载期总开关，语义是重启生效；关闭的模块不构造、不初始化、不注册钩子。
+- 子模组是在 `BekToolsMod` 构造器里 `new` + `init()` 的，**早于游戏内容加载**（`Vars.init()` 里 `content = new ContentLoader()` 之后、`ClientLauncher` 的 `content.load()` 之前）。因此 `init()` 里读 `Vars.content.blocks()` 拿到的是空表；需要内容数据的模块必须惰性初始化或挂 `ClientLoadEvent`，否则会静默不生效（历史上 `smp` 就这样失效过）。
 - `markBundled` / `initializeModule` / `initializeFeature` 捕获 `Throwable`，记入 `moduleFailures`；同一模块的第一次失败会短路后续初始化。`gatedModules`（用户关闭）与失败是两回事。
 - 失败模块在设置页显示 `@bektools.module.failed`；不要静默吞掉，也不要把初始化移出隔离层。
 - 模块字段可能为 null；所有消费点都要判空。

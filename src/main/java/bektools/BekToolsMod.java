@@ -626,7 +626,9 @@ public class BekToolsMod extends Mod{
 
         // Build & Logistics (10)
         entries.add(moduleEntry(moduleRadialBuildMenu, NeonSettingsTab.BUILD_LOGISTICS, radialBuildMenu != null, "bektools.section.rbm", "Radial Build Menu", Icon.list, true, null, st -> radialBuildMenu.bekBuildSettings(st), null));
-        entries.add(moduleEntry(moduleSmartPlacement, NeonSettingsTab.BUILD_LOGISTICS, smartPlacement != null, "bektools.section.smp", "Smart Placement", Icon.rightOpen, false, "@bektools.section.smp.none", null, null));
+        entries.add(moduleEntry(moduleSmartPlacement, NeonSettingsTab.BUILD_LOGISTICS, smartPlacement != null, "bektools.section.smp", "Smart Placement", Icon.rightOpen, true, null, st -> {
+            if(smartPlacement != null) smartPlacement.bekBuildSettings(st);
+        }, null));
         entries.add(moduleEntry(moduleAutoPruner, NeonSettingsTab.BUILD_LOGISTICS, autoPruner != null, "bektools.section.ap", "Auto Pruner", Icon.trash, true, null, st -> autoPruner.bekBuildSettings(st), null));
         entries.add(moduleEntry(moduleColorTheDucts, NeonSettingsTab.BUILD_LOGISTICS, colorTheDucts != null, "bektools.section.ctd", "Color-the-ducts", Icon.imageSmall, true, null, st -> colorTheDucts.bekBuildSettings(st), null));
         entries.add(moduleEntry(moduleBetterProjectorOverlay, NeonSettingsTab.BUILD_LOGISTICS, betterProjectorOverlay != null, "bektools.section.bpo", "Better Projector Overlay", Icon.power, true, null, BetterProjectorOverlayMod::bekBuildSettings, null));

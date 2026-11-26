@@ -11,12 +11,15 @@ import arc.struct.LongMap;
 import arc.struct.Seq;
 import arc.util.Align;
 import arc.util.Interval;
+import arc.util.Log;
 import arc.util.Time;
 import autopruner.AutoPrunerMod;
 import mindustry.game.EventType;
+import mindustry.game.Team;
 import mindustry.gen.Building;
 import mindustry.gen.Groups;
 import mindustry.ui.dialogs.SettingsMenuDialog;
+import mindustry.world.blocks.power.BeamNode;
 import mindustry.world.blocks.power.PowerNode;
 import mindustry.world.blocks.storage.CoreBlock;
 
@@ -67,6 +70,7 @@ public class AutoPrunerFeature {
 
         applyDefaults();
         refreshSettings();
+        Log.info("[AutoPruner] init：按电网连通性削多余电力节点（getPowerConnections 图，含 BeamNode）。");
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
             registerKeybinds();
@@ -199,28 +203,224 @@ public class AutoPrunerFeature {
         showToast(Core.bundle.format("ap.toast.prune.summary", removed, skippedProtected, skippedInvalid));
     }
 
+    /**
+     * 冗余电力节点判定：把电力网络当作无向图，只要删掉某个电力节点不会让所在连通分量分裂，就判为冗余；反复剥离到不动点。
+     *
+     * 顶点来自世界瓦片扫描（`world.tiles.eachTile` + 中心格），不依赖 Groups.build：Mindustry 自己的编辑器代码里就注明过 "Groups.build can be empty"，用瓦片才是权威来源。边 = Building.getPowerConnections（游戏建 PowerGraph 用的同一套关系：相邻通电建筑 + power.links 连线），再并上显式 power.links 兜底。
+     *
+     * 可拆的只有 PowerNode / BeamNode / LongPowerNode（含子类），并且必须能通过 validBreak（本队与 derelict 中立建筑可拆，敌对建筑不可拆）。电池、发电机、用电器、电力二极管、电力束塔等一律作为固定顶点保留。
+     *
+     * 结构性保证：
+     * 1. 剩余节点的诱导子图与拆除前保持同样的连通关系，任何一段电网都不会被拆散；
+     * 2. 最终保留的每个可拆节点都是当前网络的割点，单独再拆就会断开电网。
+     */
     private static Seq<Building> collectRedundantPowerNodesSnapshot() {
         Seq<Building> out = new Seq<>();
-        IntSet added = new IntSet();
+
+        Seq<Building> builds = new Seq<>();
+        LongMap<Integer> indices = new LongMap<>();
+        Seq<Building> ownPowered = new Seq<>();
+        int[] stats = new int[3]; // 0 = 世界中心建筑，1 = Groups.build 数，2 = 本队带电
 
         Groups.build.each(build -> {
-            if (build == null || !build.isValid() || build.team != player.team()) return;
-            if (!(build.block instanceof PowerNode)) return;
-            if (build.power == null) return;
+            if (build != null) stats[1]++;
+        });
 
-            IntSeq links = build.power.links;
-            if (links == null || links.size != 1) return;
-
-            Building other = world.build(links.first());
-            if (other == null || !other.isValid() || other.power == null || other.power.links == null) return;
-            if (other.power.links.size >= 2) return;
-
-            if (added.add(build.pos())) {
-                out.add(build);
+        world.tiles.eachTile(tile -> {
+            if (tile == null || !tile.isCenter() || tile.build == null) return;
+            Building build = tile.build;
+            stats[0]++;
+            if (!build.isValid() || build.power == null) return;
+            if (indices.containsKey(build.pos())) return;
+            indices.put(build.pos(), builds.size);
+            builds.add(build);
+            if (player != null && build.team == player.team()) {
+                stats[2]++;
+                ownPowered.add(build);
             }
         });
 
+        int count = builds.size;
+        if (count == 0) {
+            Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，其中带电且有效 0，跳过。", stats[0], stats[1]);
+            return out;
+        }
+
+        IntSeq[] adjacency = new IntSeq[count];
+        for (int i = 0; i < count; i++) adjacency[i] = new IntSeq();
+
+        Seq<Building> connections = new Seq<>();
+        int edges = 0;
+
+        for (int i = 0; i < count; i++) {
+            Building build = builds.get(i);
+
+            // 1) 游戏自己的电网关系：相邻通电建筑 + 连线，含二极管方向与绝缘判定
+            build.getPowerConnections(connections);
+            for (int c = 0; c < connections.size; c++) {
+                edges += connectEdge(i, connections.get(c), indices, adjacency);
+            }
+
+            // 2) 显式连线兜底：对方即使因为队伍 / 模块原因没进顶点集，也不能丢边
+            IntSeq links = build.power.links;
+            if (links != null) {
+                for (int l = 0; l < links.size; l++) {
+                    edges += connectEdge(i, world.build(links.get(l)), indices, adjacency);
+                }
+            }
+        }
+
+        boolean[] removable = new boolean[count];
+        int candidates = 0, wrongType = 0, protectedCount = 0, blocked = 0;
+
+        for (int i = 0; i < count; i++) {
+            int verdict = prunableVerdict(builds.get(i));
+            if (verdict == 0) {
+                removable[i] = true;
+                candidates++;
+            } else if (verdict == 1) {
+                wrongType++;
+            } else if (verdict == 2) {
+                protectedCount++;
+            } else {
+                blocked++;
+            }
+        }
+
+        Log.info("[AutoPruner] 诊断：世界中心建筑 @，Groups.build @，本队 @（带电 @），图顶点 @，连线 @；队伍分布 @；非节点 @，受保护 @，不可拆 @，可拆节点 @。", stats[0], stats[1], player == null ? "?" : player.team().name, stats[2], count, edges, teamHistogram(builds), wrongType, protectedCount, blocked, candidates);
+
+        if (candidates == 0) {
+            Log.info("[AutoPruner] 诊断：本队带电方块样本 @", blockSample(ownPowered, 10));
+            return out;
+        }
+
+        boolean[] removed = new boolean[count];
+        int[] queue = new int[count];
+        int[] visitStamp = new int[count];
+        int stamp = 0;
+
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (int i = 0; i < count; i++) {
+                if (removed[i] || !removable[i]) continue;
+
+                int neighbor = -1;
+                IntSeq neighbors = adjacency[i];
+                for (int k = 0; k < neighbors.size; k++) {
+                    int other = neighbors.get(k);
+                    if (removed[other]) continue;
+                    neighbor = other;
+                    break;
+                }
+
+                int componentSize = reachableCount(i, -1, adjacency, removed, queue, visitStamp, ++stamp);
+                if (neighbor >= 0 && reachableCount(neighbor, i, adjacency, removed, queue, visitStamp, ++stamp) != componentSize - 1) {
+                    continue;
+                }
+
+                removed[i] = true;
+                out.add(builds.get(i));
+                changed = true;
+            }
+        }
+
+        Log.info("[AutoPruner] 电力网络：图顶点 @，连线 @，可拆节点 @，判定多余 @。", count, edges, candidates, out.size);
+
         return out;
+    }
+
+    /** 把 from 与 other 之间的边加进无向邻接表，返回新增边数（0 或 1）。 */
+    private static int connectEdge(int from, Building other, LongMap<Integer> indices, IntSeq[] adjacency) {
+        if (other == null) return 0;
+        Integer to = indices.get(other.pos());
+        if (to == null || to == from) return 0;
+        if (adjacency[from].contains(to)) return 0;
+        addNeighbor(adjacency[from], to);
+        addNeighbor(adjacency[to], from);
+        return 1;
+    }
+
+    private static String blockSample(Seq<Building> list, int limit) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size && i < limit; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(list.get(i).block.name);
+        }
+        return sb.toString();
+    }
+
+    /** 诊断用：按队伍统计顶点数量，例如 `derelict x33, sharded x8`。 */
+    private static String teamHistogram(Seq<Building> list) {
+        Seq<Team> keys = new Seq<>();
+        IntSeq counts = new IntSeq();
+
+        for (int i = 0; i < list.size; i++) {
+            Team team = list.get(i).team;
+            int index = -1;
+            for (int k = 0; k < keys.size; k++) {
+                if (keys.get(k) == team) {
+                    index = k;
+                    break;
+                }
+            }
+            if (index < 0) {
+                keys.add(team);
+                counts.add(1);
+            } else {
+                counts.set(index, counts.get(index) + 1);
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int k = 0; k < keys.size; k++) {
+            if (k > 0) sb.append(", ");
+            Team team = keys.get(k);
+            sb.append(team == null ? "null" : team.name).append(" x").append(counts.get(k));
+        }
+        return sb.toString();
+    }
+
+    private static void addNeighbor(IntSeq neighbors, int index) {
+        if (!neighbors.contains(index)) neighbors.add(index);
+    }
+
+    /** 判定结论：0 = 可拆的电力节点；1 = 不是电力节点；2 = 受保护；3 = 当前不可拆（权限 / 不可破坏 / 无输入）。 */
+    private static int prunableVerdict(Building build) {
+        if (build == null || !build.isValid() || build.block == null) return 3;
+        if (!(build.block instanceof PowerNode) && !(build.block instanceof BeamNode)) return 1;
+        if (isProtectedBuilding(build)) return 2;
+        if (control == null || control.input == null) return 3;
+        return control.input.validBreak(build.tileX(), build.tileY()) ? 0 : 3;
+    }
+
+    /**
+     * 从 start 出发统计可达顶点数，跳过 removed 与 excluded。
+     * visitStamp 用时间戳复用数组，避免每次判定都重新分配 / 清空。
+     */
+    private static int reachableCount(int start, int excluded, IntSeq[] adjacency, boolean[] removed,
+                                      int[] queue, int[] visitStamp, int stamp) {
+        int head = 0;
+        int tail = 0;
+        int total = 0;
+
+        queue[tail++] = start;
+        visitStamp[start] = stamp;
+
+        while (head < tail) {
+            int index = queue[head++];
+            total++;
+
+            IntSeq neighbors = adjacency[index];
+            for (int k = 0; k < neighbors.size; k++) {
+                int other = neighbors.get(k);
+                if (other == excluded || removed[other] || visitStamp[other] == stamp) continue;
+                visitStamp[other] = stamp;
+                queue[tail++] = other;
+            }
+        }
+
+        return total;
     }
 
     private static void runRemoveByTimeRule() {
@@ -306,10 +506,10 @@ public class AutoPrunerFeature {
 
     private static boolean canAutoBreak(Building build) {
         if (build == null || !build.isValid()) return false;
-        if (build.team != player.team()) return false;
         if (control == null || control.input == null) return false;
         if (build.tile == null) return false;
         if (isProtectedBuilding(build)) return false;
+        // validBreak 已经包含队伍判定：本队建筑与 derelict 中立建筑都可通过
         return control.input.validBreak(build.tileX(), build.tileY());
     }
 

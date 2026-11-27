@@ -1,135 +1,124 @@
-# Neon / 氖 (Mindustry Mod)
-<h1 align="center">
-  <a href="https://github.com/DeterMination-Wind/Neon/releases/latest"><img src="https://img.shields.io/github/v/release/DeterMination-Wind/Neon?display_name=release&label=Latest%20Release&color=green"></a>
-  <a href="https://github.com/DeterMination-Wind/Neon/releases"><img src="https://img.shields.io/github/downloads/DeterMination-Wind/Neon/total?label=Downloads&color=blue"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/DeterMination-Wind/Neon?label=License"></a>
-  <a href="https://github.com/DeterMination-Wind/Neon"><img src="https://img.shields.io/github/stars/DeterMination-Wind/Neon?style=flat&label=Star%20this%20mod!&color=yellow"></a>
-</h1>
+# Neon / 氖
 
 > [!NOTE]
-> 若有反馈，请发送反馈到bugsoc@qq.com / If you have any feedback, please send it to bugsoc@qq.com
+> 使用中遇到问题或有功能建议？欢迎发送邮件至 bugsoc@qq.com 反馈！
+> Have feedback or found a bug? Feel free to reach out at bugsoc@qq.com!
 
-- [中文](#中文)
-- [English](#english)
+* [中文](https://www.google.com/search?q=%23%E4%B8%AD%E6%96%87)
+* [English](https://www.google.com/search?q=%23english)
+
+---
 
 ## 中文
 
-> 看得更清楚，操作更顺手，问题更容易查清。
+> **战场局势一目了然，日常操作行云流水，疑难问题一查到底。**
 
-### Neon 是什么
+### Neon 是什么？
 
-Neon 是 Mindustry 的客户端辅助工作台。
+**Neon** 是一款专为 Mindustry 打造的**纯客户端全能辅助工具箱**。
 
-它把日常游玩、建造、联机、制图和逻辑制作中常用的工具集中到一个模组里：让重要信息更容易看见，让重复操作更顺手，让复杂问题更容易定位。
+无论你是专注前线作战、热衷蓝图建造、喜欢联机开黑，还是钻研地图制作与逻辑编程，Neon 都能把分散在各处的实用辅助功能整合进**同一个模组**中——告别翻找十几个独立 Mod 的烦恼，一个安装包、一套统一设置、一个清爽的悬浮窗即可全部搞定。
 
-Neon 的价值不在于堆叠功能，而在于把原本分散的辅助工具用一个安装包、一个设置入口和统一的悬浮界面管理起来。你可以按自己的玩法启用观察、建造、单位控制、地图编辑、逻辑排错、信息查询和交流辅助，而不必单独安装和维护一长串模组。
+它不会改动游戏的任何原版内容（不新增方块、单位或资源），也**无需服务器安装**。你只需要按需开启自己顺手的功能，就能在单人与多人联机中获得更清晰的战场视野和更流畅的操作体验。
 
-Neon 是纯客户端模组，不需要服务器安装，适合单机和多人游戏。它不增加新的方块、单位或资源，主要帮助你减少界面切换、重复操作、误判和信息盲区。
+### 为什么选择 Neon？
 
-### 为什么使用 Neon
+* ** 洞察全局，告别盲区**：将电网负载、物流走向、单位状态、建筑投影及敌方威胁范围直接呈现在画面上，关键信息不用再靠猜。
+* ** 简化操作，手感拉满**：优化建筑施工、单位编队与微操、地图编辑以及游戏截图流程，减少重复点击，让操作更贴合你的习惯。
+* ** 精准排错，有据可查**：快速定位逻辑连接引用、数据补丁变动、玩家历史记录与聊天信息中的异常，不再对着复杂工程抓瞎。
+* ** 化零为整，随用随开**：所有功能模块均可自由开关，设置选项、悬浮面板与版本更新入口全部集中管理，既清爽又省心。
 
-- **看清局面**：把电网、物流、单位、投影和威胁等重要信息直接放在游戏画面里。
-- **减少操作**：让建造、编队、单位控制、地图编辑和截图更符合自己的工作流。
-- **查明原因**：帮助定位逻辑引用、数据补丁、玩家信息和聊天内容中的问题。
-- **一次安装，统一管理**：大多数功能可以按需启用，设置、悬浮窗口和更新入口集中在 Neon 中。
+### 快速上手
 
-### 快速开始
+1. **安装模组**：前往 [Releases 页面](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip`（**安卓玩家请下载 `Neon.jar**`），放入 Mindustry 的 `mods` 文件夹并在游戏内启用。
+2. **自定义按键**：进入游戏 `设置 → 控制`，按个人习惯调整 Neon 提供的快捷键。
+3. **按需开启功能**：进入 `设置 → 模组 → Neon`，根据你的游玩偏好勾选开启对应模块。
+4. **呼出悬浮面板**：支持悬浮窗的功能会集中在 **Overlay 管理器**中，点击屏幕左侧的**齿轮图标**或按下默认快捷键 **`Z`** 即可随时呼出。
 
-1. 从 [Releases](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip`，放入 Mindustry 的 `mods` 目录并在游戏内启用。
-2. 在 `设置 → 控制` 中按照需要调整 Neon 提供的快捷键。
-3. 在 `设置 → 模组 → Neon` 中按分组启用和配置功能。
-4. 支持悬浮窗口的功能会出现在统一的 Overlay 管理器中，可使用屏幕左侧的齿轮按钮或默认快捷键 `Z` 打开。
+> [!WARNING]
+> **防冲突提示**：Neon 已整合了相关独立辅助模组的功能。启用 Neon 时，**请务必关闭或移除对应的独立版本 Mod**，以免出现功能重复或界面重叠冲突。
 
-Neon 已经包含相关独立模组的功能。请不要同时启用对应的独立版本，否则可能出现重复功能或界面冲突。
+### 兼容性说明
 
-### 兼容性
+* **游戏版本**：需要 **Mindustry v160.1** 或更高版本。
+* **联机支持**：纯客户端运行，加入任意原版或第三方服务器均可正常使用，无需服务端安装。
+* **环境适配**：原版客户端即可体验全部核心功能；若同时安装了 **MindustryX** 或提供兼容接口的客户端，支持的功能还将自动解锁对应的 OverlayUI 与地图标记增强效果。
+* **安卓端须知**：安卓设备请务必下载 Release 中包含 `classes.dex` 的 `Neon.jar`，切勿使用桌面版构建的中间文件。
 
-- 需要 Mindustry v160.1 或更高版本。
-- Neon 为纯客户端模组，服务器不需要安装。
-- 原版客户端可以使用核心功能；安装 MindustryX 或提供兼容接口的环境后，支持的功能可以接入相应的 OverlayUI 和标记能力。
-- 安卓端请使用 Release 中包含 `classes.dex` 的 `Neon.jar`，不要使用桌面构建的中间文件。
+### 了解更多与反馈
 
-### 功能详情
+*  **完整功能手册**：想了解每个模块的详细用法与术语说明？请查阅 [FEATURES.md](FEATURES.md)。
+*  **进阶与开发文档**：架构设计、测试及使用指南分类目录见 [docs/](https://www.google.com/search?q=docs/README.md)。
+*  **玩家交流群**：加入 [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu) 一起交流或反馈 Bug。
 
-完整功能说明、使用场景和术语解释请查看 [FEATURES.md](FEATURES.md)。
-
-分类文档（架构、开发、测试、发布、用户指南）见 [docs/](docs/README.md)。
-
-### 反馈
-
-- [BEK 辅助 mod 反馈群](https://qm.qq.com/q/cZWzPa4cTu)
-
-### 开发者构建
-
-在项目目录执行：
+在项目根目录执行以下命令即可构建：
 
 ```powershell
 .\gradlew.bat clean deploy
+
 ```
 
-主要输出：
+主要构建产物输出路径：
 
-- `dist/Neon.zip`
-- `dist/Neon.jar`
-- `../构建/Neon/Neon-<version>.zip`
-- `../构建/Neon/Neon-<version>.jar`
+* `dist/Neon.zip`
+* `dist/Neon.jar`
+* `../构建/Neon/Neon-<version>.zip`
+* `../构建/Neon/Neon-<version>.jar`
+
+---
 
 ## English
 
-> See more clearly. Build with less friction. Troubleshoot with less guesswork.
+> **See the battlefield clearly. Build effortlessly. Troubleshoot without guesswork.**
 
 ### What is Neon?
 
-Neon is a client-side companion toolkit for Mindustry.
+**Neon** is an all-in-one, **client-side companion toolkit** for Mindustry.
 
-It brings together the tools commonly needed for playing, building, multiplayer, map making, and logic work. Important information becomes easier to see, repetitive actions become easier to perform, and complicated problems become easier to trace.
+Whether you are fighting on the frontlines, designing blueprints, playing multiplayer, crafting maps, or wiring up logic processors, Neon brings your essential utility tools together into **a single mod**. Instead of juggling a long list of separate mods, you get one clean package, one settings menu, and one unified overlay workflow.
 
-Neon is not just a pile of features. It gives a set of focused client-side tools one package, one settings entry, and one shared overlay workflow. Enable the parts that fit your play style without installing and maintaining a long chain of separate mods.
-
-Neon does not require server installation and works well in both singleplayer and multiplayer. It does not add new blocks, units, or resources; it improves the information and workflows around the game.
+Neon adds no new blocks, units, or resources, and **requires zero server-side installation**. Simply toggle on the tools that match your playstyle to eliminate blind spots, cut down on repetitive clicks, and play smoother in both singleplayer and multiplayer.
 
 ### Why use Neon?
 
-- **See the situation**: surface useful power, logistics, unit, projector, and threat information in-game.
-- **Work with less friction**: streamline building, formations, unit control, map editing, and screenshots.
-- **Find the cause**: trace logic references, datapatch changes, player records, and chat-related problems.
-- **Install once, manage centrally**: most features can be enabled as needed, with shared settings, overlays, and update entry points.
+* ** See the whole picture**: Surface critical power grid stats, logistics flows, unit statuses, projector ranges, and incoming threats directly on your screen.
+* ** Play with less friction**: Streamline building, unit formations, micro-control, map editing, and screenshots with workflows designed to save clicks.
+* ** Troubleshoot with confidence**: Quickly trace logic references, datapatch changes, player records, and chat logs instead of guessing what went wrong.
+* ** One install, total control**: Every module can be toggled on or off at will, with settings, floating overlays, and update checks managed in one place.
 
-### Quick start
+### Quick Start
 
-1. Download `Neon.zip` from [Releases](https://github.com/DeterMination-Wind/Neon/releases), put it in Mindustry's `mods` folder, and enable it in-game.
-2. Rebind the Neon keybinds you need in `Settings -> Controls`.
-3. Configure features in `Settings -> Mods -> Neon`.
-4. Overlay-capable features appear in the shared Overlay manager. Open it with the gear button on the left side of the screen or the default `Z` hotkey.
+1. **Install**: Download `Neon.zip` from [Releases](https://github.com/DeterMination-Wind/Neon/releases) (**Android users: download `Neon.jar**`), drop it into your Mindustry `mods` folder, and enable it in-game.
+2. **Set your hotkeys**: Open `Settings -> Controls` to customize Neon's keybinds to your liking.
+3. **Pick your tools**: Head to `Settings -> Mods -> Neon` to enable and configure features by category.
+4. **Open the Overlay**: Overlay-enabled tools live in the shared **Overlay Manager**—click the **gear icon** on the left edge of your screen or press **`Z`** (default) to open it anytime.
 
-Neon already contains the functionality of the related standalone mods. Do not enable their standalone versions at the same time, or duplicate features and UI conflicts may occur.
+> [!WARNING]
+> **Avoid Mod Conflicts**: Neon already includes the features of its related standalone mods. **Do not run their standalone versions alongside Neon**, or you may encounter duplicate features and UI overlaps.
 
 ### Compatibility
 
-- Requires Mindustry v160.1 or later.
-- Neon is fully client-side; servers do not need to install it.
-- Core features work on vanilla clients. With MindustryX or a compatible bridge available, supported features can use the corresponding OverlayUI and marker integrations.
-- On Android, use the release `Neon.jar` that contains `classes.dex`, not a desktop-only or intermediate build.
+* **Game Version**: Requires **Mindustry v160.1** or later.
+* **Multiplayer Ready**: 100% client-side—works seamlessly on any server without requiring server-side installation.
+* **Client Integrations**: Core features work right out of the box on vanilla clients. If you use **MindustryX** or a compatible bridge, supported features automatically hook into enhanced OverlayUI and map marker capabilities.
+* **Android Note**: Please use the official release `Neon.jar` containing `classes.dex`—do not use desktop-only or intermediate build files.
 
-### Feature details
+### Learn More & Community
 
-See [FEATURES.md](FEATURES.md) for the complete feature guide, use cases, and terminology. Categorized docs (architecture, development, testing, release, user guide) live under [docs/](docs/README.md).
+*  **Full Feature Guide**: Check out [FEATURES.md](FEATURES.md) for detailed breakdowns, use cases, and terminology.
+*  **Documentation**: Browse categorized guides (user guides, architecture, testing, and releases) in [docs/](https://www.google.com/search?q=docs/README.md).
+*  **Community & Support**: Join our [Discord feedback channel](https://discord.com/channels/391020510269669376/1467903894716940522) to share feedback or report issues.
 
-### Feedback
-
-- [Discord feedback channel](https://discord.com/channels/391020510269669376/1467903894716940522)
-
-### Development
-
-From the project directory:
+Run the following command from the project root directory:
 
 ```powershell
 .\gradlew.bat clean deploy
+
 ```
 
-Main outputs:
+Main build outputs:
 
-- `dist/Neon.zip`
-- `dist/Neon.jar`
-- `../构建/Neon/Neon-<version>.zip`
-- `../构建/Neon/Neon-<version>.jar`
+* `dist/Neon.zip`
+* `dist/Neon.jar`
+* `../构建/Neon/Neon-<version>.zip`
+* `../构建/Neon/Neon-<version>.jar`

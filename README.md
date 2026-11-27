@@ -23,10 +23,10 @@
 
 ### 为什么选择 Neon？
 
-* ** 洞察全局，告别盲区**：将电网负载、物流走向、单位状态、建筑投影及敌方威胁范围直接呈现在画面上，关键信息不用再靠猜。
-* ** 简化操作，手感拉满**：优化建筑施工、单位编队与微操、地图编辑以及游戏截图流程，减少重复点击，让操作更贴合你的习惯。
-* ** 精准排错，有据可查**：快速定位逻辑连接引用、数据补丁变动、玩家历史记录与聊天信息中的异常，不再对着复杂工程抓瞎。
-* ** 化零为整，随用随开**：所有功能模块均可自由开关，设置选项、悬浮面板与版本更新入口全部集中管理，既清爽又省心。
+* **洞察全局，告别盲区**：将电网负载、物流走向、单位状态、建筑投影及敌方威胁范围直接呈现在画面上，关键信息不用再靠猜。
+* **简化操作，手感拉满**：优化建筑施工、单位编队与微操、地图编辑以及游戏截图流程，减少重复点击，让操作更贴合你的习惯。
+* **精准排错，有据可查**：快速定位逻辑连接引用、数据补丁变动、玩家历史记录与聊天信息中的异常，不再对着复杂工程抓瞎。
+* **化零为整，随用随开**：所有功能模块均可自由开关，设置选项、悬浮面板与版本更新入口全部集中管理，既清爽又省心。
 
 ### 快速上手
 
@@ -81,10 +81,10 @@ Neon adds no new blocks, units, or resources, and **requires zero server-side in
 
 ### Why use Neon?
 
-* ** See the whole picture**: Surface critical power grid stats, logistics flows, unit statuses, projector ranges, and incoming threats directly on your screen.
-* ** Play with less friction**: Streamline building, unit formations, micro-control, map editing, and screenshots with workflows designed to save clicks.
-* ** Troubleshoot with confidence**: Quickly trace logic references, datapatch changes, player records, and chat logs instead of guessing what went wrong.
-* ** One install, total control**: Every module can be toggled on or off at will, with settings, floating overlays, and update checks managed in one place.
+* **See the whole picture**: Surface critical power grid stats, logistics flows, unit statuses, projector ranges, and incoming threats directly on your screen.
+* **Play with less friction**: Streamline building, unit formations, micro-control, map editing, and screenshots with workflows designed to save clicks.
+* **Troubleshoot with confidence**: Quickly trace logic references, datapatch changes, player records, and chat logs instead of guessing what went wrong.
+* **One install, total control**: Every module can be toggled on or off at will, with settings, floating overlays, and update checks managed in one place.
 
 ### Quick Start
 

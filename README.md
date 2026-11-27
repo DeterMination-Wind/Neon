@@ -30,7 +30,7 @@
 
 ### 快速上手
 
-1. **安装模组**：前往 [Releases 页面](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip`（**安卓玩家请下载 `Neon.jar**`），放入 Mindustry 的 `mods` 文件夹并在游戏内启用。
+1. **安装模组**：前往 [Releases 页面](https://github.com/DeterMination-Wind/Neon/releases) 下载 `Neon.zip`（**安卓玩家请下载 `Neon.jar`**），放入 Mindustry 的 `mods` 文件夹并在游戏内启用。
 2. **自定义按键**：进入游戏 `设置 → 控制`，按个人习惯调整 Neon 提供的快捷键。
 3. **按需开启功能**：进入 `设置 → 模组 → Neon`，根据你的游玩偏好勾选开启对应模块。
 4. **呼出悬浮面板**：支持悬浮窗的功能会集中在 **Overlay 管理器**中，点击屏幕左侧的**齿轮图标**或按下默认快捷键 **`Z`** 即可随时呼出。
@@ -88,7 +88,7 @@ Neon adds no new blocks, units, or resources, and **requires zero server-side in
 
 ### Quick Start
 
-1. **Install**: Download `Neon.zip` from [Releases](https://github.com/DeterMination-Wind/Neon/releases) (**Android users: download `Neon.jar**`), drop it into your Mindustry `mods` folder, and enable it in-game.
+1. **Install**: Download `Neon.zip` from [Releases](https://github.com/DeterMination-Wind/Neon/releases) (**Android users: download `Neon.jar`**), drop it into your Mindustry `mods` folder, and enable it in-game.
 2. **Set your hotkeys**: Open `Settings -> Controls` to customize Neon's keybinds to your liking.
 3. **Pick your tools**: Head to `Settings -> Mods -> Neon` to enable and configure features by category.
 4. **Open the Overlay**: Overlay-enabled tools live in the shared **Overlay Manager**—click the **gear icon** on the left edge of your screen or press **`Z`** (default) to open it anytime.

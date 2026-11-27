@@ -3,19 +3,15 @@ package bektools;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
-import arc.scene.event.Touchable;
-import arc.scene.ui.Button;
-import arc.scene.ui.Image;
-import arc.scene.ui.Label;
-import arc.scene.ui.layout.Collapser;
-import arc.scene.ui.layout.Table;
 import arc.scene.style.Drawable;
 import arc.struct.Seq;
 import arc.util.CommandHandler;
 import arc.util.Log;
-import arc.util.Scaling;
 import bektools.profiler.NeonProfilerFeature;
-import bektools.ui.VscodeSettingsStyle;
+import bektools.ui.NeonSettingsContext;
+import bektools.ui.NeonSettingsHostSetting;
+import bektools.ui.NeonSettingsModule;
+import bektools.ui.NeonSettingsTab;
 import betterrtsformation.BetterRTSFormationMod;
 import hidewhatprocessorsshow.HideWhatProcessorsShowMod;
 import mdtxcompat.LegacyMindustryXGuard;
@@ -44,7 +40,6 @@ import mindustry.gen.Icon;
 import mindustry.mod.Mod;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import modupdater.ModUpdaterMod;
-import bektools.ui.RbmStyle;
 import patchviewer.PatchViewerMod;
 import pinyinsearchsupport.PinyinSearchSupportMod;
 import powergridminimap.PowerGridMinimapMod;
@@ -74,7 +69,6 @@ import static mindustry.Vars.ui;
  * supplies X-specific bridges and ModX subclasses through the protected constructor.
  */
 public class BekToolsMod extends Mod{
-    private static final String moduleFailureMessage = "@bektools.module.failed";
     private static final String feedbackDiscordUrl = "https://discord.com/channels/391020510269669376/1467903894716940522";
     private static final String feedbackChineseUrl = "https://qm.qq.com/q/wkddSGW1J8";
 
@@ -568,59 +562,110 @@ public class BekToolsMod extends Mod{
         if(ui == null || ui.settings == null) return;
         if(settingsRegistered) return;
 
+        NeonSettingsContext settingsContext = new NeonSettingsContext(){
+            @Override
+            public boolean isModuleFailed(String moduleId){
+                return BekToolsMod.this.isModuleFailed(moduleId);
+            }
+
+            @Override
+            public Throwable getModuleFailure(String moduleId){
+                return moduleFailures.get(moduleId);
+            }
+
+            @Override
+            public void recordModuleFailure(String moduleId, Throwable failure){
+                BekToolsMod.this.recordModuleFailure(moduleId, failure);
+            }
+
+            @Override
+            public void openFeedback(){
+                BekToolsMod.openFeedback();
+            }
+        };
+
+        // Keep outer SettingsTable list.size constant at 1 so MindustryX's SettingsTable.act()
+        // never triggers spurious rebuilds or stray vanilla reset buttons.
         ui.settings.addCategory("@bektools.category", Icon.settings, table -> {
-            table.pref(new ModuleListSetting(buildModuleEntries(), this));
-            table.pref(new FeedbackSetting());
+            table.pref(new NeonSettingsHostSetting(buildModuleEntries(), settingsContext));
         });
         settingsRegistered = true;
     }
 
-    private Seq<ModuleEntry> buildModuleEntries(){
-        // Each entry's master switch comes from moduleGates (see there for keys/defaults);
-        // modules without a switch UI of their own get their row rendered by Neon.
-        Seq<ModuleEntry> entries = new Seq<>();
-        entries.add(new ModuleEntry(modulePgmm, pgmm != null, Core.bundle.get("bektools.section.pgmm", "Power Grid Minimap"), Icon.power, st -> pgmm.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleStealthPath, stealthPath != null, Core.bundle.get("bektools.section.sp", "Stealth Path"), Icon.map, st -> stealthPath.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleCustomMarker, !isModuleFailed(moduleCustomMarker) && !isModuleGated(moduleCustomMarker), Core.bundle.get("bektools.section.cm", "Custom Marker"), Icon.mapSmall, CustomMarkerFeature::buildSettings));
-        entries.add(new ModuleEntry(moduleScreenshot, !isModuleFailed(moduleScreenshot) && !isModuleGated(moduleScreenshot), Core.bundle.get("bektools.section.bss", "Better ScreenShot (BSS core by Miner)"), Icon.map, BetterScreenShotFeature::buildSettings));
-        entries.add(new ModuleEntry(moduleRadialBuildMenu, radialBuildMenu != null, Core.bundle.get("bektools.section.rbm", "Radial Build Menu"), Icon.list, st -> radialBuildMenu.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterRtsFormation, betterRtsFormation != null, Core.bundle.get("bektools.section.brf", "Better RTS Formation"), Icon.commandRally, st -> betterRtsFormation.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleSmartPlacement, smartPlacement != null, Core.bundle.get("bektools.section.smp", "Smart Placement"), Icon.rightOpen, st -> {
+    private NeonSettingsModule moduleEntry(
+        String moduleId,
+        NeonSettingsTab tab,
+        boolean available,
+        String titleKey,
+        String titleFallback,
+        Drawable icon,
+        boolean hasOwnSettings,
+        String emptyPlaceholderKey,
+        Cons<SettingsMenuDialog.SettingsTable> builder,
+        Cons<Boolean> onSwitchChanged
+    ){
+        ModuleGate gate = moduleGates.get(moduleId);
+        return new NeonSettingsModule(
+            moduleId,
+            tab,
+            available,
+            Core.bundle.get(titleKey, titleFallback),
+            icon,
+            gate == null ? null : gate.key,
+            gate != null && gate.def,
+            gate != null && gate.neonSwitch,
+            hasOwnSettings,
+            emptyPlaceholderKey,
+            builder,
+            onSwitchChanged
+        );
+    }
+
+    private Seq<NeonSettingsModule> buildModuleEntries(){
+        Seq<NeonSettingsModule> entries = new Seq<>();
+
+        // Build & Logistics (10)
+        entries.add(moduleEntry(moduleRadialBuildMenu, NeonSettingsTab.BUILD_LOGISTICS, radialBuildMenu != null, "bektools.section.rbm", "Radial Build Menu", Icon.list, true, null, st -> radialBuildMenu.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleSmartPlacement, NeonSettingsTab.BUILD_LOGISTICS, smartPlacement != null, "bektools.section.smp", "Smart Placement", Icon.rightOpen, true, null, st -> {
             if(smartPlacement != null) smartPlacement.bekBuildSettings(st);
-        }));
-        entries.add(new ModuleEntry(moduleHideWhatProcessorsShow, hideWhatProcessorsShow != null, Core.bundle.get("bektools.section.hwps", "Hide What Processors Show"), Icon.logic, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.hwps.none"))));
-        entries.add(new ModuleEntry(modulePatrolCancel, patrolCancel != null, Core.bundle.get("bektools.section.pc", "Patrol Cancel"), Icon.commandRally, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.pc.none"))));
-        entries.add(new ModuleEntry(moduleBetterTerrainGen, betterTerrainGen != null, Core.bundle.get("bektools.section.btg", "Better Terrain Gen V2"), Icon.map, st -> {
-            betterTerrainGen.bekBuildSettings(st);
-            st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.btg.none"));
-        }));
-        entries.add(new ModuleEntry(moduleAutoPruner, autoPruner != null, Core.bundle.get("bektools.section.ap", "Auto Pruner"), Icon.trash, st -> autoPruner.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleColorTheDucts, colorTheDucts != null, Core.bundle.get("bektools.section.ctd", "Color-the-ducts"), Icon.imageSmall, st -> colorTheDucts.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleLogicSugar, logicSugar != null, Core.bundle.get("bektools.section.ls", "LogicSugar"), Icon.edit, st -> logicSugar.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterMiniMap, betterMiniMap != null, Core.bundle.get("bektools.section.bmm", "betterMiniMap"), Icon.map, BetterMiniMapMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleServerPlayerDatabase, serverPlayerDataBase != null, Core.bundle.get("bektools.section.spdb", "Server Player DataBase"), Icon.players, st -> serverPlayerDataBase.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterMapEditor, betterMapEditor != null, Core.bundle.get("bektools.section.bme", "Better Map Editor"), Icon.map, st -> {
-            st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.bme.none"));
-        }));
-        entries.add(new ModuleEntry(moduleBetterProjectorOverlay, betterProjectorOverlay != null, Core.bundle.get("bektools.section.bpo", "Better Projector Overlay"), Icon.power, BetterProjectorOverlayMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleBetterLogisticsSpeed, betterLogisticsSpeed != null, Core.bundle.get("bektools.section.bls", "Better Logistics Speed"), Icon.rightOpen, BetterLogisticsSpeedMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleBetterHotKey, betterHotKey != null, Core.bundle.get("bektools.section.bhk", "Better HotKey"), Icon.settingsSmall, st -> betterHotKey.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleModUpdater, modUpdater != null, Core.bundle.get("bektools.section.mu", "Mod Updater"), Icon.refresh, ModUpdaterMod::bekBuildSettings));
-        entries.add(new ModuleEntry(moduleWhoUsesThisBuilding, whoUsesThisBuilding != null, Core.bundle.get("bektools.section.wutb", "Who Uses This Building"), Icon.logicSmall, st -> whoUsesThisBuilding.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(modulePatchViewer, patchViewer != null, Core.bundle.get("bektools.section.pv", "PatchViewer"), Icon.list, st -> patchViewer.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(modulePinyinSearchSupport, pinyinSearchSupport != null, Core.bundle.get("bektools.section.pss", "Pinyin Search Support"), Icon.zoom, st -> pinyinSearchSupport.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleForeignServerTranslator, foreignServerTranslator != null, Core.bundle.get("bektools.section.fst", "Foreign Server Translator"), Icon.chat, st -> foreignServerTranslator.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleTripwire, tripwire != null, Core.bundle.get("bektools.section.tw", "Tripwire"), Icon.map, st -> tripwire.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBetterPolyAi, betterPolyAi != null, Core.bundle.get("bektools.section.bpa", "Better PolyAI"), Icon.units, st -> betterPolyAi.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleAdvancedReplace, advancedReplace != null, Core.bundle.get("bektools.section.ar", "Advanced Replace"), Icon.map, st -> advancedReplace.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleRandom, random != null, Core.bundle.get("bektools.section.random", "Random"), Icon.effect, st -> {
-            random.bekBuildSettings(st);
-            st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.random.none"));
-        }));
-        entries.add(new ModuleEntry(moduleLockAttack, lockAttack != null, Core.bundle.get("bektools.section.la", "Lock Attack"), Icon.lock, st -> lockAttack.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleBuildXray, buildXray != null, Core.bundle.get("bektools.section.bx", "Build X-ray (by Miner)"), Icon.eyeSmall, st -> buildXray.bekBuildSettings(st)));
-        entries.add(new ModuleEntry(moduleOverlayCompatBridge, overlayCompatBridge != null, Core.bundle.get("bektools.section.ocb", "OverlayCompatBridge"), Icon.layers, st -> st.pref(new RbmStyle.SubHeaderSetting("@bektools.section.ocb.none"))));
-        entries.add(new ModuleEntry(moduleProfiler, !isModuleFailed(moduleProfiler) && !isModuleGated(moduleProfiler), Core.bundle.get("bektools.section.profiler", "Performance Profiler"), Icon.chartBar, NeonProfilerFeature::buildSettings));
+        }, null));
+        entries.add(moduleEntry(moduleAutoPruner, NeonSettingsTab.BUILD_LOGISTICS, autoPruner != null, "bektools.section.ap", "Auto Pruner", Icon.trash, true, null, st -> autoPruner.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleColorTheDucts, NeonSettingsTab.BUILD_LOGISTICS, colorTheDucts != null, "bektools.section.ctd", "Color-the-ducts", Icon.imageSmall, true, null, st -> colorTheDucts.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleBetterProjectorOverlay, NeonSettingsTab.BUILD_LOGISTICS, betterProjectorOverlay != null, "bektools.section.bpo", "Better Projector Overlay", Icon.power, true, null, BetterProjectorOverlayMod::bekBuildSettings, null));
+        entries.add(moduleEntry(moduleBetterLogisticsSpeed, NeonSettingsTab.BUILD_LOGISTICS, betterLogisticsSpeed != null, "bektools.section.bls", "Better Logistics Speed", Icon.rightOpen, true, null, BetterLogisticsSpeedMod::bekBuildSettings, null));
+        entries.add(moduleEntry(moduleBetterPolyAi, NeonSettingsTab.BUILD_LOGISTICS, betterPolyAi != null, "bektools.section.bpa", "Better PolyAI", Icon.units, true, null, st -> betterPolyAi.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleAdvancedReplace, NeonSettingsTab.BUILD_LOGISTICS, advancedReplace != null, "bektools.section.ar", "Advanced Replace", Icon.map, true, null, st -> advancedReplace.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleBuildXray, NeonSettingsTab.BUILD_LOGISTICS, buildXray != null, "bektools.section.bx", "Build X-ray (by Miner)", Icon.eyeSmall, true, null, st -> buildXray.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleWhoUsesThisBuilding, NeonSettingsTab.BUILD_LOGISTICS, whoUsesThisBuilding != null, "bektools.section.wutb", "Who Uses This Building", Icon.logicSmall, true, null, st -> whoUsesThisBuilding.bekBuildSettings(st), null));
+
+        // Combat & Vision (8)
+        entries.add(moduleEntry(modulePgmm, NeonSettingsTab.COMBAT_HUD, pgmm != null, "bektools.section.pgmm", "Power Grid Minimap", Icon.power, true, null, st -> pgmm.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleStealthPath, NeonSettingsTab.COMBAT_HUD, stealthPath != null, "bektools.section.sp", "Stealth Path", Icon.map, true, null, st -> stealthPath.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleBetterMiniMap, NeonSettingsTab.COMBAT_HUD, betterMiniMap != null, "bektools.section.bmm", "betterMiniMap", Icon.map, true, null, BetterMiniMapMod::bekBuildSettings, null));
+        entries.add(moduleEntry(moduleBetterRtsFormation, NeonSettingsTab.COMBAT_HUD, betterRtsFormation != null, "bektools.section.brf", "Better RTS Formation", Icon.commandRally, true, null, st -> betterRtsFormation.bekBuildSettings(st), null));
+        entries.add(moduleEntry(modulePatrolCancel, NeonSettingsTab.COMBAT_HUD, patrolCancel != null, "bektools.section.pc", "Patrol Cancel", Icon.commandRally, false, "@bektools.section.pc.none", null, null));
+        entries.add(moduleEntry(moduleLockAttack, NeonSettingsTab.COMBAT_HUD, lockAttack != null, "bektools.section.la", "Lock Attack", Icon.lock, true, null, st -> lockAttack.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleTripwire, NeonSettingsTab.COMBAT_HUD, tripwire != null, "bektools.section.tw", "Tripwire", Icon.map, true, null, st -> tripwire.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleCustomMarker, NeonSettingsTab.COMBAT_HUD, !isModuleFailed(moduleCustomMarker) && !isModuleGated(moduleCustomMarker), "bektools.section.cm", "Custom Marker", Icon.mapSmall, true, null, CustomMarkerFeature::buildSettings, null));
+
+        // Logic & Editor (6)
+        entries.add(moduleEntry(moduleLogicSugar, NeonSettingsTab.LOGIC_EDITOR, logicSugar != null, "bektools.section.ls", "LogicSugar", Icon.edit, true, null, st -> logicSugar.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleHideWhatProcessorsShow, NeonSettingsTab.LOGIC_EDITOR, hideWhatProcessorsShow != null, "bektools.section.hwps", "Hide What Processors Show", Icon.logic, false, "@bektools.section.hwps.none", null, null));
+        entries.add(moduleEntry(moduleBetterTerrainGen, NeonSettingsTab.LOGIC_EDITOR, betterTerrainGen != null, "bektools.section.btg", "Better Terrain Gen V2", Icon.map, true, "@bektools.section.btg.none", st -> betterTerrainGen.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleBetterMapEditor, NeonSettingsTab.LOGIC_EDITOR, betterMapEditor != null, "bektools.section.bme", "Better Map Editor", Icon.map, false, "@bektools.section.bme.none", null, null));
+        entries.add(moduleEntry(modulePatchViewer, NeonSettingsTab.LOGIC_EDITOR, patchViewer != null, "bektools.section.pv", "PatchViewer", Icon.list, true, null, st -> patchViewer.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleRandom, NeonSettingsTab.LOGIC_EDITOR, random != null, "bektools.section.random", "Random", Icon.effect, true, "@bektools.section.random.none", st -> random.bekBuildSettings(st), null));
+
+        // Tools & Core (8)
+        entries.add(moduleEntry(moduleBetterHotKey, NeonSettingsTab.TOOLS_CORE, betterHotKey != null, "bektools.section.bhk", "Better HotKey", Icon.settingsSmall, true, null, st -> betterHotKey.bekBuildSettings(st), null));
+        entries.add(moduleEntry(modulePinyinSearchSupport, NeonSettingsTab.TOOLS_CORE, pinyinSearchSupport != null, "bektools.section.pss", "Pinyin Search Support", Icon.zoom, true, null, st -> pinyinSearchSupport.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleForeignServerTranslator, NeonSettingsTab.TOOLS_CORE, foreignServerTranslator != null, "bektools.section.fst", "Foreign Server Translator", Icon.chat, true, null, st -> foreignServerTranslator.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleServerPlayerDatabase, NeonSettingsTab.TOOLS_CORE, serverPlayerDataBase != null, "bektools.section.spdb", "Server Player DataBase", Icon.players, true, null, st -> serverPlayerDataBase.bekBuildSettings(st), null));
+        entries.add(moduleEntry(moduleScreenshot, NeonSettingsTab.TOOLS_CORE, !isModuleFailed(moduleScreenshot) && !isModuleGated(moduleScreenshot), "bektools.section.bss", "Better ScreenShot (BSS core by Miner)", Icon.map, true, null, BetterScreenShotFeature::buildSettings, null));
+        entries.add(moduleEntry(moduleModUpdater, NeonSettingsTab.TOOLS_CORE, modUpdater != null, "bektools.section.mu", "Mod Updater", Icon.refresh, true, null, ModUpdaterMod::bekBuildSettings, null));
+        entries.add(moduleEntry(moduleOverlayCompatBridge, NeonSettingsTab.TOOLS_CORE, overlayCompatBridge != null, "bektools.section.ocb", "OverlayCompatBridge", Icon.layers, false, "@bektools.section.ocb.none", null, null));
+        entries.add(moduleEntry(moduleProfiler, NeonSettingsTab.TOOLS_CORE, !isModuleFailed(moduleProfiler) && !isModuleGated(moduleProfiler), "bektools.section.profiler", "Performance Profiler", Icon.chartBar, true, null, NeonProfilerFeature::buildSettings, NeonProfilerFeature::setEnabled));
+
         return entries;
     }
 
@@ -630,359 +675,5 @@ public class BekToolsMod extends Mod{
             locale = Locale.getDefault().toString();
         }
         Core.app.openURI(locale.toLowerCase(Locale.ROOT).startsWith("zh") ? feedbackChineseUrl : feedbackDiscordUrl);
-    }
-
-    private static class FeedbackSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private Button feedbackButton;
-
-        FeedbackSetting(){
-            super(null);
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            Core.app.post(() -> {
-                if(feedbackButton != null && feedbackButton.parent == table) return;
-                table.row();
-                feedbackButton = table.button("@bektools.feedback", BekToolsMod::openFeedback)
-                    .margin(14f).width(240f).pad(6f).get();
-            });
-        }
-    }
-
-    private static class ModuleEntry{
-        final String moduleId;
-        final boolean available;
-        final String title;
-        final Drawable icon;
-        final String enableKey; // null when the module has no master switch
-        final boolean enableDefault;
-        final boolean neonSwitch; // true when Neon renders the master switch (module has no switch UI of its own)
-        final Cons<SettingsMenuDialog.SettingsTable> builder;
-
-        ModuleEntry(String moduleId, boolean available, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){
-            this.moduleId = moduleId;
-            this.available = available;
-            this.title = title;
-            this.icon = icon;
-            ModuleGate gate = moduleGates.get(moduleId);
-            this.enableKey = gate == null ? null : gate.key;
-            this.enableDefault = gate != null && gate.def;
-            this.neonSwitch = gate != null && gate.neonSwitch;
-            this.builder = builder;
-        }
-    }
-
-    private static class ModuleListSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final Seq<ModuleEntry> entries;
-        private final Seq<ModuleEntry> polledEntries;
-        private final BekToolsMod mod;
-
-        ModuleListSetting(Seq<ModuleEntry> entries, BekToolsMod mod){
-            super("bektools-module-list");
-            this.entries = entries;
-            this.polledEntries = entries.select(entry -> entry.enableKey != null);
-            this.mod = mod;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            Seq<ModuleEntry> disabled = new Seq<>();
-            for(ModuleEntry entry : entries){
-                boolean switchedOn = entry.enableKey == null || Core.settings.getBool(entry.enableKey, entry.enableDefault);
-                if(!switchedOn && !mod.isModuleFailed(entry.moduleId)){
-                    // Master switch off: collect into the collapsed "disabled" section. This
-                    // includes modules that were gated out before construction.
-                    disabled.add(entry);
-                }else{
-                    // Loaded modules render their own settings; failed modules and modules
-                    // that are on but were gated out render a placeholder instead.
-                    addModuleGroup(table, entry);
-                }
-            }
-
-            if(!disabled.isEmpty()){
-                // Collapsed section collecting every sub-mod whose master switch is off.
-                addGroup(table, Core.bundle.format("bektools.disabled.section", disabled.size), Icon.eyeOffSmall, nested -> {
-                    for(ModuleEntry entry : disabled){
-                        addModuleGroupPref(nested, entry);
-                    }
-                });
-            }
-
-            // Anchor the category table's width. Everything is laid out with growX()
-            // and the wrapped header labels report a pref width of 0, so a fully
-            // collapsed list would otherwise shrink the dialog to near-zero width -
-            // and then jump to full width the moment a group with fixed-width rows is
-            // expanded (the "sudden redraw"). This invisible fixed-width row keeps
-            // the dialog at the full settings width in every expansion state.
-            table.row();
-            table.add().width(RbmStyle.prefWidth());
-            table.row();
-
-            attachSwitchPoller(table);
-        }
-
-        private void addModuleGroup(SettingsMenuDialog.SettingsTable table, ModuleEntry entry){
-            if(mod.isModuleFailed(entry.moduleId)){
-                addGroup(table, entry.title, entry.icon, mod::addFailurePlaceholder);
-                return;
-            }
-
-            addGroup(table, entry.title, entry.icon, nested -> {
-                if(mod.isModuleFailed(entry.moduleId)){
-                    mod.addFailurePlaceholder(nested);
-                    return;
-                }
-                if(!entry.available){
-                    // Gated out at startup (or re-enabled this session): no module code is
-                    // loaded, so only the master switch and a restart note can be rendered.
-                    mod.addUnloadedPlaceholder(nested, entry);
-                    return;
-                }
-                try{
-                    mod.addNeonMasterSwitch(nested, entry);
-                    entry.builder.get(nested);
-                }catch(Throwable t){
-                    mod.recordModuleFailure(entry.moduleId, t);
-                    mod.addFailurePlaceholder(nested);
-                }
-            });
-        }
-
-        private void addModuleGroupPref(SettingsMenuDialog.SettingsTable nested, ModuleEntry entry){
-            // Register through pref(): the section body is a NestedSettingsTable whose
-            // finishBuild() clears children and replays only pref'd settings, so direct
-            // add() rendering would be wiped. Its suppressRebuild flag keeps pref() from
-            // re-triggering a rebuild while the body is being mounted.
-            if(mod.isModuleFailed(entry.moduleId)){
-                nested.pref(new CollapsibleGroupSetting(entry.title, entry.icon, 24f, mod::addFailurePlaceholder));
-                nested.pref(new RbmStyle.SpacerSetting(4f));
-                return;
-            }
-
-            nested.pref(new CollapsibleGroupSetting(entry.title, entry.icon, 24f, inner -> {
-                if(mod.isModuleFailed(entry.moduleId)){
-                    mod.addFailurePlaceholder(inner);
-                    return;
-                }
-                if(!entry.available){
-                    mod.addUnloadedPlaceholder(inner, entry);
-                    return;
-                }
-                try{
-                    mod.addNeonMasterSwitch(inner, entry);
-                    entry.builder.get(inner);
-                }catch(Throwable t){
-                    mod.recordModuleFailure(entry.moduleId, t);
-                    mod.addFailurePlaceholder(inner);
-                }
-            }));
-            nested.pref(new RbmStyle.SpacerSetting(4f));
-        }
-
-        private void redrawSettings(SettingsMenuDialog.SettingsTable table){
-            // MindustryX turns SettingsTable.rebuild() into a no-op while list.size is
-            // unchanged (build() short-circuits on lastSize), so re-render the category
-            // table by hand: clear, re-add every group (this re-hooks the poller via
-            // Element.update replacement), then re-add the feedback button.
-            table.clearChildren();
-            add(table);
-            new FeedbackSetting().add(table);
-        }
-
-        private void attachSwitchPoller(SettingsMenuDialog.SettingsTable table){
-            if(polledEntries.isEmpty()) return;
-            boolean[] cached = new boolean[polledEntries.size];
-            for(int i = 0; i < polledEntries.size; i++){
-                ModuleEntry entry = polledEntries.get(i);
-                cached[i] = Core.settings.getBool(entry.enableKey, entry.enableDefault);
-            }
-            boolean[] posted = {false};
-            // One poller on the category table itself, which stays in the act chain while
-            // the dialog is open. Element.update replaces the previous runnable, so every
-            // rebuild refreshes the cache instead of stacking listeners.
-            table.update(() -> {
-                for(int i = 0; i < polledEntries.size; i++){
-                    ModuleEntry entry = polledEntries.get(i);
-                    boolean current = Core.settings.getBool(entry.enableKey, entry.enableDefault);
-                    if(current != cached[i]){
-                        cached[i] = current;
-                        if(!posted[0]){
-                            posted[0] = true;
-                            Core.app.post(() -> {
-                                posted[0] = false;
-                                try{
-                                    redrawSettings(table);
-                                }catch(Throwable t){
-                                    Log.err("Neon: failed to rebuild settings after a module master switch changed.", t);
-                                }
-                            });
-                        }
-                    }
-                }
-            });
-        }
-    }
-
-    private void addFailurePlaceholder(SettingsMenuDialog.SettingsTable table){
-        table.pref(new RbmStyle.SubHeaderSetting(moduleFailureMessage));
-    }
-
-    /** Renders the master-switch row for modules whose own settings UI has none. */
-    private void addNeonMasterSwitch(SettingsMenuDialog.SettingsTable table, ModuleEntry entry){
-        if(entry.neonSwitch && entry.enableKey != null && !isModuleFailed(entry.moduleId)){
-            table.pref(new RbmStyle.IconCheckSetting(entry.enableKey, Core.bundle.get("bektools.module.switch", "Master switch"), entry.enableDefault, Icon.power, null));
-        }
-    }
-
-    /**
-     * Placeholder for a module that was gated out before construction. Its code is not
-     * loaded, so instead of the module's settings only the master switch and the
-     * restart requirement are shown.
-     */
-    private void addUnloadedPlaceholder(SettingsMenuDialog.SettingsTable table, ModuleEntry entry){
-        if(entry.enableKey == null){
-            // Only switch-free infrastructure modules reach this path, and they always load.
-            addFailurePlaceholder(table);
-            return;
-        }
-        table.pref(new RbmStyle.IconCheckSetting(entry.enableKey, Core.bundle.get("bektools.module.switch", "Master switch"), entry.enableDefault, Icon.power, null));
-        boolean enabled = Core.settings.getBool(entry.enableKey, entry.enableDefault);
-        table.pref(new RbmStyle.SubHeaderSetting(enabled ? "@bektools.module.restart" : "@bektools.module.disabled"));
-    }
-
-    private static void addGroup(SettingsMenuDialog.SettingsTable table, String title, Drawable icon, Cons<SettingsMenuDialog.SettingsTable> builder){
-        // Render directly instead of pref(): this runs inside a rebuild, so pref()
-        // would re-trigger SettingsTable.rebuild() and recurse.
-        new CollapsibleGroupSetting(title, icon, 24f, builder).add(table);
-        new RbmStyle.SpacerSetting(4f).add(table);
-    }
-
-    private static class CollapsibleGroupSetting extends SettingsMenuDialog.SettingsTable.Setting{
-        private final String title;
-        private final Drawable icon;
-        private final float indent;
-        private final Cons<SettingsMenuDialog.SettingsTable> builder;
-        private boolean expanded;
-
-        public CollapsibleGroupSetting(String title, Drawable icon, float indent, Cons<SettingsMenuDialog.SettingsTable> builder){
-            super("bektools-group");
-            this.title = title;
-            this.icon = icon;
-            this.indent = indent;
-            this.builder = builder;
-        }
-
-        @Override
-        public void add(SettingsMenuDialog.SettingsTable table){
-            // A rebuild always re-creates the collapsed header, so keep the field in sync with it.
-            expanded = false;
-            table.row();
-            table.table(wrap -> {
-                wrap.center();
-                Table body = new Table();
-                body.center();
-                Collapser collapser = new Collapser(body, true);
-                collapser.setDuration(0.12f);
-                final boolean[] built = {false};
-                final boolean[] rebuilding = {false};
-                final Runnable[] mountBody = new Runnable[1];
-                final Label[] arrow = new Label[1];
-
-                mountBody[0] = () -> {
-                    if(rebuilding[0]) return;
-                    rebuilding[0] = true;
-                    try{
-                        NestedSettingsTable nested = new NestedSettingsTable(indent, () -> {
-                            if(rebuilding[0]) return;
-                            mountBody[0].run();
-                        });
-                        builder.get(nested);
-                        nested.finishBuild();
-                        body.clearChildren();
-                        body.add(nested).growX().center();
-                        built[0] = true;
-                    }finally{
-                        rebuilding[0] = false;
-                    }
-                };
-
-                Runnable toggle = () -> {
-                    expanded = !expanded;
-                    arrow[0].setText(expanded ? "v" : ">");
-                    if(expanded && !built[0]) mountBody[0].run();
-                    collapser.setCollapsed(!expanded, true);
-                };
-
-                Button.ButtonStyle headerStyle = new Button.ButtonStyle(
-                    VscodeSettingsStyle.headerBackground(),
-                    VscodeSettingsStyle.cardAltBackground(),
-                    VscodeSettingsStyle.headerBackground()
-                );
-                headerStyle.over = VscodeSettingsStyle.cardBackground();
-                Button header = new Button(headerStyle);
-                header.touchable = Touchable.enabled;
-                header.margin(8f);
-                header.left();
-                header.clicked(toggle);
-                if(icon != null){
-                    Image ic = header.image(icon).size(20f).padRight(8f).get();
-                    ic.touchable = Touchable.disabled;
-                    ic.setScaling(Scaling.fit);
-                    ic.update(() -> ic.setColor(VscodeSettingsStyle.accentColor()));
-                }
-                Label titleLabel = header.add(title).color(VscodeSettingsStyle.accentColor()).left().growX().minWidth(0f).wrap().get();
-                titleLabel.touchable = Touchable.disabled;
-                arrow[0] = new Label(">");
-                arrow[0].touchable = Touchable.disabled;
-                arrow[0].setColor(VscodeSettingsStyle.accentColor());
-                header.add(arrow[0]).width(20f).padLeft(8f).right();
-
-                wrap.add(header).growX();
-                wrap.row();
-                wrap.image(mindustry.gen.Tex.whiteui).color(VscodeSettingsStyle.accentColor()).height(2f).growX().padBottom(8f);
-                wrap.row();
-                wrap.add(collapser).growX().center();
-            }).growX().padTop(12f).padBottom(2f).center();
-            table.row();
-        }
-    }
-
-    private static class NestedSettingsTable extends SettingsMenuDialog.SettingsTable{
-        private final Runnable rebuildAction;
-        private boolean suppressRebuild = true;
-
-        public NestedSettingsTable(float indent, Runnable rebuildAction){
-            super();
-            this.rebuildAction = rebuildAction;
-            left();
-            defaults().left();
-            defaults().padLeft(indent);
-        }
-
-        // MindustryX-only: its SettingsTable.act() auto-rebuilds whenever list.size
-        // changes (lastSize != list.size); finishBuild() grows our list from 0 to N,
-        // which would otherwise replay the content, collapse every child group and
-        // append a stray vanilla reset button one frame after expanding. Returning
-        // this short-circuits that. No @Override on purpose - vanilla v159 has no
-        // build() to override, and MindustryX dispatches to this at runtime.
-        public Table build(){
-            return this;
-        }
-
-        @Override
-        public void rebuild(){
-            if(suppressRebuild) return;
-            rebuildAction.run();
-        }
-
-        public void finishBuild(){
-            suppressRebuild = false;
-            clearChildren();
-            for(SettingsMenuDialog.SettingsTable.Setting setting : list){
-                setting.add(this);
-            }
-        }
     }
 }

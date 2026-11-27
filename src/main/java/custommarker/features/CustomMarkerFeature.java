@@ -19,7 +19,6 @@ import arc.scene.event.InputEvent;
 import arc.scene.event.InputListener;
 import arc.scene.event.Touchable;
 import arc.scene.style.TextureRegionDrawable;
-import arc.scene.ui.CheckBox;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.TextField;
 import arc.scene.ui.layout.Scl;
@@ -31,6 +30,7 @@ import arc.util.Time;
 import arc.util.Tmp;
 import arc.util.pooling.Pools;
 import bektools.profiler.NeonProfiler;
+import bektools.ui.RbmStyle;
 import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.MarkerBridge;
 import mdtxcompat.OverlayUiBridge;
@@ -77,12 +77,12 @@ public class CustomMarkerFeature {
     private static final int maxChatMarks = 300;
     private static final float markCooldown = 30f;
     private static final float overlaySyncIntervalTicks = 30f;
-    private static final Color panelBackgroundColor = Color.valueOf("111821");
+    private static final Color panelBackgroundColor = Color.valueOf("141414");
 
     private static final String[] defaultFirst = {"Mark", "Gather", "Attack", "Defend", "What"};
     private static final String[] defaultSecond = {"标记", "集合", "攻击", "防御", "问号"};
     private static final Color[] markerColors = {
-        Color.valueOf("4ea8ff"),
+        Color.valueOf("f6d495"),
         Color.valueOf("7dd9c4"),
         Color.valueOf("ff9b71"),
         Color.valueOf("9ad06b"),
@@ -175,51 +175,9 @@ public class CustomMarkerFeature {
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table) {
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting(keyEnabled) {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                CheckBox box = new CheckBox(title);
-                box.getLabel().setWrap(true);
-                box.getLabelCell().growX().minWidth(0f);
-                box.update(() -> box.setChecked(Core.settings.getBool(name, true)));
-                box.changed(() -> Core.settings.put(name, box.isChecked()));
-
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(10f);
-                    row.add(box).left().growX().minWidth(0f);
-                }).growX().padTop(6f);
-                addDesc(box);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("cm-edit-templates") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(6f);
-                    row.button(title, Styles.flatt, CustomMarkerFeature::showTemplateEditor)
-                        .growX()
-                        .height(42f)
-                        .padLeft(8f);
-                }).growX().padTop(6f);
-                t.row();
-            }
-        });
-
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("cm-reset-templates") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t) {
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(6f);
-                    row.button(title, Styles.flatt, CustomMarkerFeature::resetTemplatesToDefaults)
-                        .growX()
-                        .height(42f)
-                        .padLeft(8f);
-                }).growX().padTop(6f);
-                t.row();
-            }
-        });
+        table.pref(new RbmStyle.IconCheckSetting(keyEnabled, true, Icon.mapSmall, null));
+        table.pref(new RbmStyle.ActionButtonSetting("cm-edit-templates", Icon.edit, CustomMarkerFeature::showTemplateEditor));
+        table.pref(new RbmStyle.ActionButtonSetting("cm-reset-templates", Icon.refreshSmall, CustomMarkerFeature::resetTemplatesToDefaults));
 
         reloadRuntimeSettings();
         reloadTemplatesFromSettings();
@@ -753,39 +711,39 @@ public class CustomMarkerFeature {
             secondEdit[i] = secondParts[i];
         }
 
-        dialog.cont.table(VscodeSettingsStyle.headerBackground(), header -> {
+        dialog.cont.table(VscodeSettingsStyle.sectionHeaderBackground(), header -> {
             header.left().margin(8f);
-            header.add(Core.bundle.get("cm.templates.col.first", "First content")).growX().left().pad(6f);
-            header.add(Core.bundle.get("cm.templates.col.second", "Second content")).growX().left().pad(6f);
+            header.add(Core.bundle.get("cm.templates.col.first", "First content")).color(VscodeSettingsStyle.accentColor()).growX().left().pad(6f);
+            header.add(Core.bundle.get("cm.templates.col.second", "Second content")).color(VscodeSettingsStyle.accentColor()).growX().left().pad(6f);
         }).growX().row();
 
         dialog.cont.pane(Styles.noBarPane, body -> {
             body.defaults().growX().pad(4f);
             for (int i = 0; i < templateCount; i++) {
                 final int index = i;
-                body.table(VscodeSettingsStyle.cardBackground(), line -> {
+                body.table(VscodeSettingsStyle.hudCardBackground(), line -> {
                     line.left().margin(6f);
-                    line.add((index + 1) + ".").width(28f).color(Pal.accent);
+                    line.add((index + 1) + ".").width(28f).color(VscodeSettingsStyle.accentColor());
 
-                    firstFields[index] = line.field(firstEdit[index], text -> firstEdit[index] = text).growX().get();
+                    firstFields[index] = line.field(firstEdit[index], VscodeSettingsStyle.flatFieldStyle(), text -> firstEdit[index] = text).growX().height(34f).get();
                     firstFields[index].setMessageText(Core.bundle.get("cm.templates.first.hint", "First content in <...>"));
 
                     line.add(" ").width(8f);
 
-                    secondFields[index] = line.field(secondEdit[index], text -> secondEdit[index] = text).growX().get();
+                    secondFields[index] = line.field(secondEdit[index], VscodeSettingsStyle.flatFieldStyle(), text -> secondEdit[index] = text).growX().height(34f).get();
                     secondFields[index].setMessageText(Core.bundle.get("cm.templates.second.hint", "Second content in <...>"));
                 }).growX().row();
             }
         }).grow().maxHeight(Math.min(440f, Core.graphics.getHeight() * 0.75f)).row();
 
         dialog.buttons.defaults().size(220f, 54f).pad(4f);
-        dialog.buttons.button("@cm.templates.reset", Icon.refresh, Styles.flatt, () -> {
+        dialog.buttons.button("@cm.templates.reset", Icon.refresh, VscodeSettingsStyle.flatButtonStyle(), () -> {
             for (int i = 0; i < templateCount; i++) {
                 firstFields[i].setText(defaultFirst[i]);
                 secondFields[i].setText(defaultSecond[i]);
             }
         });
-        dialog.buttons.button("@cm.templates.save", Icon.ok, Styles.flatt, () -> {
+        dialog.buttons.button("@cm.templates.save", Icon.ok, VscodeSettingsStyle.flatButtonStyle(), () -> {
             Seq<String> out = new Seq<>();
             for (int i = 0; i < templateCount; i++) {
                 String first = sanitizeToken(firstFields[i].getText(), defaultFirst[i]);

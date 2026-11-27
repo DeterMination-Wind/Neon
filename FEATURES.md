@@ -278,7 +278,8 @@ Neon 聚合版没有单独设置组。想体验时，在主菜单点击“千万
 - 拖放交叉物品线时，如果条件符合，会自动选择未配置的反向分拣器。
 - 单科技星球、平行线路、端点和非物品障碍物仍保持原版放置行为。
 - 设置页可分别关闭传送带×传送带、传送带×管道、管道×传送带、管道×管道四类交叉，关掉的一类保持原版行为。
-- 管道线遇到 3 格及以上的交叉阻挡带时整段改用物品管道桥，1~2 格仍放反向分拣器；该规则也可单独关闭。
+- 管道线遇到 3 格及以上的交叉阻挡带时整段改用物品管道桥，1~2 格默认仍放反向分拣器（除非会形成第 3 个连续分拣器）；该规则也可单独关闭。
+- 反向分拣器只能连续串两个：传送带×管道交叉会形成第 3 个时，保留已有两个，新线改用本科技的桥跨过整段交叉带（传送带线用传送带桥，管道线用物品管道桥）；该规则也可单独关闭。
 - 默认只在行星规则为「任意」（混合科技）时介入，关闭限制后所有星球都套用。
 
 它只针对明确的交叉运输线场景，不会全面替换原版的建筑选择逻辑。
@@ -528,7 +529,7 @@ Tap another target to switch, tap empty ground or a friendly target to unlock, a
 
 ### 27. Smart Placement
 
-On mixed-tech planets, Smart Placement selects an unconfigured inverted sorter when an item line is dragged across another item line. Single-tech planets, parallel lines, endpoints, and non-item obstacles retain vanilla placement behavior.
+On mixed-tech planets, Smart Placement selects an unconfigured inverted sorter when an item line is dragged across another item line. Inverted sorters only chain two deep, so a conveyor × duct crossing that would add a third consecutive sorter keeps the existing two and bridges the new line over the band with its own technology family's bridge. Single-tech planets, parallel lines, endpoints, and non-item obstacles retain vanilla placement behavior.
 
 ### 28. Hide What Processors Show
 

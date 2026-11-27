@@ -15,6 +15,7 @@ import mindustry.content.Planets;
 import mindustry.entities.units.BuildPlan;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.game.EventType.Trigger;
+import mindustry.game.Team;
 import mindustry.gen.Building;
 import mindustry.gen.Icon;
 import mindustry.input.DesktopInput;
@@ -24,6 +25,8 @@ import mindustry.input.Placement;
 import mindustry.mod.Mod;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import mindustry.world.Block;
+import mindustry.world.Build;
+import mindustry.world.Tile;
 import mindustry.world.blocks.distribution.Conveyor;
 import mindustry.world.blocks.distribution.DirectionBridge;
 import mindustry.world.blocks.distribution.Duct;
@@ -44,11 +47,15 @@ public final class SmartPlacementMod extends Mod{
     static final String settingCrossDuctDuct = "smartplacement-cross-dd";
     /** 管道交叉的阻挡带宽超过 2 格时改放物品管道桥。 */
     static final String settingDuctBridgeOverWide = "smartplacement-duct-bridge-wide";
+    /** 交叉会形成第三个连续反向分类器时，新线改放本科技的桥。 */
+    static final String settingSorterLimitBridge = "smartplacement-sorter-limit-bridge";
     /** 只在行星为“任意”（混合科技）时生效。 */
     static final String settingMixedPlanetOnly = "smartplacement-mixed-only";
 
-    /** 宽阻挡带改用管道桥的阈值：超过该格数才换桥。 */
+    /** 宽阻挡带改用桥的阈值：超过该格数才换桥。 */
     private static final int wideBandThreshold = 2;
+    /** 反向分类器最多允许连续串联的数量；第 3 个必须改用桥。 */
+    private static final int sorterChainLimit = 2;
 
     private final ObjectMap<Block, PlacementProxy> proxies = new ObjectMap<Block, PlacementProxy>();
     private boolean proxiesBuilt;
@@ -84,6 +91,7 @@ public final class SmartPlacementMod extends Mod{
         table.checkPref(settingCrossDuctConveyor, true);
         table.checkPref(settingCrossDuctDuct, true);
         table.checkPref(settingDuctBridgeOverWide, true);
+        table.checkPref(settingSorterLimitBridge, true);
         table.checkPref(settingMixedPlanetOnly, true);
     }
 
@@ -259,12 +267,12 @@ public final class SmartPlacementMod extends Mod{
         @Override
         public void handlePlacementLine(Seq<BuildPlan> plans){
             // Vanilla bridging first, then re-apply crossings it may have flattened, then the
-            // wide-band rule can turn a 3+ tile duct crossing into a single item duct bridge.
+            // bridge rules can turn a crossing run into a single bridge of this line's family.
             if(!handleDuctBridgePass(plans)){
                 source.handlePlacementLine(plans);
             }
             restoreCrossings(plans);
-            applyWideDuctBridge(plans);
+            applyCrossingBridges(plans);
         }
 
         /**
@@ -328,41 +336,159 @@ public final class SmartPlacementMod extends Mod{
             }
         }
 
-        private void applyWideDuctBridge(Seq<BuildPlan> plans){
-            if(kindOf(source) != LineKind.duct) return;
-            if(!settingEnabled(settingDuctBridgeOverWide, true)) return;
-
-            Block bridge = Blocks.ductBridge;
-            if(bridge == null || !bridge.unlockedNow()) return;
-            if(plans.size < wideBandThreshold + 2) return;
+        /**
+         * Bridges crossing runs that cannot keep using inverted sorters. Two rules feed in:
+         * <ul>
+         *   <li>the legacy wide-duct rule: a duct line jumping a band wider than
+         *       {@link #wideBandThreshold} crossings;</li>
+         *   <li>the sorter limit: a conveyor×duct crossing that would become a third consecutive
+         *       inverted sorter along the crossed line, or 3+ consecutive crossings along the new
+         *       line, must jump that band instead.</li>
+         * </ul>
+         * The bridge is always placed on the line being drawn, so the existing line keeps its
+         * blocks and the two sorters already in place stay intact.
+         */
+        private void applyCrossingBridges(Seq<BuildPlan> plans){
+            boolean wideDuct = source instanceof Duct && settingEnabled(settingDuctBridgeOverWide, true);
+            boolean sorterLimit = settingEnabled(settingSorterLimitBridge, true);
+            if(!wideDuct && !sorterLimit) return;
+            // At minimum: one crossing tile plus a bridge endpoint on each side.
+            if(plans.size < 3) return;
 
             BuildPlan first = plans.first();
             if(first.x != plans.peek().x && first.y != plans.peek().y) return;
+
+            Block bridge = bridgeFor(source);
+            if(bridge == null || !bridge.unlockedNow()) return;
 
             boolean[] blocked = new boolean[plans.size];
             for(int i = 0; i < blocked.length; i++){
                 blocked[i] = isCrossingPlan(plans.get(i));
             }
 
-            Seq<int[]> runs = wideBlockedRuns(blocked, wideBandThreshold);
+            Seq<int[]> runs = wideBlockedRuns(blocked, 0);
             if(runs.isEmpty()) return;
 
-            int maxSpan = bridge instanceof DirectionBridge ? ((DirectionBridge)bridge).range : 4;
-            for(int r = runs.size - 1; r >= 0; r--){
+            boolean[] bridged = new boolean[runs.size];
+            for(int r = 0; r < runs.size; r++){
+                int[] run = runs.get(r);
+                int runLength = run[1] - run[0] + 1;
+                boolean mixed = false, chainLimit = false;
+
+                for(int i = run[0]; i <= run[1] && !chainLimit; i++){
+                    BuildPlan plan = plans.get(i);
+                    if(!isMixedCrossingPlan(plan)) continue;
+                    mixed = true;
+                    chainLimit = completesSorterChain(plan, plans);
+                }
+
+                bridged[r] = shouldBridgeCrossingRun(wideDuct, mixed, runLength, wideBandThreshold, chainLimit);
+            }
+
+            // Two bridges cannot share an endpoint block. Merge spans that touch so a one-tile gap
+            // between two triggered runs is crossed by one bridge instead of leaving a dead link.
+            Seq<int[]> spans = new Seq<int[]>();
+            for(int r = 0; r < runs.size; r++){
+                if(!bridged[r]) continue;
                 int[] run = runs.get(r);
                 int before = run[0] - 1, after = run[1] + 1;
                 if(before < 0 || after >= plans.size) continue;
-                if(after - before > maxSpan) continue;
 
-                BuildPlan start = plans.get(before), end = plans.get(after);
-                if(Vars.player != null && (!start.placeable(Vars.player.team()) || !end.placeable(Vars.player.team()))) continue;
-
-                start.block = bridge;
-                end.block = bridge;
-                for(int i = run[1]; i >= run[0]; i--){
-                    plans.remove(i);
+                if(!spans.isEmpty()){
+                    int[] last = spans.peek();
+                    if(before <= last[1]){
+                        last[1] = Math.max(last[1], after);
+                        continue;
+                    }
                 }
+                spans.add(new int[]{before, after});
             }
+
+            for(int s = spans.size - 1; s >= 0; s--){
+                int[] span = spans.get(s);
+                placeBridgeSpan(plans, span[0], span[1], bridge);
+            }
+        }
+
+        /** @return the bridge block of the source line's technology family, or null if unavailable. */
+        private static Block bridgeFor(Block source){
+            if(source instanceof Conveyor){
+                Block bridge = ((Conveyor)source).bridgeReplacement;
+                return bridge == null ? Blocks.itemBridge : bridge;
+            }
+            if(source instanceof Duct){
+                Block bridge = ((Duct)source).bridgeReplacement;
+                return bridge == null ? Blocks.ductBridge : bridge;
+            }
+            return null;
+        }
+
+        private void placeBridgeSpan(Seq<BuildPlan> plans, int before, int after, Block bridge){
+            if(before < 0 || after >= plans.size || before >= after) return;
+
+            BuildPlan start = plans.get(before), end = plans.get(after);
+            int maxSpan = bridge instanceof DirectionBridge ? ((DirectionBridge)bridge).range
+                : bridge instanceof ItemBridge ? ((ItemBridge)bridge).range : 4;
+            int span = Math.max(Math.abs(start.x - end.x), Math.abs(start.y - end.y));
+            if(span > maxSpan) return;
+            if(Vars.player != null){
+                // Check the bridge itself, not the line plan: repeating the same line block and
+                // rotation counts as unplaceable, but a bridge over that tile is still valid.
+                Team team = Vars.player.team();
+                if(!Build.validPlace(bridge, team, start.x, start.y, start.rotation)
+                    || !Build.validPlace(bridge, team, end.x, end.y, end.rotation)) return;
+            }
+
+            start.block = bridge;
+            end.block = bridge;
+            if(bridge instanceof ItemBridge){
+                start.config = new Point2(end.x - start.x, end.y - start.y);
+            }
+
+            for(int i = after - 1; i > before; i--){
+                plans.remove(i);
+            }
+        }
+
+        /** True when this crossing is a conveyor×duct pair, the only family mix this rule targets. */
+        private boolean isMixedCrossingPlan(BuildPlan plan){
+            if(plan.block != Blocks.invertedSorter) return false;
+            Building existing = plan.build();
+            if(existing == null) return false;
+
+            LineKind sourceKind = kindOf(source), existingKind = kindOf(existing.block);
+            return sourceKind != null && existingKind != null && sourceKind != existingKind;
+        }
+
+        /**
+         * Checks the crossed line's axis around this crossing. Three consecutive sorters never
+         * transfer items (Sorter.getTileTarget refuses 3-chains), so the third one must be a bridge.
+         */
+        private boolean completesSorterChain(BuildPlan plan, Seq<BuildPlan> plans){
+            Building existing = plan.build();
+            if(existing == null) return false;
+
+            int rotation = existing.rotation;
+            boolean[] window = new boolean[sorterChainLimit * 2 + 1];
+            for(int i = 0; i < window.length; i++){
+                int offset = i - sorterChainLimit;
+                window[i] = offset == 0 || isSorterAt(
+                    plan.x + Geometry.d4x(rotation) * offset,
+                    plan.y + Geometry.d4y(rotation) * offset,
+                    plans
+                );
+            }
+
+            return sorterRunLength(window, sorterChainLimit) > sorterChainLimit;
+        }
+
+        private static boolean isSorterAt(int x, int y, Seq<BuildPlan> plans){
+            if(Vars.world != null){
+                Tile tile = Vars.world.tile(x, y);
+                if(tile != null && tile.build != null && tile.build.block == Blocks.invertedSorter) return true;
+            }
+
+            return plans.contains(plan -> plan.x == x && plan.y == y && plan.block == Blocks.invertedSorter);
         }
 
         private static boolean isCrossingPlan(BuildPlan plan){
@@ -398,6 +524,27 @@ public final class SmartPlacementMod extends Mod{
             }
         }
         return runs;
+    }
+
+    /** @return length of the consecutive {@code true} run containing {@code index}, or 0. */
+    static int sorterRunLength(boolean[] flags, int index){
+        if(flags == null || index < 0 || index >= flags.length || !flags[index]) return 0;
+
+        int left = index, right = index;
+        while(left > 0 && flags[left - 1]) left--;
+        while(right + 1 < flags.length && flags[right + 1]) right++;
+        return right - left + 1;
+    }
+
+    /**
+     * @param wideDuct the legacy duct-wide bridging rule applies to this run
+     * @param mixed the run contains at least one conveyor×duct crossing
+     * @param runLength consecutive crossing plans along the line being drawn
+     * @param chainLimit one of the mixed crossings would complete a third consecutive sorter
+     */
+    static boolean shouldBridgeCrossingRun(boolean wideDuct, boolean mixed, int runLength, int wideThreshold, boolean chainLimit){
+        if(wideDuct && runLength > wideThreshold) return true;
+        return mixed && (runLength > wideThreshold || chainLimit);
     }
 
     static Block crossingReplacement(Block source, Block existing, int existingRotation, int planRotation,

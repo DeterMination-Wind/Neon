@@ -72,6 +72,7 @@ public final class VscodeSettingsStyle{
     private static final Color bannerFailed = new Color(0.185f, 0.068f, 0.062f, 0.70f);
 
     private static final Drawable panelBgDrawable = new FlatFrameDrawable(bgPanel, borderSubtle, 1f, accentCorner, 7f);
+    private static final Drawable fullScreenPanelBgDrawable = new FlatFrameDrawable(bgPanel, null, 0f, null, 0f);
     private static final Drawable tabBarBgDrawable = new FlatUnderlineDrawable(bgTabBar, bgDivider, 1f, false);
     private static final Drawable sidebarBgDrawable = new FlatFrameDrawable(bgSidebar, null, 0f, null, 0f);
     private static final Drawable headerBgDrawable = new FlatFrameDrawable(bgHeader, borderSubtle, 1f, accentCorner, 5f);
@@ -183,6 +184,10 @@ public final class VscodeSettingsStyle{
 
     public static Drawable panelBackground(){
         return panelBgDrawable;
+    }
+
+    public static Drawable fullScreenPanelBackground(){
+        return fullScreenPanelBgDrawable;
     }
 
     public static Drawable tabBarBackground(){

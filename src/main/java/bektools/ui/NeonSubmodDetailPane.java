@@ -88,6 +88,12 @@ public class NeonSubmodDetailPane extends Table{
         return currentModule;
     }
 
+    void requestPrimaryScroll(){
+        if(Core.scene != null && bodyScroll != null){
+            bodyScroll.requestScroll();
+        }
+    }
+
     private void rebuildBackBar(){
         backBar.clearChildren();
         if(!narrowMode || currentModule == null) return;

@@ -342,6 +342,12 @@ public class NeonOverviewPane extends Table{
         }).growX().minWidth(0f).padBottom(8f).row();
     }
 
+    void requestPrimaryScroll(){
+        if(Core.scene != null && scrollPane != null){
+            scrollPane.requestScroll();
+        }
+    }
+
     private boolean matchesOverviewFilter(ModuleRuntimeState state){
         switch(filterMode){
             case ACTIVE:

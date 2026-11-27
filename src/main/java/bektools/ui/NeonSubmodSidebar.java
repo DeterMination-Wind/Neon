@@ -162,6 +162,12 @@ public class NeonSubmodSidebar extends Table{
         rebuildList();
     }
 
+    void requestPrimaryScroll(){
+        if(Core.scene != null && scrollPane != null){
+            scrollPane.requestScroll();
+        }
+    }
+
     public Seq<NeonSettingsModule> visibleModules(){
         Seq<NeonSettingsModule> result = new Seq<>();
         String q = searchQuery == null ? "" : searchQuery.trim().toLowerCase(Locale.ROOT);

@@ -27,6 +27,7 @@ public final class OverlayWindowSizeSeed{
         boolean ensure();
     }
 
+    private static final int retryIntervalTicks = 15;
     private static final Seq<Pending> seeds = new Seq<>();
     private static boolean installed;
 
@@ -74,7 +75,11 @@ public final class OverlayWindowSizeSeed{
                 done = true;
                 Log.err("Neon OverlayUI integration: overlay window size seed failed.", t);
             }
-            if(done) seeds.remove(i);
+            if(done){
+                seeds.remove(i);
+            }else{
+                pending.warmup = retryIntervalTicks;
+            }
         }
     }
 

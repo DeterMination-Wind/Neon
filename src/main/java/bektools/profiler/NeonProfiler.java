@@ -36,24 +36,24 @@ public final class NeonProfiler{
         "Profiler"
     };
 
-    private static boolean enabled;
-    private static boolean showAll;
+    private static volatile boolean enabled;
+    private static volatile boolean showAll;
     private static long windowStartMillis = nowMillis();
     private static long lastRotateMillis = windowStartMillis;
 
     private static RowKey[] keys = new RowKey[initialKeyCapacity];
     private static BucketSeries[] series = new BucketSeries[initialKeyCapacity];
+    private static final HashMap<RowKey, Integer> keyIndex = new HashMap<>(initialKeyCapacity * 2);
+    private static final RowKey lookupKey = new RowKey("", "", "", threadMain, false, false);
     private static int size;
 
     private static SnapshotRow[] snapshotRows = new SnapshotRow[initialRowCapacity];
     private static int snapshotRowCount;
-    private static final long[] snapshotBucketCalls = new long[bucketCount];
-    private static final long[] snapshotBucketTotalNanos = new long[bucketCount];
 
     private static long selfUiRefreshNanos;
     private static long selfCopyNanos;
     private static long selfSnapshotNanos;
-    private static final ThreadLocal<HashMap<String, Integer>> activeModules = ThreadLocal.withInitial(HashMap::new);
+    private static final ThreadLocal<HashMap<String, int[]>> activeModules = ThreadLocal.withInitial(HashMap::new);
 
     static{
         for(int i = 0; i < snapshotRows.length; i++){
@@ -70,15 +70,15 @@ public final class NeonProfiler{
         enabled = value;
     }
 
-    public static synchronized boolean isEnabled(){
+    public static boolean isEnabled(){
         return enabled;
     }
 
-    public static synchronized void setShowAll(boolean value){
+    public static void setShowAll(boolean value){
         showAll = value;
     }
 
-    public static synchronized boolean isShowAll(){
+    public static boolean isShowAll(){
         return showAll;
     }
 
@@ -105,6 +105,26 @@ public final class NeonProfiler{
     public static Scope timeDetail(String module, String category, String operation, String threadGroup){
         if(!enabled) return Scope.disabled();
         return new Scope(module, category, operation, normalizeThread(threadGroup), false);
+    }
+
+    /** Pre-registers a row and returns its stable array index for zero-allocation hot-path timing. */
+    public static synchronized int registerProbe(String module, String category, String operation, String threadGroup, boolean rollup){
+        String normalizedThread = normalizeThread(threadGroup);
+        ensureIdleRollup(module, normalizedThread);
+        return indexOf(module, category, operation, normalizedThread, rollup, false);
+    }
+
+    /** Captures a start timestamp when enabled; returns 0L when disabled so end() is a cheap no-op. */
+    public static long begin(){
+        return enabled ? Time.nanos() : 0L;
+    }
+
+    /** Records elapsed time for a pre-registered probe handle with zero heap allocation. */
+    public static void end(int probeId, long startedNanos){
+        if(startedNanos == 0L || !enabled) return;
+        long elapsed = Time.timeSinceNanos(startedNanos);
+        if(elapsed <= 0L) return;
+        recordProbe(probeId, elapsed);
     }
 
     public static void record(String module, String category, String operation, String threadGroup, long elapsedNanos, boolean rollup){
@@ -240,20 +260,42 @@ public final class NeonProfiler{
         rotateBucketsIfNeeded(nowMillis());
         int index = indexOf(module, category, operation, threadGroup, rollup, selfCost);
         series[index].add(elapsedNanos, calls);
+    }
 
+    private static synchronized void recordScope(String module, String category, String operation, String threadGroup, long elapsedNanos, boolean rollup, boolean countTowardModuleTotal){
+        rotateBucketsIfNeeded(nowMillis());
+        int index = indexOf(module, category, operation, threadGroup, rollup, false);
+        series[index].add(elapsedNanos, 1L);
+        if(countTowardModuleTotal){
+            int totalIndex = indexOf(module, "Module", "total", threadGroup, true, false);
+            series[totalIndex].add(elapsedNanos, 1L);
+        }
+    }
+
+    private static synchronized void recordProbe(int probeId, long elapsedNanos){
+        if(probeId < 0 || probeId >= size) return;
+        rotateBucketsIfNeeded(nowMillis());
+        series[probeId].add(elapsedNanos, 1L);
+        RowKey key = keys[probeId];
+        if(key != null && key.rollup){
+            int totalIndex = indexOf(key.module, "Module", "total", key.threadGroup, true, false);
+            series[totalIndex].add(elapsedNanos, 1L);
+        }
     }
 
     private static int indexOf(String module, String category, String operation, String threadGroup, boolean rollup, boolean selfCost){
-        for(int i = 0; i < size; i++){
-            RowKey key = keys[i];
-            if(key != null && key.matches(module, category, operation, threadGroup, rollup, selfCost)){
-                return i;
-            }
+        lookupKey.set(module, category, operation, threadGroup, rollup, selfCost);
+        Integer existing = keyIndex.get(lookupKey);
+        if(existing != null){
+            return existing;
         }
         ensureCapacity(size + 1);
-        keys[size] = new RowKey(module, category, operation, threadGroup, rollup, selfCost);
-        series[size] = new BucketSeries();
-        return size++;
+        RowKey created = new RowKey(module, category, operation, threadGroup, rollup, selfCost);
+        int idx = size++;
+        keys[idx] = created;
+        series[idx] = new BucketSeries();
+        keyIndex.put(created, idx);
+        return idx;
     }
 
     private static void ensureCapacity(int desired){
@@ -316,20 +358,22 @@ public final class NeonProfiler{
     }
 
     private static boolean enterModule(String module){
-        HashMap<String, Integer> counts = activeModules.get();
-        Integer current = counts.get(module);
-        counts.put(module, current == null ? 1 : current + 1);
-        return current == null || current <= 0;
+        HashMap<String, int[]> counts = activeModules.get();
+        int[] depth = counts.get(module);
+        if(depth == null){
+            depth = new int[]{1};
+            counts.put(module, depth);
+            return true;
+        }
+        return depth[0]++ <= 0;
     }
 
     private static void exitModule(String module){
-        HashMap<String, Integer> counts = activeModules.get();
-        Integer current = counts.get(module);
-        if(current == null) return;
-        if(current <= 1){
-            counts.remove(module);
-        }else{
-            counts.put(module, current - 1);
+        HashMap<String, int[]> counts = activeModules.get();
+        int[] depth = counts.get(module);
+        if(depth == null) return;
+        if(depth[0] > 0){
+            depth[0]--;
         }
     }
 
@@ -377,10 +421,7 @@ public final class NeonProfiler{
             long elapsed = Time.timeSinceNanos(started);
             try{
                 if(!enabled || elapsed <= 0L) return;
-                recordInternal(module, category, operation, threadGroup, elapsed, 1L, rollup, false);
-                if(countTowardModuleTotal){
-                    recordInternal(module, "Module", "total", threadGroup, elapsed, 1L, true, false);
-                }
+                recordScope(module, category, operation, threadGroup, elapsed, rollup, countTowardModuleTotal);
             }finally{
                 exitModule(module);
             }
@@ -388,29 +429,51 @@ public final class NeonProfiler{
     }
 
     private static final class RowKey{
-        final String module;
-        final String category;
-        final String operation;
-        final String threadGroup;
-        final boolean rollup;
-        final boolean selfCost;
+        String module;
+        String category;
+        String operation;
+        String threadGroup;
+        boolean rollup;
+        boolean selfCost;
+        int hash;
 
         RowKey(String module, String category, String operation, String threadGroup, boolean rollup, boolean selfCost){
+            set(module, category, operation, threadGroup, rollup, selfCost);
+        }
+
+        void set(String module, String category, String operation, String threadGroup, boolean rollup, boolean selfCost){
             this.module = module;
             this.category = category;
             this.operation = operation;
             this.threadGroup = threadGroup;
             this.rollup = rollup;
             this.selfCost = selfCost;
+            int h = module.hashCode();
+            h = 31 * h + category.hashCode();
+            h = 31 * h + operation.hashCode();
+            h = 31 * h + threadGroup.hashCode();
+            h = 31 * h + (rollup ? 1231 : 1237);
+            h = 31 * h + (selfCost ? 1231 : 1237);
+            this.hash = h;
         }
 
-        boolean matches(String module, String category, String operation, String threadGroup, boolean rollup, boolean selfCost){
-            return this.rollup == rollup
-                && this.selfCost == selfCost
-                && this.module.equals(module)
-                && this.category.equals(category)
-                && this.operation.equals(operation)
-                && this.threadGroup.equals(threadGroup);
+        @Override
+        public int hashCode(){
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object other){
+            if(this == other) return true;
+            if(!(other instanceof RowKey)) return false;
+            RowKey that = (RowKey)other;
+            return this.hash == that.hash
+                && this.rollup == that.rollup
+                && this.selfCost == that.selfCost
+                && this.module.equals(that.module)
+                && this.category.equals(that.category)
+                && this.operation.equals(that.operation)
+                && this.threadGroup.equals(that.threadGroup);
         }
     }
 

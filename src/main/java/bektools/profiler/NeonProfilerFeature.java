@@ -107,7 +107,6 @@ public final class NeonProfilerFeature{
 
         Events.run(EventType.Trigger.update, () -> {
             if(Vars.headless) return;
-            NeonProfiler.setShowAll(Core.settings.getBool(keyShowAll, false));
             if(!NeonProfiler.isEnabled()) return;
             if(Time.time >= nextAttachAttempt){
                 nextAttachAttempt = Time.time + 60f;
@@ -427,10 +426,10 @@ public final class NeonProfilerFeature{
 
     public static void openPanel(){
         ensureDetailDialogBuilt();
-        refreshPanel();
         if(detailDialog != null){
             detailDialog.show();
         }
+        refreshPanel();
     }
 
     private static void ensureAttached(){
@@ -551,6 +550,7 @@ public final class NeonProfilerFeature{
     private static void refreshPanel(){
         if(panel == null) return;
         long started = Time.nanos();
+        NeonProfiler.setShowAll(Core.settings.getBool(keyShowAll, false));
         NeonProfiler.Snapshot snapshot = NeonProfiler.snapshot();
 
         headerLabel.setText(
@@ -600,7 +600,7 @@ public final class NeonProfilerFeature{
     }
 
     private static void refreshDetailDialog(NeonProfiler.Snapshot snapshot){
-        if(detailDialog == null || detailRowsTable == null) return;
+        if(detailDialog == null || detailRowsTable == null || !detailDialog.isShown()) return;
 
         if(detailToggleButton != null){
             detailToggleButton.setText(

@@ -40,7 +40,7 @@ python .\tools\update_submods.py --verify-build     # 同步后跑 gradlew compi
 - 存在 `registerSettings()` 时必须含 `if(bekBundled) return;` 早退；
 - 括号必须平衡。任一失败会中止同步并提示更新 `inject_bek_hooks()`；不要绕过断言。
 
-多数子模组已设 `injectBekHooks=false`，由子仓库自行维护契约。`preserveJavaFiles` 目前只用于 `sp` 的 `StealthPathModX.java`（Neon 侧 mainX 入口，子仓库无对应文件），镜像拷贝时不要删。
+多数子模组已设 `injectBekHooks=false`，由子仓库自行维护契约。`preserveJavaFiles` 里的条目在镜像拷贝时既不会被删除、也不会被上游同名文件覆盖：`sp` 用它保住 Neon 侧 mainX 入口 `StealthPathModX.java`（子仓库无对应文件），`bls` 用它保住 `features/LongWindowFlowFeature.java`（Neon 额外注入了 `mdtxcompat.OverlayUiBridge`，上游没有 `mdtxcompat`）。
 
 ## bundle 合并
 

@@ -1236,6 +1236,10 @@ def copy_java(mod: SubMod, repo_dir: Path) -> None:
         for src_path in upstream_pkg_dir.rglob("*.java"):
             rel = src_path.relative_to(upstream_pkg_dir)
             dst_path = target_pkg_dir / rel
+            if dst_path.name in preserve or rel.as_posix() in preserve:
+                # Neon-side adapter or a locally patched adapter over an upstream file
+                # (e.g. bls's OverlayUiBridge injection): keep the Neon copy untouched.
+                continue
             text = read_text(src_path)
             is_main_class = (
                 mod.main_class_file

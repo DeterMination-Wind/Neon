@@ -8,6 +8,7 @@ import powergridminimap.PowerGridMinimapModX;
 import radialbuildmenu.RadialBuildMenuModX;
 import serverplayerdatabase.ServerPlayerDataBaseModX;
 import stealthpath.StealthPathModX;
+import tripwire.TripwireModX;
 
 /** Neon entry for MindustryX-injected runtimes: selects the X-specific overlay/marker bridges and ModX subclasses. */
 public class BekToolsModX extends BekToolsMod{
@@ -20,7 +21,8 @@ public class BekToolsModX extends BekToolsMod{
             RadialBuildMenuModX::new,
             ServerPlayerDataBaseModX::new,
             BetterProjectorOverlayModX::new,
-            BetterHotKeyModX::new
+            BetterHotKeyModX::new,
+            TripwireModX::new
         );
     }
 }

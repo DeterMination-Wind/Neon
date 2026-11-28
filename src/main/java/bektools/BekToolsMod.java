@@ -24,6 +24,7 @@ import bettermapeditor.BetterMapEditorMod;
 import betterhotkey.BetterHotKeyMod;
 import betterminimap.BetterMiniMapMod;
 import betterlogisticsspeed.BetterLogisticsSpeedMod;
+import betterlogisticsspeed.features.LongWindowFlowFeature;
 import betterpolyai.BetterPolyAiMod;
 import betterprojectoroverlay.BetterProjectorOverlayMod;
 import betterterraingen.v2.BetterTerrainGenV2Mod;
@@ -217,7 +218,8 @@ public class BekToolsMod extends Mod{
             RadialBuildMenuMod::new,
             ServerPlayerDataBaseMod::new,
             BetterProjectorOverlayMod::new,
-            BetterHotKeyMod::new
+            BetterHotKeyMod::new,
+            null
         );
     }
 
@@ -229,7 +231,8 @@ public class BekToolsMod extends Mod{
         ModSupplier<RadialBuildMenuMod> radialBuildMenuSupplier,
         ModSupplier<ServerPlayerDataBaseMod> serverPlayerDataBaseSupplier,
         ModSupplier<BetterProjectorOverlayMod> betterProjectorOverlaySupplier,
-        ModSupplier<BetterHotKeyMod> betterHotKeySupplier
+        ModSupplier<BetterHotKeyMod> betterHotKeySupplier,
+        ModSupplier<TripwireMod> tripwireSupplier
     ){
         Log.info("Neon: runtime = " + (LegacyMindustryXGuard.isMindustryXRuntime() ? "MindustryX" : "vanilla") + " (core marker mindustryX.VarsX).");
         DataImagePackerCompat.installHooks();
@@ -329,6 +332,7 @@ public class BekToolsMod extends Mod{
             return mod;
         });
         betterLogisticsSpeed = initializeModule(moduleBetterLogisticsSpeed, () -> {
+            LongWindowFlowFeature.configureOverlayUi(overlayUi);
             BetterLogisticsSpeedMod mod = new BetterLogisticsSpeedMod();
             mod.init();
             return mod;
@@ -359,7 +363,7 @@ public class BekToolsMod extends Mod{
             mod.init();
             return mod;
         });
-        tripwire = initializeModule(moduleTripwire, TripwireMod::new);
+        tripwire = initializeModule(moduleTripwire, tripwireSupplier != null ? tripwireSupplier : () -> new TripwireMod(overlayUi));
         betterPolyAi = initializeModule(moduleBetterPolyAi, () -> {
             BetterPolyAiMod mod = new BetterPolyAiMod();
             mod.init();

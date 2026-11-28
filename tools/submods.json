@@ -141,6 +141,7 @@
       "mainClassFile": "BetterLogisticsSpeedMod.java",
       "bundlesDir": "src/main/resources/bundles",
       "injectBekHooks": false,
+      "preserveJavaFiles": ["features/LongWindowFlowFeature.java"],
       "allowNoGit": true
     },
     {

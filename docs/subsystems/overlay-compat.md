@@ -70,7 +70,7 @@ main 入口 → vanillaOverlayUi()
 
 OverlayUI 仅在玩家拖动缩放手柄时持久化窗口 `size`，而预览模式又只在 `size` 存在时恢复尺寸。因此，若一个 `resizable` 窗口从未被手动缩放过，重启后会以 0 宽高启动，直到按 `Z` 打开编辑界面触发一次 `pack()`；由于该次 `pack()` 不会写回设置，问题每次重启都会复发。
 
-为此，`mdtxcompat.OverlayWindowSizeSeed` 会轮询经 Neon 桥注册的窗口：当窗口可见、内容已量出尺寸且当前仍无有效尺寸时，主动调用一次 `pack()`。已经从设置或其他路径获得尺寸的窗口不会被覆盖，隐藏窗口也不会按空壳尺寸打包。该兜底仅对经 Neon 桥注册的窗口生效，直接反射调用 OverlayUI 的子模组（如 BLS）无法享受此兜底，必须自行按内容定尺寸或改走桥接口；MindustryX 自带窗口则需上游在 `Window.act()` 中做同等回退（`size == null` 时采用内容尺寸）。
+为此，`mdtxcompat.OverlayWindowSizeSeed` 会轮询经 Neon 桥注册的窗口：当窗口可见、内容已量出尺寸且当前仍无有效尺寸时，主动调用一次 `pack()`。已经从设置或其他路径获得尺寸的窗口不会被覆盖，隐藏窗口也不会按空壳尺寸打包。该兜底仅对经 Neon 桥注册的窗口生效：直接反射调用 OverlayUI 的子模组享受不到，必须自行按内容定尺寸或改走桥接口（BLS 已改为由 `LongWindowFlowFeature.configureOverlayUi(OverlayUiBridge)` 接收 Neon 统一管理的桥，因此纳入兜底）；MindustryX 自带窗口则需上游在 `Window.act()` 中做同等回退（`size == null` 时采用内容尺寸）。
 
 模块注册窗口时应优先设为 `resizable = false`（让面板按内容自适应）；确有手动缩放需求时再开启 `resizable`，并依靠上述兜底保证首次启动具备有效尺寸。注意：将已有窗口改为 `resizable = false` 会清空已保存的 `size` 并移除编辑模式下的缩放手柄，仅适用于本就无需手调大小的面板，且发版时需在更新日志中说明。
 

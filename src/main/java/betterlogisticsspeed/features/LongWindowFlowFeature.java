@@ -29,6 +29,7 @@ import arc.util.Scaling;
 import arc.util.Strings;
 import arc.util.Time;
 import arc.util.pooling.Pools;
+import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType;
 import mindustry.gen.Building;
@@ -100,6 +101,9 @@ public class LongWindowFlowFeature {
     private static BuildFlowTracker trackedTracker;
 
     private static final Seq<MarkedNode> markedNodes = new Seq<>();
+    private static OverlayUiBridge injectedOverlayUi;
+    private static boolean useInjectedOverlayUi;
+    private static OverlayUiBridge.OverlayWindowHandle overlayWindowHandle;
     private static Table overlayTable;
     private static boolean overlayRegistered;
     private static boolean overlayDirty = true;
@@ -120,6 +124,13 @@ public class LongWindowFlowFeature {
     private static Field mi2uHoverInfoField;
     private static Field mi2uHoverBuildField;
     private static Field mi2uHoverBuildtField;
+
+    public static void configureOverlayUi(OverlayUiBridge bridge) {
+        injectedOverlayUi = bridge == null ? OverlayUiBridge.UNSUPPORTED : bridge;
+        useInjectedOverlayUi = true;
+        overlayRegistered = false;
+        overlayWindowHandle = null;
+    }
 
     public static void init() {
         if (inited) return;
@@ -167,7 +178,7 @@ public class LongWindowFlowFeature {
         table.sliderPref(keyWindowSeconds, 10, 2, 60, 1, i -> i + "s");
         table.checkPref(keyShowTotal, true);
         table.sliderPref(keyDecimals, 1, 1, 2, 1, String::valueOf);
-        if (!OverlayCompat.hasOverlayUI()) {
+        if (!hasOverlayUi()) {
             table.row();
             table.add(Core.bundle.get("bls.overlay.missing")).width(520f).left().wrap().padTop(8f);
         }
@@ -483,19 +494,41 @@ public class LongWindowFlowFeature {
         nextOverlayRegisterAttemptMs = now + 1000L;
 
         ensureOverlayTable();
-        // Content-sized panel: OverlayUI only persists a size after a manual resize, so a resizable
-        // window without one collapses to zero width after every restart. Let the window track its
-        // content instead (same height behaviour as the previous autoHeight flag).
-        overlayRegistered = OverlayCompat.tryRegister(
-            overlayWindowName,
-            overlayTable,
-            () -> state != null && state.isGame() && enabled,
-            false,
-            false
-        );
-        if (!overlayRegistered && !OverlayCompat.hasOverlayUI()) {
+        if (useInjectedOverlayUi) {
+            if (injectedOverlayUi != null && injectedOverlayUi.isSupported()) {
+                OverlayUiBridge.OverlayWindowHandle handle = injectedOverlayUi.registerWindow(
+                    overlayWindowName,
+                    overlayTable,
+                    () -> state != null && state.isGame() && enabled
+                );
+                if (handle != null) {
+                    handle.configure(false, false);
+                    overlayWindowHandle = handle;
+                    overlayRegistered = true;
+                }
+            }
+        } else {
+            // Content-sized panel: OverlayUI only persists a size after a manual resize, so a resizable
+            // window without one collapses to zero width after every restart. Let the window track its
+            // content instead (same height behaviour as the previous autoHeight flag).
+            overlayRegistered = OverlayCompat.tryRegister(
+                overlayWindowName,
+                overlayTable,
+                () -> state != null && state.isGame() && enabled,
+                false,
+                false
+            );
+        }
+        if (!overlayRegistered && !hasOverlayUi()) {
             clearMarkedNodes();
         }
+    }
+
+    private static boolean hasOverlayUi() {
+        if (useInjectedOverlayUi) {
+            return injectedOverlayUi != null && injectedOverlayUi.isSupported();
+        }
+        return OverlayCompat.hasOverlayUI();
     }
 
     private static void ensureOverlayTable() {
@@ -1339,7 +1372,20 @@ public class LongWindowFlowFeature {
         private static boolean loggedFailure;
 
         static boolean hasOverlayUI() {
-            return resolveFromCore() != null || resolveFromSelf() != null;
+            if (resolveFromCore() != null) return true;
+            return resolveFromSelf() != null && isBundledOverlayServing();
+        }
+
+        private static boolean isBundledOverlayServing() {
+            try {
+                Class<?> bridge = Class.forName("overlaycompat.OverlayCompatBridgeMod", false, OverlayCompat.class.getClassLoader());
+                Object serving = bridge.getMethod("overlayServing").invoke(null);
+                return !(serving instanceof Boolean) || (Boolean) serving;
+            } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+                return true;
+            } catch (Throwable ignored) {
+                return true;
+            }
         }
 
         /**
@@ -1369,7 +1415,10 @@ public class LongWindowFlowFeature {
             try {
                 Class<?> overlayClass = resolveFromCore();
                 boolean fromCore = overlayClass != null;
-                if (overlayClass == null) overlayClass = resolveFromSelf();
+                if (overlayClass == null) {
+                    if (!isBundledOverlayServing()) return false;
+                    overlayClass = resolveFromSelf();
+                }
                 if (overlayClass == null) return false;
 
                 Object overlay = overlayClass.getField("INSTANCE").get(null);

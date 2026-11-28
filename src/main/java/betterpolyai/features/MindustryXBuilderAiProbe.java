@@ -35,8 +35,8 @@ final class MindustryXBuilderAiProbe {
         resolved = true;
 
         try {
-            overlayUiClass = resolveXClass(overlayUiClassName);
             auxiliaryToolsClass = resolveXClass(auxiliaryToolsClassName);
+            overlayUiClass = resolveXClass(overlayUiClassName);
             overlayWindowsField = findField(overlayUiClass, "windows");
             selectAiField = findField(auxiliaryToolsClass, "selectAI");
             available = selectAiField != null;
@@ -90,7 +90,7 @@ final class MindustryXBuilderAiProbe {
         try {
             return Class.forName(name, false, Vars.class.getClassLoader());
         } catch (ClassNotFoundException | LinkageError ignored) {
-            return Class.forName(name);
+            return Class.forName(name, false, MindustryXBuilderAiProbe.class.getClassLoader());
         }
     }
 

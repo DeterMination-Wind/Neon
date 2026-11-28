@@ -3,7 +3,9 @@ package bektools;
 import arc.Core;
 import arc.Events;
 import arc.func.Cons;
+import arc.graphics.g2d.TextureRegion;
 import arc.scene.style.Drawable;
+import arc.scene.style.TextureRegionDrawable;
 import arc.struct.Seq;
 import arc.util.CommandHandler;
 import arc.util.Log;
@@ -36,9 +38,11 @@ import foreignservertranslator.ForeignServerTranslatorMod;
 import foreignservertranslator.TranslatorFeature;
 import logicsugar.LogicSugarMod;
 import lockattack.LockAttackMod;
+import mindustry.Vars;
 import mindustry.game.EventType.ClientLoadEvent;
 import mindustry.gen.Icon;
 import mindustry.mod.Mod;
+import mindustry.mod.Mods;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 import modupdater.ModUpdaterMod;
 import patchviewer.PatchViewerMod;
@@ -590,10 +594,30 @@ public class BekToolsMod extends Mod{
 
         // Keep outer SettingsTable list.size constant at 1 so MindustryX's SettingsTable.act()
         // never triggers spurious rebuilds or stray vanilla reset buttons.
-        ui.settings.addCategory("@bektools.category", Icon.settings, table -> {
+        ui.settings.addCategory("@bektools.category", categoryIcon(), table -> {
             table.pref(new NeonSettingsHostSetting(buildModuleEntries(), settingsContext));
         });
         settingsRegistered = true;
+    }
+
+    /**
+     * The icon shown next to Neon's entry in the settings category list: the mod's own icon.png
+     * when the loader has already read it, otherwise the generic gear.
+     *
+     * <p>The loaded mod is matched by main-class type, not by name, because a MindustryX runtime
+     * instantiates {@link BekToolsModX} and dev builds carry a different mod name.</p>
+     */
+    private static Drawable categoryIcon(){
+        try{
+            for(Mods.LoadedMod loaded : Vars.mods.getMods()){
+                if(loaded.main instanceof BekToolsMod && loaded.iconTexture != null){
+                    return new TextureRegionDrawable(new TextureRegion(loaded.iconTexture));
+                }
+            }
+        }catch(Throwable ignored){
+            // Missing mods manager (headless/tests) or an unloaded icon: fall back below.
+        }
+        return Icon.settings;
     }
 
     private NeonSettingsModule moduleEntry(

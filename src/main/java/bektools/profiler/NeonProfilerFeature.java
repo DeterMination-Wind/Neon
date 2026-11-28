@@ -20,7 +20,6 @@ import arc.util.Log;
 import arc.util.Strings;
 import arc.util.Time;
 import bektools.ui.RbmStyle;
-import bektools.ui.VscodeSettingsStyle;
 import mdtxcompat.OverlayUiBridge;
 import mindustry.Vars;
 import mindustry.game.EventType;
@@ -107,7 +106,6 @@ public final class NeonProfilerFeature{
 
         Events.run(EventType.Trigger.update, () -> {
             if(Vars.headless) return;
-            NeonProfiler.setShowAll(Core.settings.getBool(keyShowAll, false));
             if(!NeonProfiler.isEnabled()) return;
             if(Time.time >= nextAttachAttempt){
                 nextAttachAttempt = Time.time + 60f;
@@ -380,31 +378,6 @@ public final class NeonProfilerFeature{
     }
 
     public static void buildSettings(SettingsMenuDialog.SettingsTable table){
-        table.pref(new SettingsMenuDialog.SettingsTable.Setting("neon-profiler-toggle") {
-            @Override
-            public void add(SettingsMenuDialog.SettingsTable t){
-                final TextButton[] button = {null};
-                t.table(VscodeSettingsStyle.cardBackground(), row -> {
-                    row.left().margin(6f);
-                    row.image(Icon.chartBar).size(20f).padRight(8f);
-                    button[0] = row.button("", Styles.flatt, () -> {
-                        boolean enable = !NeonProfiler.isEnabled();
-                        setEnabled(enable);
-                        if(enable){
-                            openPanel();
-                        }
-                    }).growX().height(RbmStyle.buttonHeight()).get();
-                }).width(RbmStyle.rowWidth()).left().padTop(6f);
-                if(button[0] != null){
-                    button[0].update(() -> button[0].setText(
-                        NeonProfiler.isEnabled()
-                            ? Core.bundle.get("neon.profiler.action.off", "Disable")
-                            : Core.bundle.get("neon.profiler.action.on", "Enable")
-                    ));
-                }
-                t.row();
-            }
-        });
         table.pref(new RbmStyle.IconCheckSetting("neon-profiler-enabled", Core.bundle.get("neon.profiler.action.enabled", "Enable profiler"), false, Icon.eyeSmall, NeonProfilerFeature::setEnabled));
         table.pref(new RbmStyle.ActionButtonSetting("neon-profiler-open", Core.bundle.get("neon.profiler.action.open", "Open profiler"), Icon.list, NeonProfilerFeature::openPanel));
         table.pref(new RbmStyle.ActionButtonSetting("neon-profiler-reset", Core.bundle.get("neon.profiler.action.reset", "Reset"), Icon.refreshSmall, NeonProfiler::reset));
@@ -427,10 +400,10 @@ public final class NeonProfilerFeature{
 
     public static void openPanel(){
         ensureDetailDialogBuilt();
-        refreshPanel();
         if(detailDialog != null){
             detailDialog.show();
         }
+        refreshPanel();
     }
 
     private static void ensureAttached(){
@@ -551,6 +524,7 @@ public final class NeonProfilerFeature{
     private static void refreshPanel(){
         if(panel == null) return;
         long started = Time.nanos();
+        NeonProfiler.setShowAll(Core.settings.getBool(keyShowAll, false));
         NeonProfiler.Snapshot snapshot = NeonProfiler.snapshot();
 
         headerLabel.setText(
@@ -600,7 +574,7 @@ public final class NeonProfilerFeature{
     }
 
     private static void refreshDetailDialog(NeonProfiler.Snapshot snapshot){
-        if(detailDialog == null || detailRowsTable == null) return;
+        if(detailDialog == null || detailRowsTable == null || !detailDialog.isShown()) return;
 
         if(detailToggleButton != null){
             detailToggleButton.setText(

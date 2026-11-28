@@ -43,9 +43,10 @@ public class BetterScreenShotFeature {
     private static final int idAttach = 1;
     private static final int idSize = 2;
 
-    private static final float settingsRefreshTime = 0.25f;
-    private static final float attachRefreshTime = 1f;
-    private static final float sizeRefreshTime = 0.2f;
+    // Interval.get() measures Arc ticks (60 ticks = 1s) and resets the timer; check() is read-only.
+    private static final float settingsRefreshTicks = 15f;
+    private static final float attachRefreshTicks = 60f;
+    private static final float sizeRefreshTicks = 12f;
 
     private static OverlayUiBridge xOverlayUi = OverlayUiBridge.UNSUPPORTED;
 
@@ -58,6 +59,15 @@ public class BetterScreenShotFeature {
 
     private static boolean capturing;
     private static int lastProgressPercent = -1;
+    private static boolean sizeHintInitialized;
+    private static boolean lastSizeInGame;
+    private static float lastSizeWorldWidth = -1f;
+    private static float lastSizeWorldHeight = -1f;
+    private static int lastSizeResolutionPercent = -1;
+    private static String lastTitleText;
+    private static String lastCaptureButtonText;
+    private static boolean lastCaptureButtonDisabled;
+    private static boolean captureButtonStateInitialized;
 
     private static KeyBind keybindCapture;
     private static Table panel;
@@ -92,14 +102,17 @@ public class BetterScreenShotFeature {
             updateCaptureButton();
         });
 
-        Events.on(EventType.WorldLoadEvent.class, e -> updateSizeHint());
+        Events.on(EventType.WorldLoadEvent.class, e -> {
+            sizeHintInitialized = false;
+            updateSizeHint();
+        });
 
         Events.run(EventType.Trigger.update, () -> {
             if (!Core.settings.getBool(keyEnabled, true)) return;
             try(NeonProfiler.Scope ignored = NeonProfiler.timeRoot("BSS", "Update", "update", NeonProfiler.threadMain)){
-            if (interval.check(idSettings, settingsRefreshTime)) refreshSettings();
-            if (interval.check(idAttach, attachRefreshTime)) ensurePanelAttached();
-            if (interval.check(idSize, sizeRefreshTime)) updateSizeHint();
+            if (interval.get(idSettings, settingsRefreshTicks)) refreshSettings();
+            if (interval.get(idAttach, attachRefreshTicks)) ensurePanelAttached();
+            if (interval.get(idSize, sizeRefreshTicks)) updateSizeHint();
             handleCaptureHotkey();
             }
         });
@@ -219,10 +232,33 @@ public class BetterScreenShotFeature {
     private static void updateSizeHint() {
         if (sizeLabel == null) return;
 
-        if (state == null || !state.isGame() || world == null) {
+        boolean inGame = state != null && state.isGame() && world != null;
+        if (!inGame) {
+            if (sizeHintInitialized && !lastSizeInGame) return;
+            sizeHintInitialized = true;
+            lastSizeInGame = false;
+            lastSizeWorldWidth = -1f;
+            lastSizeWorldHeight = -1f;
+            lastSizeResolutionPercent = -1;
             sizeLabel.setText(Core.bundle.get("bss.size.nogame"));
             return;
         }
+
+        float worldWidth = world.unitWidth();
+        float worldHeight = world.unitHeight();
+        if (sizeHintInitialized
+            && lastSizeInGame
+            && lastSizeWorldWidth == worldWidth
+            && lastSizeWorldHeight == worldHeight
+            && lastSizeResolutionPercent == resolutionPercent) {
+            return;
+        }
+
+        sizeHintInitialized = true;
+        lastSizeInGame = true;
+        lastSizeWorldWidth = worldWidth;
+        lastSizeWorldHeight = worldHeight;
+        lastSizeResolutionPercent = resolutionPercent;
 
         Screenshot.ShotEstimate estimate = Screenshot.estimateWorld(getWorldBounds(), getResolution());
         String rawMB = Strings.autoFixed(estimate.rawBytes / 1024f / 1024f, 1);
@@ -319,13 +355,24 @@ public class BetterScreenShotFeature {
 
     private static void updateCaptureButton() {
         if (captureButton == null) return;
-        captureButton.setText(capturing ? Core.bundle.get("bss.button.capturing") : Core.bundle.get("bss.button.capture"));
-        captureButton.setDisabled(capturing || !enabled);
+        String text = capturing ? Core.bundle.get("bss.button.capturing") : Core.bundle.get("bss.button.capture");
+        boolean disabled = capturing || !enabled;
+        if (captureButtonStateInitialized && disabled == lastCaptureButtonDisabled && text.equals(lastCaptureButtonText)) {
+            return;
+        }
+        captureButtonStateInitialized = true;
+        lastCaptureButtonText = text;
+        lastCaptureButtonDisabled = disabled;
+        captureButton.setText(text);
+        captureButton.setDisabled(disabled);
     }
 
     private static void updateTitle() {
         if (titleLabel == null) return;
-        titleLabel.setText(resolveWindowTitle());
+        String title = resolveWindowTitle();
+        if (title.equals(lastTitleText)) return;
+        lastTitleText = title;
+        titleLabel.setText(title);
     }
 
     private static String resolveWindowTitle() {

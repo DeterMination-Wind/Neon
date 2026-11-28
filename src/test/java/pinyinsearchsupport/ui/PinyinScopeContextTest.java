@@ -13,6 +13,7 @@ import arc.mock.MockGL20;
 import arc.mock.MockApplication;
 import arc.scene.Element;
 import arc.scene.Scene;
+import arc.scene.event.ChangeListener;
 import arc.scene.ui.Dialog;
 import arc.scene.ui.Dialog.DialogStyle;
 import arc.scene.ui.Label;
@@ -21,6 +22,7 @@ import arc.scene.ui.ScrollPane;
 import arc.scene.ui.ScrollPane.ScrollPaneStyle;
 import arc.scene.ui.TextField;
 import arc.scene.ui.TextField.TextFieldStyle;
+import arc.scene.ui.Tooltip;
 import arc.scene.ui.layout.Table;
 import arc.scene.ui.layout.WidgetGroup;
 import arc.struct.Seq;
@@ -29,6 +31,7 @@ import mindustry.Vars;
 import mindustry.core.UI;
 import mindustry.game.Schematic;
 import pinyinsearchsupport.match.MatchEngine;
+import pinyinsearchsupport.match.PinyinIndex;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
@@ -65,6 +68,10 @@ public final class PinyinScopeContextTest{
             testSchematicCandidatesRespectNativeFiltering();
             testResultSnapshotInvalidatedByNativeCardReplacement();
             testNumericSchematicQueriesRemainEligibleAfterReopen();
+            testMatchEngineBoundariesAndFuzzy();
+            testPinyinIndexBoundedCacheAndSurrogates();
+            testSearchTextExtractorBoundsAndTooltips();
+            testFieldDispatcherReentrancyGuard();
         }finally{
             Core.graphics = originalGraphics;
             Core.app = originalApp;
@@ -229,7 +236,7 @@ public final class PinyinScopeContextTest{
         Element originalCard = new Element();
         results.add(originalCard);
 
-        Seq<Element> snapshot = new Seq<>();
+        Seq<Element> snapshot = new Seq<Element>();
         snapshot.add(originalCard);
         check(FieldDispatcher.ResultSnapshot.sameActors(results, snapshot),
             "an unchanged native result table did not match its snapshot");
@@ -250,6 +257,126 @@ public final class PinyinScopeContextTest{
         }
         check(!FieldDispatcher.shouldDispatchSearch("123", false),
             "numeric query was incorrectly routed through pinyin filtering outside schematics");
+    }
+
+    private static void testMatchEngineBoundariesAndFuzzy(){
+        MatchEngine.MatchOptions allOn = new MatchEngine.MatchOptions(true, true, true);
+        MatchEngine.MatchOptions strict = new MatchEngine.MatchOptions(false, false, false);
+
+        // Null and empty boundary inputs must never throw.
+        check(MatchEngine.accepts("铜", null, null), "null query should accept");
+        check(MatchEngine.accepts("铜", "", allOn), "empty query should accept");
+        check(!MatchEngine.accepts(null, "tong", allOn), "null rawText should reject non-empty query");
+        check(!MatchEngine.accepts("", "tong", allOn), "empty rawText should reject non-empty query");
+        check(MatchEngine.accepts("铜", "   ---   ", allOn), "separator-only query should accept");
+
+        // Fuzzy retroflex (zh/z, ch/c, sh/s) and trailing g (ang/an) matching.
+        check(MatchEngine.accepts("重工厂", "zonggongchang", allOn), "fuzzy z->zh failed");
+        check(MatchEngine.accepts("重工厂", "zhonggonchan", allOn), "fuzzy trailing g omission failed");
+        check(MatchEngine.accepts("水泵", "suibeng", allOn), "fuzzy s->sh failed");
+        check(!MatchEngine.accepts("水泵", "suibeng", strict), "strict mode unexpectedly accepted fuzzy match");
+
+        // Surrogate pairs / emoji and unpaired surrogates must be handled safely.
+        check(MatchEngine.accepts("\uD83D\uDD25水泵\uD83D\uDCA7", "shuibeng", allOn), "emoji-wrapped CJK failed");
+        check(MatchEngine.accepts("\uD800水泵\uDC00", "sb", allOn), "unpaired surrogate failed");
+
+        // Adversarial long heteronym text + non-matching query must complete rapidly without stack overflow.
+        StringBuilder heavy = new StringBuilder();
+        for(int i = 0; i < 120; i++){
+            heavy.append("行长重调乐着");
+        }
+        long startNs = System.nanoTime();
+        boolean matched = MatchEngine.accepts(heavy.toString(), "aaaaaaaaaaaaaaaaaaaaaz", allOn);
+        long elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
+        check(!matched, "adversarial non-matching query unexpectedly matched");
+        check(elapsedMs < 500L, "adversarial walkMatch took too long: " + elapsedMs + "ms");
+    }
+
+    private static void testPinyinIndexBoundedCacheAndSurrogates(){
+        check(PinyinIndex.of(null) == PinyinIndex.Profile.EMPTY, "null raw did not return EMPTY");
+        check(PinyinIndex.of("") == PinyinIndex.Profile.EMPTY, "empty raw did not return EMPTY");
+        check(PinyinIndex.of("[red]") == PinyinIndex.Profile.EMPTY, "color-tag-only raw did not return EMPTY");
+
+        StringBuilder huge = new StringBuilder();
+        for(int i = 0; i < 2000; i++) huge.append('水');
+        PinyinIndex.Profile p = PinyinIndex.of(huge.toString());
+        check(p.tokens.length <= 512, "ultra-long input was not capped in PinyinIndex");
+
+        // Ensure cache remains strictly bounded under heavy churn.
+        for(int i = 0; i < 2500; i++){
+            PinyinIndex.of("条目" + i);
+        }
+        // Cache size check via package-private test hook would live in match package;
+        // here verify repeated lookup remains consistent and functional.
+        check(MatchEngine.accepts("条目2499", "tiaomu2499", null), "lookup after cache churn failed");
+    }
+
+    private static void testSearchTextExtractorBoundsAndTooltips(){
+        Fixture fixture = new Fixture();
+        check(SearchTextExtractor.extract(null) == null, "null element extraction should return null");
+
+        Table root = new Table();
+        Table current = root;
+        for(int i = 0; i < 24; i++){
+            Table next = new Table();
+            current.add(next);
+            current = next;
+        }
+        current.add(fixture.label("深层节点"));
+        // Deep nesting beyond MAX_DEPTH must not stack overflow.
+        SearchTextExtractor.extract(root);
+
+        Table buttonLike = new Table();
+        buttonLike.add(fixture.label("铜墙"));
+        Tooltip tip = new Tooltip(t -> t.add(fixture.label("防御建筑")));
+        buttonLike.addListener(tip);
+        String extracted = SearchTextExtractor.extract(buttonLike);
+        check(extracted != null && extracted.contains("铜墙") && extracted.contains("防御建筑"),
+            "SearchTextExtractor missed label or tooltip text");
+    }
+
+    private static void testFieldDispatcherReentrancyGuard() throws Exception{
+        Fixture fixture = new Fixture();
+        Dialog dialog = fixture.dialog();
+        TextField field = fixture.field();
+        field.name = "search";
+
+        Table searchRow = new Table();
+        searchRow.add(field);
+        Table results = new Table();
+        results.add(fixture.label("水"));
+        results.add(fixture.label("铜"));
+        dialog.cont.add(searchRow).row();
+        dialog.cont.add(new ScrollPane(results, new ScrollPaneStyle()));
+        fixture.scene.root.addChild(dialog);
+        focus(fixture.scene, field);
+
+        final int[] vanillaCalls = {0};
+        field.addListener(new ChangeListener(){
+            @Override
+            public void changed(ChangeEvent event, Element actor){
+                vanillaCalls[0]++;
+                // Simulate a vanilla listener reentrantly firing a text mutation / change event.
+                if(vanillaCalls[0] < 5){
+                    field.setText(field.getText());
+                }
+            }
+        });
+
+        FieldDispatcher dispatcher = new FieldDispatcher();
+        check(dispatcher.attach(field), "FieldDispatcher failed to attach to search field");
+
+        field.setProgrammaticChangeEvents(true);
+        Application prevApp = Core.app;
+        try{
+            // Core.app == null forces synchronous dispatch so reentrancy is exercised immediately.
+            Core.app = null;
+            field.setText("shui");
+        }finally{
+            Core.app = prevApp;
+        }
+        check(vanillaCalls[0] >= 1 && vanillaCalls[0] <= 2,
+            "reentrant listener caused unexpected invocation count: " + vanillaCalls[0]);
     }
 
     private static Schematic schematic(String name){

@@ -20,6 +20,10 @@ import pinyinsearchsupport.match.MatchEngine;
 public final class ScopeTree{
     public enum LayoutMode{ LIST, GRID, SECTIONED }
 
+    private static final int MAX_TRAVERSAL_DEPTH = 32;
+    private static final int MAX_TRAVERSAL_NODES = 2048;
+    private static final int MAX_SECTION_DEPTH = 8;
+
     private final TextField field;
     private final Context context;
     private final Seq<SubScope> scopes;
@@ -41,8 +45,8 @@ public final class ScopeTree{
     static ScopeTree locate(TextField field, Context context){
         if(context == null || !context.isActive(field)) return null;
 
-        Seq<ScrollPane> allPanes = new Seq<>();
-        collectScrollPanes(context.root, context.root, allPanes);
+        Seq<ScrollPane> allPanes = new Seq<ScrollPane>();
+        collectScrollPanes(context.root, context.root, 0, new int[]{0}, allPanes);
 
         Candidate best = null;
         boolean ambiguous = false;
@@ -61,13 +65,13 @@ public final class ScopeTree{
 
         if(best == null || ambiguous) return null;
 
-        Seq<SubScope> scopes = new Seq<>();
+        Seq<SubScope> scopes = new Seq<SubScope>();
         scopes.add(new SubScope(field, context, best.pane, best.table, detectMode(best.table)));
         return new ScopeTree(field, context, scopes);
     }
 
     public void postFilter(String query, MatchEngine.MatchOptions opts){
-        if(query == null || query.isEmpty()) return;
+        if(query == null || query.isEmpty() || scopes == null) return;
         for(int i = 0; i < scopes.size; i++){
             scopes.get(i).filter(query, opts);
         }
@@ -82,7 +86,7 @@ public final class ScopeTree{
         Group originalParent = field.parent;
         Group boundary = globalBoundaryOf(field);
         Group cursor = originalParent;
-        for(int depth = 0; depth < 32 && cursor != null; depth++){
+        for(int depth = 0; depth < MAX_TRAVERSAL_DEPTH && cursor != null; depth++){
             if(cursor instanceof Dialog){
                 return new Context(scene, cursor, (Dialog)cursor, originalParent, boundary);
             }
@@ -94,7 +98,7 @@ public final class ScopeTree{
         // A strict local descendant may own a search field and result pane,
         // but the boundary itself can never become the inferred scope.
         cursor = originalParent;
-        for(int depth = 0; depth < 32 && cursor != null && cursor != scene.root && cursor != boundary; depth++){
+        for(int depth = 0; depth < MAX_TRAVERSAL_DEPTH && cursor != null && cursor != scene.root && cursor != boundary; depth++){
             Context context = new Context(scene, cursor, null, originalParent, boundary);
             if(hasQualifyingScrollPane(field, context)){
                 return context;
@@ -113,15 +117,16 @@ public final class ScopeTree{
     }
 
     private static boolean hasQualifyingScrollPane(TextField field, Context context){
-        Seq<ScrollPane> panes = new Seq<>();
-        collectScrollPanes(context.root, context.root, panes);
+        Seq<ScrollPane> panes = new Seq<ScrollPane>();
+        collectScrollPanes(context.root, context.root, 0, new int[]{0}, panes);
         for(int i = 0; i < panes.size; i++){
             if(candidate(field, context, panes.get(i)) != null) return true;
         }
         return false;
     }
 
-    private static void collectScrollPanes(Element root, Element current, Seq<ScrollPane> out){
+    private static void collectScrollPanes(Element root, Element current, int depth, int[] visited, Seq<ScrollPane> out){
+        if(current == null || depth > MAX_TRAVERSAL_DEPTH || visited[0]++ >= MAX_TRAVERSAL_NODES) return;
         if(current != root){
             if(current instanceof Dialog) return;
             if(current instanceof Group && isGlobalUiGroup((Group)current)) return;
@@ -129,7 +134,11 @@ public final class ScopeTree{
         if(current instanceof ScrollPane) out.add((ScrollPane)current);
         if(current instanceof Group){
             Seq<Element> ch = ((Group)current).getChildren();
-            for(int i = 0; i < ch.size; i++) collectScrollPanes(root, ch.get(i), out);
+            if(ch == null) return;
+            for(int i = 0; i < ch.size; i++){
+                if(visited[0] >= MAX_TRAVERSAL_NODES) break;
+                collectScrollPanes(root, ch.get(i), depth + 1, visited, out);
+            }
         }
     }
 
@@ -140,7 +149,8 @@ public final class ScopeTree{
         if(!(widget instanceof Table)) return null;
 
         Table table = (Table)widget;
-        if(table.getScene() != context.scene || table.getCells().isEmpty()) return null;
+        Seq<Cell> cells = table.getCells();
+        if(table.getScene() != context.scene || cells == null || cells.isEmpty()) return null;
         if(pane.getHeight() > 0f && pane.getHeight() < 80f) return null;
         if(field.isDescendantOf(pane) || field.isDescendantOf(table)) return null;
         if(!context.owns(table)) return null;
@@ -152,8 +162,10 @@ public final class ScopeTree{
 
     private static boolean hasActor(Table table){
         Seq<Cell> cells = table.getCells();
+        if(cells == null) return false;
         for(int i = 0; i < cells.size; i++){
-            if(cells.get(i).get() != null) return true;
+            Cell<?> cell = cells.get(i);
+            if(cell != null && cell.get() != null) return true;
         }
         return false;
     }
@@ -164,7 +176,8 @@ public final class ScopeTree{
 
     private static Group globalBoundaryOf(Element element){
         Element cursor = element;
-        while(cursor != null){
+        int depth = 0;
+        while(cursor != null && depth++ < MAX_TRAVERSAL_DEPTH * 2){
             if(cursor instanceof Group && isGlobalUiGroup((Group)cursor)) return (Group)cursor;
             cursor = cursor.parent;
         }
@@ -173,7 +186,8 @@ public final class ScopeTree{
 
     private static boolean visibleThrough(Element element, Element root){
         Element cursor = element;
-        while(cursor != null){
+        int depth = 0;
+        while(cursor != null && depth++ < MAX_TRAVERSAL_DEPTH * 2){
             if(!cursor.visible) return false;
             if(cursor == root) return true;
             cursor = cursor.parent;
@@ -182,21 +196,24 @@ public final class ScopeTree{
     }
 
     private static LayoutMode detectMode(Table t){
+        if(t == null) return LayoutMode.LIST;
         Seq<Cell> cells = t.getCells();
-        if(cells.isEmpty()) return LayoutMode.LIST;
+        if(cells == null || cells.isEmpty()) return LayoutMode.LIST;
 
         int actorCount = 0;
         int buttonCount = 0;
         int tableCount = 0;
         boolean hasMultiCellRow = false;
         for(int i = 0; i < cells.size; i++){
-            Element actor = cells.get(i).get();
+            Cell<?> cell = cells.get(i);
+            if(cell == null) continue;
+            Element actor = cell.get();
             if(actor != null){
                 actorCount++;
                 if(actor instanceof Button) buttonCount++;
                 if(actor instanceof Table) tableCount++;
             }
-            if(i < cells.size - 1 && !cells.get(i).isEndRow()) hasMultiCellRow = true;
+            if(i < cells.size - 1 && !cell.isEndRow()) hasMultiCellRow = true;
         }
 
         // Buttons are Tables in Arc. Treat button-heavy/card layouts as grids
@@ -209,7 +226,7 @@ public final class ScopeTree{
         return LayoutMode.LIST;
     }
 
-    // ---- SubScope ----
+    // ---- Context ----
 
     static final class Context{
         final Scene scene;
@@ -248,8 +265,8 @@ public final class ScopeTree{
             Element scroll = scene.getScrollFocus();
             if(dialog != null){
                 if(!dialog.isShown()) return false;
-                return keyboard != null && keyboard.isDescendantOf(dialog)
-                    || scroll != null && scroll.isDescendantOf(dialog);
+                return (keyboard != null && keyboard.isDescendantOf(dialog))
+                    || (scroll != null && scroll.isDescendantOf(dialog));
             }
 
             return keyboard != null && keyboard.isDescendantOf(root);
@@ -284,15 +301,15 @@ public final class ScopeTree{
         static StructuralScore between(Element field, Element pane, Group root){
             Element common = field;
             int fieldDepth = 0;
-            while(common != null && !pane.isDescendantOf(common)){
+            while(common != null && !pane.isDescendantOf(common) && fieldDepth < MAX_TRAVERSAL_DEPTH * 2){
                 common = common.parent;
                 fieldDepth++;
             }
-            if(common == null || !common.isDescendantOf(root)) return null;
+            if(common == null || !pane.isDescendantOf(common) || !common.isDescendantOf(root)) return null;
 
             int paneDepth = 0;
             Element cursor = pane;
-            while(cursor != null && cursor != common){
+            while(cursor != null && cursor != common && paneDepth < MAX_TRAVERSAL_DEPTH * 2){
                 cursor = cursor.parent;
                 paneDepth++;
             }
@@ -305,11 +322,13 @@ public final class ScopeTree{
                 Element paneBranch = branchBelow(pane, common);
                 if(fieldBranch != null && paneBranch != null && fieldBranch != paneBranch){
                     Seq<Element> children = ((Group)common).getChildren();
-                    int fieldIndex = children.indexOf(fieldBranch, true);
-                    int paneIndex = children.indexOf(paneBranch, true);
-                    if(fieldIndex >= 0 && paneIndex >= 0){
-                        directionPenalty = paneIndex >= fieldIndex ? 0 : 1;
-                        siblingGap = Math.abs(paneIndex - fieldIndex);
+                    if(children != null){
+                        int fieldIndex = children.indexOf(fieldBranch, true);
+                        int paneIndex = children.indexOf(paneBranch, true);
+                        if(fieldIndex >= 0 && paneIndex >= 0){
+                            directionPenalty = paneIndex >= fieldIndex ? 0 : 1;
+                            siblingGap = Math.abs(paneIndex - fieldIndex);
+                        }
                     }
                 }
             }
@@ -320,7 +339,8 @@ public final class ScopeTree{
         private static Element branchBelow(Element element, Element ancestor){
             Element cursor = element;
             Element branch = element;
-            while(cursor != null && cursor != ancestor){
+            int depth = 0;
+            while(cursor != null && cursor != ancestor && depth++ < MAX_TRAVERSAL_DEPTH * 2){
                 branch = cursor;
                 cursor = cursor.parent;
             }
@@ -365,8 +385,9 @@ public final class ScopeTree{
             if(!isValid()) return;
 
             float scrollY = pane.getScrollY();
+            if(!Float.isFinite(scrollY) || scrollY < 0f) scrollY = 0f;
 
-            int matches = filterTable(table, mode, query, opts);
+            int matches = filterTable(table, mode, query, opts, 0);
             if(matches == 0){
                 table.add("@none.found").padLeft(54f).padTop(10f);
             }
@@ -378,16 +399,18 @@ public final class ScopeTree{
                 Log.warn("[PinyinSearchSupport] pane.layout() threw: @", t.getMessage());
             }
             float maxY = pane.getMaxY();
-            pane.setScrollYForce(Math.max(0f, Math.min(scrollY, maxY)));
+            float clampedY = Float.isFinite(maxY) && maxY > 0f ? Math.min(scrollY, maxY) : 0f;
+            pane.setScrollYForce(Math.max(0f, clampedY));
             pane.updateVisualScroll();
         }
 
-        private int filterTable(Table target, LayoutMode layout, String query, MatchEngine.MatchOptions opts){
+        private int filterTable(Table target, LayoutMode layout, String query, MatchEngine.MatchOptions opts, int depth){
             if(target == null || target == context.root || field.isDescendantOf(target)) return 0;
+            if(depth > MAX_SECTION_DEPTH) return 0;
             if(target == table && !context.owns(target)) return 0;
 
             Seq<Cell> cells = target.getCells();
-            if(cells.isEmpty()) return 0;
+            if(cells == null || cells.isEmpty()) return 0;
 
             int n = cells.size;
             Element[] actors = new Element[n];
@@ -395,63 +418,87 @@ public final class ScopeTree{
             boolean[] endRows = new boolean[n];
             for(int i = 0; i < n; i++){
                 Cell<?> c = cells.get(i);
+                if(c == null) continue;
                 actors[i] = c.get();
                 snaps[i] = CellSnapshot.capture(c);
                 endRows[i] = c.isEndRow();
             }
 
-            target.clearChildren();
-
             if(layout == LayoutMode.SECTIONED){
-                return filterSectioned(target, actors, snaps, endRows, n, query, opts);
+                target.clearChildren();
+                try{
+                    return filterSectioned(target, actors, snaps, endRows, n, query, opts, depth);
+                }catch(Throwable t){
+                    restoreOriginal(target, actors, snaps, endRows, n);
+                    throw t;
+                }
             }else if(layout == LayoutMode.GRID){
-                return filterGrid(target, actors, snaps, endRows, n, query, opts);
+                boolean[] matched = evaluateMatches(actors, n, query, opts);
+                target.clearChildren();
+                try{
+                    return rebuildGrid(target, actors, snaps, endRows, matched, n);
+                }catch(Throwable t){
+                    restoreOriginal(target, actors, snaps, endRows, n);
+                    throw t;
+                }
             }else{
-                return filterList(target, actors, snaps, endRows, n, query, opts);
+                boolean[] matched = evaluateMatches(actors, n, query, opts);
+                target.clearChildren();
+                try{
+                    return rebuildList(target, actors, snaps, endRows, matched, n);
+                }catch(Throwable t){
+                    restoreOriginal(target, actors, snaps, endRows, n);
+                    throw t;
+                }
             }
         }
 
-        private int filterList(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows, int n,
-                               String query, MatchEngine.MatchOptions opts){
-            int matches = 0;
+        private boolean[] evaluateMatches(Element[] actors, int n, String query, MatchEngine.MatchOptions opts){
+            boolean[] matched = new boolean[n];
             for(int i = 0; i < n; i++){
                 Element actor = actors[i];
                 if(actor == null) continue;
-                if(matchesActor(actor, query, opts)){
-                    addOriginal(target, actors, snaps, endRows, i);
-                    matches++;
-                }
+                matched[i] = matchesActorSafe(actor, query, opts);
+            }
+            return matched;
+        }
+
+        private int rebuildList(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows,
+                                boolean[] matched, int n){
+            int matches = 0;
+            for(int i = 0; i < n; i++){
+                if(actors[i] == null || !matched[i]) continue;
+                addOriginal(target, actors, snaps, endRows, i);
+                matches++;
             }
             return matches;
         }
 
-        private int filterGrid(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows, int n,
-                               String query, MatchEngine.MatchOptions opts){
+        private int rebuildGrid(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows,
+                                boolean[] matched, int n){
             int cols = detectColumns(endRows, n);
 
             int matches = 0;
             int col = 0;
             for(int i = 0; i < n; i++){
                 Element actor = actors[i];
-                if(actor == null) continue;
-                if(matchesActor(actor, query, opts)){
-                    Cell<?> cell = target.add(actor);
-                    if(snaps[i] != null) snaps[i].applyTo(cell);
-                    cell.colspan(1);
-                    col++;
-                    if(col % cols == 0){
-                        target.row();
-                        col = 0;
-                    }
-                    matches++;
+                if(actor == null || !matched[i]) continue;
+                Cell<?> cell = target.add(actor);
+                if(snaps[i] != null) snaps[i].applyTo(cell);
+                cell.colspan(1);
+                col++;
+                if(col % cols == 0){
+                    target.row();
+                    col = 0;
                 }
+                matches++;
             }
             if(col > 0) target.row();
             return matches;
         }
 
         private int filterSectioned(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows, int n,
-                                    String query, MatchEngine.MatchOptions opts){
+                                    String query, MatchEngine.MatchOptions opts, int depth){
             int matches = 0;
             int[] pendingHeaders = new int[n];
             int pendingCount = 0;
@@ -473,7 +520,7 @@ public final class ScopeTree{
                         continue;
                     }
 
-                    int childMatches = filterTable(section, detectMode(section), query, opts);
+                    int childMatches = filterTable(section, detectMode(section), query, opts, depth + 1);
                     if(childMatches > 0){
                         for(int p = 0; p < pendingCount; p++){
                             addOriginal(target, actors, snaps, endRows, pendingHeaders[p]);
@@ -484,7 +531,7 @@ public final class ScopeTree{
                     }else{
                         pendingCount = 0;
                     }
-                }else if(actor instanceof Button && matchesActor(actor, query, opts)){
+                }else if(actor instanceof Button && matchesActorSafe(actor, query, opts)){
                     for(int p = 0; p < pendingCount; p++){
                         addOriginal(target, actors, snaps, endRows, pendingHeaders[p]);
                     }
@@ -498,6 +545,17 @@ public final class ScopeTree{
             return matches;
         }
 
+        private void restoreOriginal(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows, int n){
+            try{
+                target.clearChildren();
+                for(int i = 0; i < n; i++){
+                    if(actors[i] == null) continue;
+                    addOriginal(target, actors, snaps, endRows, i);
+                }
+                target.invalidateHierarchy();
+            }catch(Throwable ignored){}
+        }
+
         private Cell<?> addOriginal(Table target, Element[] actors, CellSnapshot[] snaps, boolean[] endRows, int index){
             Cell<?> cell = target.add(actors[index]);
             if(snaps[index] != null) snaps[index].applyTo(cell);
@@ -505,9 +563,13 @@ public final class ScopeTree{
             return cell;
         }
 
-        private boolean matchesActor(Element actor, String query, MatchEngine.MatchOptions opts){
-            String text = SearchTextExtractor.extract(actor);
-            return text != null && MatchEngine.accepts(text, query, opts);
+        private boolean matchesActorSafe(Element actor, String query, MatchEngine.MatchOptions opts){
+            try{
+                String text = SearchTextExtractor.extract(actor);
+                return text != null && MatchEngine.accepts(text, query, opts);
+            }catch(Throwable ignored){
+                return false;
+            }
         }
 
         private int detectColumns(boolean[] endRows, int n){
@@ -526,11 +588,13 @@ public final class ScopeTree{
 
         private boolean isControlTable(Table section){
             Seq<Cell> cells = section.getCells();
-            if(cells.isEmpty()) return false;
+            if(cells == null || cells.isEmpty()) return false;
             int actors = 0;
             int buttons = 0;
             for(int i = 0; i < cells.size; i++){
-                Element actor = cells.get(i).get();
+                Cell<?> c = cells.get(i);
+                if(c == null) continue;
+                Element actor = c.get();
                 if(actor == null) continue;
                 actors++;
                 if(actor instanceof Button) buttons++;
@@ -540,11 +604,13 @@ public final class ScopeTree{
 
         private boolean isHeaderTable(Table section){
             Seq<Cell> cells = section.getCells();
-            if(cells.isEmpty() || cells.size > 4) return false;
+            if(cells == null || cells.isEmpty() || cells.size > 4) return false;
 
             boolean hasLabel = false;
             for(int i = 0; i < cells.size; i++){
-                Element actor = cells.get(i).get();
+                Cell<?> c = cells.get(i);
+                if(c == null) continue;
+                Element actor = c.get();
                 if(actor == null) continue;
                 if(actor instanceof Label){
                     hasLabel = true;

@@ -464,7 +464,10 @@ public final class PinyinScopeContextTest{
         }
 
         TextField field(){
-            return new TextField("", fieldStyle);
+            TextField field = new TextField("", fieldStyle);
+            // The fixture font carries no glyphs; without this, setText() drops every character.
+            field.setOnlyFontChars(false);
+            return field;
         }
 
         Label label(String text){

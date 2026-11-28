@@ -35,6 +35,9 @@ final class MindustryXBuilderAiProbe {
         resolved = true;
 
         try {
+            // Probe AuxiliaryTools first: a vanilla client has no such class, so the whole
+            // resolve fails before OverlayUI is even touched (its static initializer must not
+            // run on a client that only ships Neon's compat copy).
             auxiliaryToolsClass = resolveXClass(auxiliaryToolsClassName);
             overlayUiClass = resolveXClass(overlayUiClassName);
             overlayWindowsField = findField(overlayUiClass, "windows");
@@ -90,6 +93,8 @@ final class MindustryXBuilderAiProbe {
         try {
             return Class.forName(name, false, Vars.class.getClassLoader());
         } catch (ClassNotFoundException | LinkageError ignored) {
+            // initialize = false: never trigger OverlayUI's static initializer as a side
+            // effect of a failed probe.
             return Class.forName(name, false, MindustryXBuilderAiProbe.class.getClassLoader());
         }
     }

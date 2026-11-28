@@ -18,6 +18,9 @@ public class TripwireMod extends Mod {
     }
 
     public TripwireMod() {
+        // Never hard-disable the overlay for bundled runtimes: Neon passes the bridge it
+        // manages through the parameterized constructor, and a standalone jar has to work
+        // both on a real MindustryX and on a plain vanilla client.
         this(OverlayUiBridge.autoDetect());
     }
 

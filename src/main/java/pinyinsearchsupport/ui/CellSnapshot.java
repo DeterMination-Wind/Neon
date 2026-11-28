@@ -1,14 +1,21 @@
 package pinyinsearchsupport.ui;
 
+import arc.scene.Element;
 import arc.scene.ui.layout.Cell;
+import arc.scene.ui.layout.Table;
 import arc.util.Log;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 
 public final class CellSnapshot{
+    private static final int MAX_RUNTIME_FAILURES = 8;
+
     private static volatile Field[] fields;
     private static volatile boolean unavailable;
+    private static volatile int failureCount;
+
     private final Object[] values;
     private final boolean endRow;
 
@@ -18,6 +25,7 @@ public final class CellSnapshot{
     }
 
     public static CellSnapshot capture(Cell<?> cell){
+        if(cell == null) return null;
         Field[] fs = ensure();
         if(fs == null) return null;
         Object[] vals = new Object[fs.length];
@@ -25,24 +33,37 @@ public final class CellSnapshot{
             for(int i = 0; i < fs.length; i++){
                 vals[i] = fs[i].get(cell);
             }
+            return new CellSnapshot(vals, cell.isEndRow());
         }catch(Throwable t){
-            Log.warn("[PinyinSearchSupport] CellSnapshot.capture failed: @", t.getMessage());
+            recordFailure("capture", t);
             return null;
         }
-        return new CellSnapshot(vals, cell.isEndRow());
     }
 
-    public boolean endRow(){ return endRow; }
+    public boolean endRow(){
+        return endRow;
+    }
 
     public void applyTo(Cell<?> cell){
+        if(cell == null || values == null) return;
         Field[] fs = ensure();
-        if(fs == null) return;
+        if(fs == null || fs.length != values.length) return;
         try{
             for(int i = 0; i < fs.length; i++){
                 fs[i].set(cell, values[i]);
             }
         }catch(Throwable t){
-            Log.warn("[PinyinSearchSupport] CellSnapshot.applyTo failed: @", t.getMessage());
+            recordFailure("applyTo", t);
+        }
+    }
+
+    private static void recordFailure(String op, Throwable t){
+        int count = ++failureCount;
+        if(count <= 3){
+            Log.warn("[PinyinSearchSupport] CellSnapshot." + op + " failed: @", t.getMessage());
+        }
+        if(count >= MAX_RUNTIME_FAILURES){
+            unavailable = true;
         }
     }
 
@@ -51,24 +72,33 @@ public final class CellSnapshot{
         Field[] cached = fields;
         if(cached != null) return cached;
         synchronized(CellSnapshot.class){
+            if(unavailable) return null;
             if(fields != null) return fields;
             try{
                 Field[] all = Cell.class.getDeclaredFields();
-                java.util.ArrayList<Field> keep = new java.util.ArrayList<>(all.length);
-                for(Field f : all){
+                ArrayList<Field> keep = new ArrayList<Field>(all.length);
+                for(int i = 0; i < all.length; i++){
+                    Field f = all[i];
                     int m = f.getModifiers();
-                    if(Modifier.isStatic(m) || Modifier.isFinal(m)) continue;
+                    if(Modifier.isStatic(m) || Modifier.isFinal(m) || Modifier.isTransient(m)) continue;
+
+                    Class<?> type = f.getType();
+                    if(Element.class.isAssignableFrom(type)
+                        || Table.class.isAssignableFrom(type)
+                        || Cell.class.isAssignableFrom(type)) continue;
+
                     String name = f.getName();
-                    // skip back-references and actor — actor is re-set by add()
+                    // Skip back-references and actor (re-set by Table.add).
                     if("element".equals(name) || "actor".equals(name)) continue;
                     if("tableLayout".equals(name) || "table".equals(name)) continue;
-                    // skip computed layout positions / internal bookkeeping
-                    if("elementX".equals(name) || "elementY".equals(name) ||
-                       "elementWidth".equals(name) || "elementHeight".equals(name)) continue;
+                    // Skip computed layout positions and internal table bookkeeping.
+                    if("elementX".equals(name) || "elementY".equals(name)
+                        || "elementWidth".equals(name) || "elementHeight".equals(name)) continue;
                     if("endRow".equals(name) || "column".equals(name) || "row".equals(name)) continue;
                     if("cellAboveIndex".equals(name)) continue;
-                    if("computedPadTop".equals(name) || "computedPadLeft".equals(name) ||
-                       "computedPadBottom".equals(name) || "computedPadRight".equals(name)) continue;
+                    if("computedPadTop".equals(name) || "computedPadLeft".equals(name)
+                        || "computedPadBottom".equals(name) || "computedPadRight".equals(name)) continue;
+
                     f.setAccessible(true);
                     keep.add(f);
                 }

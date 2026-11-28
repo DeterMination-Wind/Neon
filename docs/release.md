@@ -1,41 +1,42 @@
 # 版本与发布
 
-Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号与构建都在本地完成，CI 只负责在 tag 推送后生成 GitHub Release**（手动 dispatch 只构建，不创建 Release），不得依赖 CI 改版本或出包。
+本文规定 Neon 的版本号体系、发版前本地必做步骤、发布正文格式以及 CI 分工。核心原则：**版本号更新与完整构建均在本地完成，CI 只负责在 tag 推送后生成 GitHub Release**（手动 dispatch 仅构建，不创建 Release），不得依赖 CI 修改版本号或替代本地出包。
 
 ## 版本号体系
 
-| 形态 | 标签 | 版本码（写进 `mod.json` / `mod.hjson` / `build.gradle`） |
+| 形态 | Git 标签 | 版本码（写入 `mod.json` / `mod.hjson` / `build.gradle`） |
 | --- | --- | --- |
 | 稳定版 | `N<v>`，如 `N12` | `<v>0000`，即 `120000` |
-| 预发行 | `B<v>.<b>`，如 `B12.5` | `<v>0000 + <b>`，即 `120005` |
+| 预发行版 | `B<v>.<b>`，如 `B12.5` | `<v>0000 + <b>`，即 `120005` |
 
-- tag 只使用 `N*` 或 `B*`。
-- `mod.json` 与 `mod.hjson` 必须保持字段一致（当前 `hidden: true`、`minGameVersion: "160.1"`、`main`/`mainX` 双入口）；不要只改一份。
-- 本地 mod 任务默认的 dev 身份（`Neon-dev` / `0.0.0`）只用于临时构建，提交前还原；描述符版本变更只属于发布提交。
-- 更新器必须同时兼容三种历史形态：新数字版本码、预发行码、老的 `vX.Y.Z` 字符串。改动 [modupdater](subsystems/modupdater.md) 时用 `versionUtilTest` 回归。
+- Git tag 仅允许使用 `N*` 或 `B*` 格式。
+- `mod.json` 与 `mod.hjson` 必须保持字段完全一致（当前包含 `hidden: true`、`minGameVersion: "160.1"` 以及 `main` / `mainX` 双入口），切勿只改其中一份。
+- 本地开发任务默认的 dev 身份（`Neon-dev` / `0.0.0`）仅用于临时构建，提交前须还原；描述文件的版本变更只应出现在发布提交中。
+- 更新器必须同时兼容三种版本格式：新数字版本码、预发行版本码，以及历史 `vX.Y.Z` 字符串。改动 [modUpdater](subsystems/modupdater.md) 时必须运行 `versionUtilTest` 回归验证。
 
 ## 发布前本地必做步骤
 
-1. **更新本地版本号**
+1. **更新本地版本号**：
    ```powershell
-   python tools/neon_version.py --set-files 120005   # 例：B12.5
+   python tools/neon_version.py --set-files 120005   # 示例：B12.5
    ```
-   会同步修改 `mod.json` / `mod.hjson` / `build.gradle` 三处。
-2. **本地完整构建**
+   该命令会同步修改 `mod.json`、`mod.hjson` 与 `build.gradle` 三处版本号。
+2. **执行本地完整构建与测试**：
    ```powershell
+   .\gradlew.bat test
    .\gradlew.bat clean deploy
    ```
-   环境要求：`ANDROID_SDK_ROOT` 指向完整 SDK，不设 `D8_PATH`，且不再走工作区 `commandlinetools-win-*` 兜底路径；先跑一遍 `.\gradlew.bat test` 确认回归任务全绿。
-3. **撰写 `RELEASE_NOTES.md`**：中英对照、只写当前版本，格式见下节「发布正文风格」；CI 直接把它作为 Release 正文。发布说明只放在 `RELEASE_NOTES.md`，不要写进 `README.md`。
-4. **拷贝并核实产物**
+   环境要求：`ANDROID_SDK_ROOT` 指向完整的 Android SDK，不设置 `D8_PATH`，且不再走工作区 `commandlinetools-win-*` 兜底路径；先确保 `test` 回归任务全绿，再执行 `clean deploy`。
+3. **撰写 `RELEASE_NOTES.md`**：中英对照、仅写当前版本，格式遵循下文「发布正文风格」；CI 会直接将其用作 GitHub Release 正文。发布说明只写入 `RELEASE_NOTES.md`，不要写进 `README.md`。
+4. **拷贝并核实发布产物**：
    - `dist/Neon.jar` → `../构建/Neon/Neon-v<标签>.jar`
    - `dist/Neon.zip` → `../构建/Neon/Neon-v<标签>.zip`
-   
-   核实两个文件都存在、大小合理；桌面 jar（不含 dex）不允许进入发布流程。同时确认 jar 内包含 `mod.json` 描述符、桌面 main 类与 `classes.dex`。
+
+   确认两个文件均存在且体积合理；桌面中间 JAR（不含 `classes.dex`）严禁进入发布流程。同时核实 JAR 内包含 `mod.json` 描述符、桌面主类与 `classes.dex`。
 
 ## 发布正文风格（Release body）
 
-`RELEASE_NOTES.md` 就是 GitHub Release 的正文原文（CI 读取它，`generate_release_notes: false`），**只写当前版本**、中英对照。当前范式于 2026-10-11 从 LogicSugar v5.9.0 同步（其 `docs/release.md` 的同名小节是上游原文，范例即下面这份 N17 正文）：
+`RELEASE_NOTES.md` 即 GitHub Release 的正文原文（CI 直接读取，配置为 `generate_release_notes: false`），**仅写当前版本**且保持中英对照。当前范式于 2026-10-11 同步自 LogicSugar v5.9.0（其 `docs/release.md` 同名小节为上游原文，下方为 N17 范例）：
 
 ````markdown
 > [!NOTE]
@@ -73,17 +74,17 @@ Neon 的发版规则、本地必做步骤和 CI 的分工。原则：**版本号
 
 写作规则：
 
-1. **结构固定**：顶部只有一个 `> [!NOTE]` 两行引用块（中文一行 + 英文一行）写版本要求，然后 `## 中文`、`## English`。不再用 `> [!IMPORTANT]` / `> [!WARNING]`，也不写构建命令、产物路径、测试数量与 commit 细节。
-2. **小节**：默认只有 `### 本次新增` / `### 本次修复`（英文 `### Added` / `### Fixed`）；本版确有行为变化、又归不进「修复」时才加 `### 本次改动` / `### Changed`。**不写「已知问题 / 兼容性」小节**：跨版本线格式与调试产物事实写在 [architecture.md](architecture.md) / [glossary.md](glossary.md)，不逐版复述。中英小节一一对应。聚合版「内置子模组升级到 vX」是用户能感知的事实，写成 `本次新增` 里的一条普通条目，不为它单开「本次更新 / Updated」小节。
-3. **条目就是一句完整的粗体话**：整条加粗、一行写完；不写括号补充、不写「（A / B / C）」式枚举清单、也不在粗体后接解释尾巴；枚举与实现细节留在设置描述、提交信息与 `docs/`。
-4. **篇幅**：全篇最多 3 个小节、条目总数不超过 6 条；常见形态就是两小节各 2 条。一条一件事，同主题合并，宁可少写。
-5. **「本次修复」只写上一个已发布版本里用户能碰到的问题**：开发过程中用户反馈的问题、同一版本内新功能的内部缺陷，用户从未在任何已发布版本里见过，不构成「修复」，不写进 Release；功能首次发布只写它新增的能力。没有上一版真实缺陷时，「本次修复」整节省略。
-6. **语言**：中文用中文标点与引号，英文用半角标点；两边各自通顺，不逐字直译。
-7. **历史不回填**：新版本一律按本范式写；历史正文以各版本的 GitHub Release 为准（N14 及更早是旧范式，保持原样）。
+1. **结构固定**：顶部仅保留一个两行 `> [!NOTE]` 引用块（中文一行 + 英文一行）说明版本要求，随后依次为 `## 中文` 与 `## English`。不使用 `> [!IMPORTANT]` 或 `> [!WARNING]`，也不写构建命令、产物路径、测试数量和 commit 细节。
+2. **小节精简**：默认只使用 `### 本次新增` / `### 本次修复`（英文 `### Added` / `### Fixed`）；仅当本版存在行为变化且不归属「本次修复」时，才增加 `### 本次改动` / `### Changed`。**不写「已知问题 / 兼容性」小节**：跨版本格式约定与调试产物事实统一记录在 [architecture.md](architecture.md) 与 [glossary.md](glossary.md)，不逐版重复。中英小节须一一对应。聚合版中的“内置子模组升级到 vX”属于玩家可感知变化，直接作为「本次新增」下的普通条目，不单开「本次更新 / Updated」小节。
+3. **条目为单行完整粗体句**：整条加粗、一行写完；不附加括号补充、不写“（A / B / C）”式枚举清单，也不在粗体后接解释尾巴；枚举项与实现细节留在设置描述、提交信息与 `docs/` 文档中。
+4. **篇幅克制**：全篇最多 3 个小节、条目总数不超过 6 条；常见形态为两小节各 2 条。一条只说一件事，同主题合并，宁可少写。
+5. **严格界定「本次修复」**：只记录上一个已发布版本中玩家实际可能遇到的问题；开发阶段反馈的问题或同版本内新功能的内部缺陷从未面向玩家发布，不构成「修复」，不写进 Release，功能首次发布只写新增能力。若无上一版真实缺陷，整节省略「本次修复」。
+6. **双语地道**：中文使用全角中文标点与引号，英文使用半角标点；两侧各自通顺自然，不逐字直译。
+7. **历史不回填**：新版本一律按本范式编写；历史正文以对应版本的 GitHub Release 为准（N14 及更早版本保持旧范式原样）。
 
 ## 打包管线细节
 
-`deploy` 背后的任务链：
+`deploy` 背后的任务执行链如下：
 
 ```text
 classes ──► d8InputJar ──► dexAndroid ──► jarMerged ──► zipMerged ──► dist/ + 构建/
@@ -93,29 +94,29 @@ classes ──► d8InputJar ──► dexAndroid ──► jarMerged ──► 
               无副作用)
 ```
 
-要点：
+关键要点：
 
-- `d8InputJar` 只打包 class 与 `pinyin4j` / `kotlin-stdlib`，是 D8 专用输入，不留 dist 副作用。
-- `dexAndroid` 用 `--min-api 14 --release` 出 `classes.dex`；必须带 `--lib <arc-core>`——缺了它 Arc 的接口会被当外部类处理，设备上触发 `AbstractMethodError`（曾踩过的坑，别移除）。
-- `jarMerged` / `zipMerged` 是唯一可分发形态；`jar` 任务的 `Neon-desktop.zip` 是中间产物，仅存在于 build 目录。
-- SPDB 语义搜索的嵌入模型由 `downloadEmbeddingModel` 按需下载（hf-mirror 源），首次离线打包请提前跑一次该任务。
+- `d8InputJar` 仅打包 class、`pinyin4j` 与 `kotlin-stdlib`，专供 D8 输入使用，不在 `dist/` 目录产生副作用。
+- `dexAndroid` 使用 `--min-api 14 --release` 生成 `classes.dex`，且必须附加 `--lib <arc-core>`；缺少该参数会导致 Arc 接口被当作外部类处理，从而在 Android 设备上触发 `AbstractMethodError`（历史踩坑，切勿移除）。
+- `jarMerged` 与 `zipMerged` 是唯一可分发产物；`jar` 任务产出的 `Neon-desktop.zip` 仅作为中间产物留在 `build/` 目录。
+- SPDB 语义搜索所需的嵌入模型由 `downloadEmbeddingModel` 按需从 `hf-mirror` 源下载；首次离线打包前请提前执行一次该任务。
 
 ## CI（`.github/workflows/release.yml`）
 
-触发：推送 `N*` / `B*` tag 或手动 dispatch。流程：
+触发条件：推送 `N*` / `B*` tag 或手动 dispatch。执行流程：
 
-1. checkout + Temurin 17 + Gradle + Android SDK。
-2. `tools/neon_version.py --code/--release-name/--set-files/--check-files` 从 tag 反算版本码并校验描述文件一致性；`B*` 标记为 prerelease。
+1. Checkout 代码，准备 Temurin 17、Gradle 与 Android SDK。
+2. 运行 `tools/neon_version.py`（`--code` / `--release-name` / `--set-files` / `--check-files`）从 tag 反算版本码并校验描述文件一致性；`B*` 标签自动标记为 prerelease。
 3. 构建合并产物并创建 GitHub Release。
 
 ## Release 资产安全规则
 
-Mindustry 游戏内安装器会取 Release API 返回的**第一个 `.jar`**，且不按操作系统挑资产。因此：
+Mindustry 游戏内模组安装器会自动拉取 Release API 返回的**第一个 `.jar`**，且不区分操作系统。因此必须严格遵守：
 
-- 一个 Release 必须有且只有一个 `.jar` 资产，即最终可安装包（含 `mod.json` + 桌面主类 + `classes.dex`）。
-- 严禁把 `*-android.jar`、`*-desktop.jar`、D8 输入 jar 等中间产物传上 Release。
-- 发布后用 API 复查：
+- 每个 Release 有且只能有一个 `.jar` 资产，即最终可安装包（同时包含 `mod.json`、桌面主类与 `classes.dex`）。
+- 严禁将 `*-android.jar`、`*-desktop.jar`、D8 输入 JAR 等中间产物上传到 Release。
+- 发布完成后立即通过 API 复查资产列表：
   ```bash
   gh release view <tag> --json assets
   ```
-  发现多余 `.jar` 立即删除。
+  如发现多余的 `.jar` 文件，立即删除。

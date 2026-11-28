@@ -206,8 +206,15 @@ public class NeonSettingsWorkbench extends Table{
         if(overlaySyncHook != null){
             overlaySyncHook.run();
         }
-        if(fillParent && (x != 0f || y != 0f)){
-            setPosition(0f, 0f);
+        if(fillParent){
+            if(x != 0f || y != 0f){
+                setPosition(0f, 0f);
+            }
+            if(parent != null && parent.getWidth() > 0f && parent.getHeight() > 0f
+                && (Math.abs(getWidth() - parent.getWidth()) > 0.5f || Math.abs(getHeight() - parent.getHeight()) > 0.5f)){
+                setSize(parent.getWidth(), parent.getHeight());
+                invalidateHierarchy();
+            }
         }
         syncSafeAreaMargins();
         pollExternalSwitchChanges();
@@ -280,7 +287,7 @@ public class NeonSettingsWorkbench extends Table{
     }
 
     private boolean shouldBalanceHeaderSpacer(float widthDp){
-        return onExitCategory != null && widthDp >= headerBalanceBreakpointDp;
+        return fullScreenMode && onExitCategory != null && widthDp >= headerBalanceBreakpointDp;
     }
 
     private void rebuildHeaderStrip(){
@@ -288,7 +295,7 @@ public class NeonSettingsWorkbench extends Table{
         headerStrip.clearChildren();
         headerStrip.center().margin(6f, 10f, 8f, 10f);
 
-        boolean showBack = onExitCategory != null;
+        boolean showBack = fullScreenMode && onExitCategory != null;
         headerBalancedWithSpacer = shouldBalanceHeaderSpacer(currentWidthDp);
 
         if(showBack){

@@ -10,11 +10,13 @@ import arc.scene.event.InputEvent;
 import arc.scene.event.Touchable;
 import arc.scene.ui.Button;
 import arc.scene.ui.Dialog;
+import arc.scene.ui.Label;
 import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Cell;
 import arc.scene.ui.layout.Table;
 import arc.struct.Seq;
 import arc.struct.SnapshotSeq;
+import arc.util.Log;
 import mindustry.ui.dialogs.SettingsMenuDialog;
 
 import java.util.Locale;
@@ -24,20 +26,27 @@ import java.util.Locale;
  *
  * <p>Keeping the outer {@link SettingsMenuDialog.SettingsTable} at a constant {@code list.size == 1}
  * guarantees that MindustryX's {@code SettingsTable.act()} ({@code lastSize != list.size}) never
- * triggers spurious rebuilds. When Neon's category is active inside {@link SettingsMenuDialog},
- * {@link OverlayController} mounts {@link NeonSettingsWorkbench} directly onto the enclosing
- * {@link Dialog} with {@code fillParent = true} and suppresses the dialog's outer title strip,
- * forced vertical scrollbar, and bottom chrome so the workbench fills 100% of the screen cleanly
- * across Desktop and Mobile.</p>
+ * triggers spurious rebuilds.</p>
+ *
+ * <p>Reliability contract: {@link #add(SettingsMenuDialog.SettingsTable)} immediately mounts
+ * {@link NeonSettingsWorkbench} inline with concrete non-zero dimensions so the category never
+ * collapses to a zero-height placeholder showing only the vanilla "Reset to Defaults" button
+ * (across both vanilla Mindustry and MindustryX settings layouts). When Neon's category is the
+ * sole active category inside a shown {@link Dialog} with valid bounds, {@link OverlayController}
+ * safely promotes the workbench to a full-screen dialog overlay and keeps its bounds explicitly
+ * synced on every frame, automatically falling back to inline mode if full-screen takeover is
+ * unavailable or fails.</p>
  */
 public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Setting{
+    private static final String hostSettingName = "neon-settings-workbench";
+
     private final Seq<NeonSettingsModule> modules;
     private final NeonSettingsContext context;
     private NeonSettingsWorkbench sharedWorkbench;
     private OverlayController activeController;
 
     public NeonSettingsHostSetting(Seq<NeonSettingsModule> modules, NeonSettingsContext context){
-        super(null);
+        super(hostSettingName);
         this.modules = modules;
         this.context = context;
     }
@@ -48,16 +57,36 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
             activeController.dispose();
             activeController = null;
         }
-        if(sharedWorkbench == null){
-            sharedWorkbench = new NeonSettingsWorkbench(modules, context, this::exitActiveCategory);
+
+        try{
+            if(sharedWorkbench == null){
+                sharedWorkbench = new NeonSettingsWorkbench(modules, context, this::exitActiveCategory);
+            }
+        }catch(Throwable t){
+            Log.err("Neon: failed to construct NeonSettingsWorkbench", t);
+            table.row();
+            Label err = new Label("Neon settings failed to initialize: " + t.getClass().getSimpleName()
+                + (t.getMessage() == null ? "" : " - " + t.getMessage()));
+            err.setWrap(true);
+            table.add(err).growX().pad(12f).row();
+            return;
         }
 
         OverlayController controller = new OverlayController(table, sharedWorkbench);
         activeController = controller;
 
         table.row();
-        Cell<HostAnchor> anchorCell = table.add(controller.anchor).growX().height(0f).pad(0f);
+        float initialW = sharedWorkbench.computeWorkbenchWidthDp();
+        float initialH = sharedWorkbench.computeWorkbenchHeightDp();
+        Cell<HostAnchor> anchorCell = table.add(controller.anchor)
+            .width(initialW)
+            .height(initialH)
+            .center()
+            .pad(0f);
         controller.setAnchorCell(anchorCell);
+        // Mount inline immediately so the workbench is always visible even before act() runs
+        // or when hosted inside MindustryX/custom settings containers outside dialog.cont.
+        controller.mountInline();
         table.row();
     }
 
@@ -119,6 +148,9 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
         private boolean inlineMounted;
         private float lastInlineWidthDp = -1f;
         private float lastInlineHeightDp = -1f;
+        private float lastFullScreenWidth = -1f;
+        private float lastFullScreenHeight = -1f;
+        private boolean fullScreenDisabled;
         private boolean exiting;
         private boolean disposed;
 
@@ -143,20 +175,14 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
         void sync(){
             if(disposed) return;
 
-            Dialog dialog = findAncestorDialog(categoryTable);
-            boolean activeInDialog = categoryTable.getScene() != null
-                && dialog != null
-                && dialog.isShown()
-                && dialog.cont != null
-                && categoryTable.isDescendantOf(dialog.cont);
-
-            if(!activeInDialog){
+            boolean attachedToScene = categoryTable.getScene() != null;
+            if(!attachedToScene){
                 exiting = false;
                 if(mountedDialog != null){
                     unmountFullScreen();
                 }
-                if(inlineMounted){
-                    unmountInline();
+                if(!inlineMounted){
+                    mountInline();
                 }
                 return;
             }
@@ -165,7 +191,17 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
                 return;
             }
 
-            if(isSoleCategoryTable(dialog.cont, categoryTable)){
+            Dialog dialog = findAncestorDialog(categoryTable);
+            boolean canFullScreen = !fullScreenDisabled
+                && dialog != null
+                && dialog.getScene() != null
+                && dialog.isShown()
+                && dialog.getWidth() > 0f
+                && dialog.getHeight() > 0f
+                && categoryTable.isDescendantOf(dialog)
+                && isSoleCategoryTable(dialog.cont != null && categoryTable.isDescendantOf(dialog.cont) ? dialog.cont : dialog, categoryTable);
+
+            if(canFullScreen){
                 if(inlineMounted){
                     unmountInline();
                 }
@@ -173,12 +209,17 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
                     if(mountedDialog != null){
                         unmountFullScreen();
                     }
-                    mountFullScreen(dialog);
+                    try{
+                        mountFullScreen(dialog);
+                    }catch(Throwable t){
+                        Log.err("Neon: full-screen settings overlay failed, falling back to inline mode", t);
+                        fullScreenDisabled = true;
+                        unmountFullScreen();
+                        mountInline();
+                    }
                 }else{
                     suppressNewlyVisibleSiblings(dialog);
-                    if(!workbench.fillParent){
-                        workbench.setFillParent(true);
-                    }
+                    syncFullScreenBounds(dialog);
                     SnapshotSeq<Element> children = dialog.getChildren();
                     if(children.size > 0 && children.peek() != workbench){
                         workbench.toFront();
@@ -203,17 +244,39 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
             workbench.remove();
             workbench.setFullScreenMode(true);
             workbench.setFillParent(true);
-            workbench.setPosition(0f, 0f);
-            if(dialog.getWidth() > 0f && dialog.getHeight() > 0f){
-                workbench.setSize(dialog.getWidth(), dialog.getHeight());
-            }
             workbench.visible = true;
             workbench.touchable = Touchable.enabled;
 
             dialog.addChild(workbench);
+            lastFullScreenWidth = -1f;
+            lastFullScreenHeight = -1f;
+            syncFullScreenBounds(dialog);
             workbench.toFront();
             workbench.onFullScreenMounted();
             dialog.invalidateHierarchy();
+        }
+
+        private void syncFullScreenBounds(Dialog dialog){
+            if(dialog == null) return;
+            if(!workbench.fillParent){
+                workbench.setFillParent(true);
+            }
+            if(workbench.x != 0f || workbench.y != 0f){
+                workbench.setPosition(0f, 0f);
+            }
+            float targetW = dialog.getWidth();
+            float targetH = dialog.getHeight();
+            if(targetW > 0f && targetH > 0f
+                && (Math.abs(targetW - lastFullScreenWidth) > 0.5f
+                    || Math.abs(targetH - lastFullScreenHeight) > 0.5f
+                    || Math.abs(workbench.getWidth() - targetW) > 0.5f
+                    || Math.abs(workbench.getHeight() - targetH) > 0.5f)){
+                lastFullScreenWidth = targetW;
+                lastFullScreenHeight = targetH;
+                workbench.setSize(targetW, targetH);
+                workbench.invalidateHierarchy();
+                workbench.validate();
+            }
         }
 
         private void suppressSiblings(Dialog dialog){
@@ -269,6 +332,8 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
         private void unmountFullScreen(){
             Dialog dialog = mountedDialog;
             mountedDialog = null;
+            lastFullScreenWidth = -1f;
+            lastFullScreenHeight = -1f;
 
             workbench.setFillParent(false);
             if(workbench.parent == dialog && dialog != null){
@@ -288,11 +353,13 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
             }
         }
 
-        private void mountInline(){
+        void mountInline(){
             inlineMounted = true;
             workbench.remove();
             workbench.setFillParent(false);
             workbench.setFullScreenMode(false);
+            workbench.visible = true;
+            workbench.touchable = Touchable.enabled;
             anchor.clearChildren();
             float w = workbench.computeWorkbenchWidthDp();
             float h = workbench.computeWorkbenchHeightDp();
@@ -300,7 +367,7 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
             lastInlineHeightDp = h;
             anchor.add(workbench).width(w).height(h).center();
             if(anchorCell != null){
-                anchorCell.height(h);
+                anchorCell.width(w).height(h);
             }
             categoryTable.invalidateHierarchy();
         }
@@ -316,7 +383,7 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
                     cell.width(w).height(h);
                 }
                 if(anchorCell != null){
-                    anchorCell.height(h);
+                    anchorCell.width(w).height(h);
                 }
                 categoryTable.invalidateHierarchy();
             }
@@ -329,7 +396,7 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
             }
             anchor.clearChildren();
             if(anchorCell != null){
-                anchorCell.height(0f);
+                anchorCell.width(0f).height(0f);
             }
             lastInlineWidthDp = -1f;
             lastInlineHeightDp = -1f;
@@ -374,8 +441,8 @@ public class NeonSettingsHostSetting extends SettingsMenuDialog.SettingsTable.Se
 
         private boolean isCategoryStillMounted(Dialog dialog){
             return categoryTable.getScene() != null
-                && dialog.cont != null
-                && categoryTable.isDescendantOf(dialog.cont);
+                && dialog != null
+                && categoryTable.isDescendantOf(dialog);
         }
 
         private static Dialog findAncestorDialog(Element element){

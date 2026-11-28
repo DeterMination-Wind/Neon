@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "generatedAtUtc": "2026-11-28T16:08:02Z",
+  "generatedAtUtc": "2026-11-28T16:20:39Z",
   "mods": {
     "pgmm": {
       "sourceKind": "git",
@@ -186,12 +186,12 @@
     },
     "tw": {
       "sourceKind": "git",
-      "syncedHead": "c3504a0ba19d15b2aa6a21fb2eb7300eb8285c9f",
-      "workspaceHeadAtSync": "c3504a0ba19d15b2aa6a21fb2eb7300eb8285c9f",
+      "syncedHead": "4f46f0c23c4a73dffa811ca22a2e125dcfb70e59",
+      "workspaceHeadAtSync": "4f46f0c23c4a73dffa811ca22a2e125dcfb70e59",
       "workspaceDirtyAtSync": false,
       "upstreamRef": "origin/main",
       "upstreamHeadAtSync": "b622e36bef064a241ef0556b332a277f32659cdd",
-      "aheadOfUpstreamAtSync": 3,
+      "aheadOfUpstreamAtSync": 5,
       "behindUpstreamAtSync": 0,
       "repoUrl": null,
       "branch": null,
@@ -199,12 +199,12 @@
     },
     "bpa": {
       "sourceKind": "git",
-      "syncedHead": "d033f29fffe4c4fec8f93464377a9aeaed7a68ad",
-      "workspaceHeadAtSync": "d033f29fffe4c4fec8f93464377a9aeaed7a68ad",
+      "syncedHead": "943e498a9c60018ec60b7bcbef54d80756e9b442",
+      "workspaceHeadAtSync": "943e498a9c60018ec60b7bcbef54d80756e9b442",
       "workspaceDirtyAtSync": false,
       "upstreamRef": "origin/main",
       "upstreamHeadAtSync": "f022e521b1870b40bf0be0b49d281019af4edab6",
-      "aheadOfUpstreamAtSync": 1,
+      "aheadOfUpstreamAtSync": 3,
       "behindUpstreamAtSync": 0,
       "repoUrl": null,
       "branch": null,
